@@ -42,19 +42,19 @@ def parse_table_survey(filepath: str, sys_name: str = "O32", table_prefix: str =
             skipped_empty += 1
             continue  # 源表名为空，跳过
 
+        # 提前计算公共变量，避免在 if not ods_table 分支内外重复
+        strategy_raw = safe_str(row, 15)
+        load_strategy = "INCR" if "增量" in strategy_raw else "FULL"
+        actual_sys = sys_name or src_sys_from_excel
+
         ods_table = safe_str(row, 7)
 
         # 修复：如果ODS表名为空，自动生成
         if not ods_table:
-            strategy_raw = safe_str(row, 15)
-            load_strategy = "INCR" if "增量" in strategy_raw else "FULL"
-            suffix = SUFFIX_INCR if load_strategy == "INCR" else SUFFIX_FULL
-            # 确定实际系统名：优先使用传入的 sys_name，其次使用 Excel 中的值
-            actual_sys = sys_name or src_sys_from_excel
             if not actual_sys:
-                # 系统名为空，无法生成表名，跳过
                 skipped_empty += 1
                 continue
+            suffix = SUFFIX_INCR if load_strategy == "INCR" else SUFFIX_FULL
             table_name_part = table_prefix.replace("{sys}", actual_sys)
             ods_table = f"{table_name_part}_{src_table}_{suffix}"
             auto_generated += 1
@@ -64,15 +64,6 @@ def parse_table_survey(filepath: str, sys_name: str = "O32", table_prefix: str =
             skipped_no_ods += 1
             continue
 
-        strategy_raw = safe_str(row, 15)
-        load_strategy = "INCR" if "增量" in strategy_raw else "FULL"
-
-        # 确定实际系统名：优先使用传入的 sys_name，其次使用 Excel 中的值
-        actual_sys = sys_name or src_sys_from_excel
-        if not actual_sys:
-            # 如果还是没有系统名，跳过这条记录（不应该发生）
-            skipped_empty += 1
-            continue
         tables.append(TableMeta(
             src_sys=actual_sys,
             src_db_type=safe_str(row, 0),

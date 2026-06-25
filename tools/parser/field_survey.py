@@ -78,21 +78,16 @@ def _read_excel_safely(filepath: str) -> pd.DataFrame:
         sheet_name = xls.sheet_names[0]
         df = pd.read_excel(xls, sheet_name=sheet_name, dtype=str)
 
-        # 清理临时文件
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        if os.path.exists(fixed_zip):
-            os.unlink(fixed_zip)
-
         logger.debug(f"  autoFilter 修复成功")
         return df
 
     except Exception as e:
-        # 清理临时文件
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        if fixed_zip is not None:
-            if os.path.exists(fixed_zip):
-                os.unlink(fixed_zip)
         raise RuntimeError(f"无法读取Excel文件 {filepath}: {e}")
+
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if fixed_zip and os.path.exists(fixed_zip):
+            os.unlink(fixed_zip)
 
 
 def _parse_fields_from_df(df: pd.DataFrame) -> dict:
