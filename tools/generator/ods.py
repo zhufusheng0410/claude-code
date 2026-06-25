@@ -126,17 +126,12 @@ def generate_ods_etl(table: TableMeta, fields: list, sys_name: str, template: st
         select_parts.append(f"                                   , {f.src_name}")
     select_str = "\n".join(select_parts)
 
-    from_where_clause = ""
-    # 动态生成源schema变量名：如 o32_src_schema, zta_src_schema, hszta_src_schema
     src_schema_var = f"{sys_name.lower()}_src_schema"
+    from_where_clause = f"\n                                FROM ${{{src_schema_var}}}.{table.src_table}"
     if table.load_strategy == "INCR" and table.incr_cond:
         incr = table.incr_cond.strip()
         if incr and incr not in ('无', 'nan', ''):
-            from_where_clause = f"\n                                FROM ${{{src_schema_var}}}.{table.src_table}\n                                WHERE {incr}  between ${{p_start_dt}} and ${{p_end_dt}}"
-        else:
-            from_where_clause = f"\n                                FROM ${{{src_schema_var}}}.{table.src_table}"
-    else:
-        from_where_clause = f"\n                                FROM ${{{src_schema_var}}}.{table.src_table}"
+            from_where_clause += f"\n                                WHERE {incr}  between ${{p_start_dt}} and ${{p_end_dt}}"
 
     query_sql = select_str + from_where_clause
 
@@ -147,9 +142,7 @@ def generate_ods_etl(table: TableMeta, fields: list, sys_name: str, template: st
         writer_columns.append({"name": f.src_name, "type": dx_type})
 
     # SELECT 字段列表（用于INSERT）
-    select_lines = ["       " + fields[0].src_name]
-    for f in fields[1:]:
-        select_lines.append("     , " + f.src_name)
+    select_lines = [f"       {f.src_name}" for f in fields]
     select_lines.append("     , FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyy-MM-dd HH:mm:ss') LD_TIME")
     select_columns_str = "\n".join(select_lines)
 
@@ -165,18 +158,23 @@ def generate_ods_etl(table: TableMeta, fields: list, sys_name: str, template: st
     # 分区子句
     partition_clause = "PARTITION(P_DT='${p_end_dt}')" if table.load_strategy == "FULL" else "PARTITION(P_DT)"
 
-    # 填充模板变量
-    filled = template.replace("${target_schema}", schema)
-    filled = filled.replace("${tmp_table}", tmp_tbl)  # 仅表名，模板会拼接 schema
-    filled = filled.replace("${tmp_table_name}", tmp_tbl.lower())
-    filled = filled.replace("${tmp_field_defs}", tmp_fields_str)
-    filled = filled.replace("${table_cn}", table.src_table_cn or "")
-    filled = filled.replace("${query_sql}", query_sql)
-    filled = filled.replace("${writer_columns}", json.dumps(writer_columns, ensure_ascii=False))
-    filled = filled.replace("${dynamic_sets}", dynamic_sets)
-    filled = filled.replace("${target_table}", tbl)
-    filled = filled.replace("${partition_clause}", partition_clause)
-    filled = filled.replace("${select_columns}", select_columns_str)
+    # 填充模板变量 — 用 dict + 循环替换单次 chain
+    replacements = {
+        "${target_schema}": schema,
+        "${tmp_table}": tmp_tbl,
+        "${tmp_table_name}": tmp_tbl.lower(),
+        "${tmp_field_defs}": tmp_fields_str,
+        "${table_cn}": table.src_table_cn or "",
+        "${query_sql}": query_sql,
+        "${writer_columns}": json.dumps(writer_columns, ensure_ascii=False),
+        "${dynamic_sets}": dynamic_sets,
+        "${target_table}": tbl,
+        "${partition_clause}": partition_clause,
+        "${select_columns}": select_columns_str,
+    }
+    filled = template
+    for placeholder, value in replacements.items():
+        filled = filled.replace(placeholder, value)
 
     return filled
 

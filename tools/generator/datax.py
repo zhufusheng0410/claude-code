@@ -2,7 +2,6 @@ import json
 import os
 from ..core.ir import TableMeta, FieldMeta
 from ..config import DATAX_ORACLE_VARS, DATAX_HDFS_VARS, ODS_SCHEMA_TMPL
-from ..core.type_mapper import oracle_to_hive
 from tools.utils.table_utils import write_file, iter_ods_tables
 from tools.utils.logging_setup import get_logger
 
