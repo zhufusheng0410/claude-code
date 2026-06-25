@@ -3,7 +3,7 @@ import json
 from ..core.ir import TableMeta, FieldMeta
 from ..config import ODS_SCHEMA_TMPL
 from ..core.type_mapper import oracle_to_hive
-from tools.utils.table_utils import find_fields_by_table, filter_ods_fields, is_table_reserved, write_file
+from tools.utils.table_utils import write_file, iter_ods_tables
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
 
@@ -53,16 +53,7 @@ def generate_all_ods_ddl(tables: list, fields_by_table: dict, sys_name: str) -> 
         "-- ============================================\n",
     ]
 
-    for table in tables:
-        # 筛选：只有"是否保留"为"是"的表才生成
-        if not is_table_reserved(table):
-            continue
-
-        tbl_fields = find_fields_by_table(table.src_table, fields_by_table)
-        if not tbl_fields:
-            continue
-
-        ods_fields = filter_ods_fields(tbl_fields)
+    for table, ods_fields in iter_ods_tables(tables, fields_by_table):
         parts.append(generate_ods_ddl(table, ods_fields, sys_name))
         parts.append("")
 
@@ -74,15 +65,7 @@ def generate_all_ods_ddl_files(tables: list, fields_by_table: dict, output_dir: 
     """按表生成独立的 DDL SQL 文件"""
     ddl_dir = os.path.join(output_dir, "ddl")
     os.makedirs(ddl_dir, exist_ok=True)
-    for table in tables:
-        # 筛选：只有"是否保留"为"是"的表才生成
-        if not is_table_reserved(table):
-            continue
-
-        tbl_fields = find_fields_by_table(table.src_table, fields_by_table)
-        if not tbl_fields:
-            continue
-        ods_fields = filter_ods_fields(tbl_fields)
+    for table, ods_fields in iter_ods_tables(tables, fields_by_table):
         filepath = os.path.join(ddl_dir, table.ods_table + ".sql")
         try:
             ddl_sql = generate_ods_ddl(table, ods_fields, sys_name)
@@ -203,15 +186,7 @@ def generate_all_ods_etl(tables: list, fields_by_table: dict, output_dir: str, s
     etl_dir = os.path.join(output_dir, "etl_sh")
     os.makedirs(etl_dir, exist_ok=True)
     template = _load_etl_template()
-    for table in tables:
-        # 筛选：只有"是否保留"为"是"的表才生成
-        if not is_table_reserved(table):
-            continue
-
-        tbl_fields = find_fields_by_table(table.src_table, fields_by_table)
-        if not tbl_fields:
-            continue
-        ods_fields = filter_ods_fields(tbl_fields)
+    for table, ods_fields in iter_ods_tables(tables, fields_by_table):
         filepath = os.path.join(etl_dir, table.ods_table + ".sh")
         try:
             script = generate_ods_etl(table, ods_fields, sys_name, template)

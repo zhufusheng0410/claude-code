@@ -10,6 +10,15 @@ logger = get_logger(__name__)
 # 跳过非数据sheet（目录、变更记录等）
 _SKIP_SHEETS = ('目录', '变更记录', '修改记录', '数据测试')
 
+# 已知的列头描述行（出现在数据区域中但只是列名说明，不是真正的注释行）
+_KNOWN_COLUMN_HEADERS = frozenset({
+    '目标字段中文名', '目标字段类型', '序号', '主键', '组别',
+    'JOIN方式', '关联条件', '关联条件说明', '源表别名', '源表英文名',
+    '源表中文名', '源字段英文名', '源字段中文名', '源字段类型',
+    '映射规则', '映射规则注释', '备注', '数据质量检查或约束条件',
+    '过滤条件', '过滤条件说明',
+})
+
 
 def _sanitize_identifier(name: str) -> str:
     """
@@ -114,7 +123,8 @@ def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
             continue
         # 跳过注释行：目标字段英文名包含中文的行（如"初始化。第1组插入交易日历史数据"等ETL逻辑说明）
         if _has_chinese(tgt_name):
-            logger.info(f"  SKIP comment row {i}: '{tgt_name[:60]}'")
+            if tgt_name not in _KNOWN_COLUMN_HEADERS:
+                logger.info(f"  SKIP comment row {i}: '{tgt_name[:80]}'")
             continue
 
         tgt_type = cell(i, col_map.get("目标字段类型", 2))

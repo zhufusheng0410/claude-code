@@ -31,6 +31,20 @@ def is_table_reserved(table) -> bool:
     return table.is_reserved in ('是', '保留', 'Y', 'y')
 
 
+def iter_ods_tables(tables: list, fields_by_table: dict):
+    """迭代有效的 ODS 表，跳过未保留、无字段的表，生成 (table, ods_fields) 对。
+
+    消除 generate_all_ods_ddl / _files / _etl 和 generate_all_datax 中重复的过滤模式。
+    """
+    for table in tables:
+        if not is_table_reserved(table):
+            continue
+        tbl_fields = find_fields_by_table(table.src_table, fields_by_table)
+        if not tbl_fields:
+            continue
+        yield table, filter_ods_fields(tbl_fields)
+
+
 def write_file(filepath: str, content: str) -> None:
     """统一文件写入，写失败时抛出 OSError"""
     with open(filepath, 'w', encoding='utf-8') as fh:

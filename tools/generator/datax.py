@@ -3,7 +3,7 @@ import os
 from ..core.ir import TableMeta, FieldMeta
 from ..config import DATAX_ORACLE_VARS, DATAX_HDFS_VARS, ODS_SCHEMA_TMPL
 from ..core.type_mapper import oracle_to_hive
-from tools.utils.table_utils import find_fields_by_table, filter_ods_fields, is_table_reserved, write_file
+from tools.utils.table_utils import write_file, iter_ods_tables
 from tools.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -70,16 +70,7 @@ def generate_all_datax(tables: list, fields_by_table: dict, output_dir: str, sys
     os.makedirs(datax_dir, exist_ok=True)
 
     generated = 0
-    for table in tables:
-        if not is_table_reserved(table):
-            continue
-
-        tbl_fields = find_fields_by_table(table.src_table, fields_by_table)
-        if not tbl_fields:
-            logger.debug(f"  [DataX] 跳过 {table.ods_table}: 无字段信息")
-            continue
-
-        ods_fields = filter_ods_fields(tbl_fields)
+    for table, ods_fields in iter_ods_tables(tables, fields_by_table):
         json_str = generate_datax(table, ods_fields, sys_name)
         filepath = os.path.join(datax_dir, f"{table.ods_table}.json")
         write_file(filepath, json_str)

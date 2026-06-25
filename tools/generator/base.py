@@ -1,5 +1,6 @@
 import os
 import re
+from collections import defaultdict
 from ..core.ir import MappingSheet
 from ..config import DWD_SCHEMA, SYS_FIELDS_DWD
 from tools.utils.validation import validate_db_identifier
@@ -153,29 +154,24 @@ class BaseGenerator:
             alias = mr.src_table_alias
             if not alias:
                 continue
-            if alias not in aliases:
-                aliases[alias] = {
-                    "join_type": "",
-                    "join_cond": "",
-                    "filter_cond": [],
-                    "src_table": mr.src_table_name or alias,
-                    "src_table_cn": mr.src_table_cn or "",
-                }
-            if mr.src_table_name and aliases[alias]["src_table"] == alias:
-                aliases[alias]["src_table"] = mr.src_table_name
-            if mr.src_table_cn and not aliases[alias]["src_table_cn"]:
-                aliases[alias]["src_table_cn"] = mr.src_table_cn
-            if mr.join_type and not aliases[alias]["join_type"]:
-                aliases[alias]["join_type"] = mr.join_type
-            if mr.join_cond:
-                existing = aliases[alias]["join_cond"]
+            info = aliases.setdefault(alias, {
+                "join_type": "",
+                "join_cond": "",
+                "filter_cond": [],
+                "src_table": mr.src_table_name or alias,
+                "src_table_cn": mr.src_table_cn or "",
+            })
+            if mr.src_table_name and info["src_table"] == alias:
+                info["src_table"] = mr.src_table_name
+            if mr.src_table_cn and not info["src_table_cn"]:
+                info["src_table_cn"] = mr.src_table_cn
+            if mr.join_type and not info["join_type"]:
+                info["join_type"] = mr.join_type
+            if mr.join_cond and not info["join_cond"]:
                 cond = mr.join_cond.strip()
-                if cond.startswith("ON "):
-                    cond = cond[3:]
-                if not existing:
-                    aliases[alias]["join_cond"] = cond
-            if mr.filter_cond and mr.filter_cond not in aliases[alias]["filter_cond"]:
-                aliases[alias]["filter_cond"].append(mr.filter_cond)
+                info["join_cond"] = cond[3:] if cond.startswith("ON ") else cond
+            if mr.filter_cond and mr.filter_cond not in info["filter_cond"]:
+                info["filter_cond"].append(mr.filter_cond)
         return aliases
 
     def _build_from_join(self, aliases: dict) -> str:
@@ -320,35 +316,21 @@ class BaseGenerator:
             if mr.tgt_name in sys_field_names:
                 continue
             seen.add(mr.tgt_name)
+            prefix = "       " if first_field else "     , "
+            first_field = False
             expr = self._resolve_expr(mr.src_field_alias)
             comment = mr.tgt_name_cn if mr.tgt_name_cn else ""
             if expr.upper().startswith('CASE '):
-                case_lines = self._format_case_expr(expr, mr.tgt_name, comment, first_field)
+                case_lines = self._format_case_expr(expr, mr.tgt_name, comment, prefix == "       ")
                 select_lines.extend(case_lines)
-                first_field = False
             elif '\n' in expr:
-                lines = expr.split('\n')
-                first_line = lines[0].rstrip()
-                if first_field:
-                    prefix = "       "
-                    first_field = False
-                else:
-                    prefix = "     , "
-                # 第一行：前缀 + 表达式，填充到 _AS_POS，加 AS 别名，填充到 _COMMENT_POS，加注释
+                first_line = expr.split('\n')[0].rstrip()
                 line_with_alias = (prefix + first_line).ljust(_AS_POS) + " AS " + mr.tgt_name
                 select_lines.append(line_with_alias.ljust(_COMMENT_POS) + "--" + comment)
-                # 处理后续行（缩进即可，无别名和注释）
-                for line in lines[1:]:
-                    stripped = line.rstrip()
-                    if stripped:
-                        select_lines.append("            " + stripped)
+                for line in expr.split('\n')[1:]:
+                    if line.rstrip():
+                        select_lines.append("            " + line.rstrip())
             else:
-                if first_field:
-                    prefix = "       "
-                    first_field = False
-                else:
-                    prefix = "     , "
-                # 前缀 + 表达式，填充到 _AS_POS，加 AS 别名，填充到 _COMMENT_POS，加注释
                 line_with_alias = (prefix + expr).ljust(_AS_POS) + " AS " + mr.tgt_name
                 select_lines.append(line_with_alias.ljust(_COMMENT_POS) + "--" + comment)
 
@@ -381,12 +363,9 @@ class BaseGenerator:
         param = sheet.param or "p_end_dt"
 
         # 按 group_no 分组，支持多组 UNION ALL（Python 3.7+ dict 保序）
-        groups = {}
+        groups = defaultdict(list)
         for mr in sheet.mappings:
-            g = mr.group_no if mr.group_no else "1"
-            if g not in groups:
-                groups[g] = []
-            groups[g].append(mr)
+            groups[mr.group_no or "1"].append(mr)
 
         # 预计算每组别名，同时合并为 all_aliases（供 dep_block 用）
         group_data = []
