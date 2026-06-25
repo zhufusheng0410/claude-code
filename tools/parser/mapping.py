@@ -64,49 +64,48 @@ def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
     """
     df = pd.read_excel(filepath, sheet_name=sheet_name, header=None)
 
-    # 使用统一的 safe_str 函数，但需要直接访问 df.iloc
+    # 一次扫描 col 0 找所有关键词行，避免 N 次重复遍历
+    _KEYWORDS = {
+        "目标表中文名称", "目标表英文名称", "功能描述", "分区字段",
+        "参数", "频度", "目标表类型", "加载类型", "增量逻辑", "目标字段英文名",
+    }
+    keyword_rows: dict[str, int] = {}
+    for i in range(len(df)):
+        v = df.iloc[i, 0]
+        if pd.notna(v):
+            s = str(v)
+            for kw in _KEYWORDS - keyword_rows.keys():
+                if kw in s:
+                    keyword_rows[kw] = i
+
     def cell(row_idx: int, col_idx: int) -> str:
-        if row_idx >= len(df) or col_idx < 0 or col_idx >= len(df.columns):
+        if row_idx < 0 or row_idx >= len(df) or col_idx < 0 or col_idx >= len(df.columns):
             return ""
-        row = df.iloc[row_idx]
-        return safe_str(row, col_idx)
+        return safe_str(df.iloc[row_idx], col_idx)
 
-    # 动态定位元数据行 (查找 "目标表中文名称", "目标表英文名称" 等关键字)
-    tgt_cn_row = _find_row_by_keyword(df, "目标表中文名称", 0)
-    tgt_en_row = _find_row_by_keyword(df, "目标表英文名称", 0)
-    func_row = _find_row_by_keyword(df, "功能描述", 0)
-    part_row = _find_row_by_keyword(df, "分区字段", 0)
-    param_row = _find_row_by_keyword(df, "参数", 0)
-    freq_row = _find_row_by_keyword(df, "频度", 0)
-    type_row = _find_row_by_keyword(df, "目标表类型", 0)
-    load_row = _find_row_by_keyword(df, "加载类型", 0)
-    incr_row = _find_row_by_keyword(df, "增量逻辑", 0)
+    def meta(keyword: str, default: str = "") -> str:
+        row = keyword_rows.get(keyword, -1)
+        return cell(row, 1) if row >= 0 else default
 
-    # 动态定位列头行
-    header_row = _find_row_by_keyword(df, "目标字段英文名", 0)
-
-    # 构建列名映射
-    col_map = {}
-    if header_row >= 0:
-        for j in range(len(df.columns)):
-            hdr = cell(header_row, j)
-            if hdr:
-                col_map[hdr] = j
+    header_row = keyword_rows.get("目标字段英文名", -1)
 
     sheet = MappingSheet(
-        tgt_table_cn=cell(tgt_cn_row, 1) if tgt_cn_row >= 0 else "",
-        tgt_table=cell(tgt_en_row, 1) if tgt_en_row >= 0 else "",
-        func_desc=cell(func_row, 1) if func_row >= 0 else "",
-        partition_col=cell(part_row, 1) if part_row >= 0 else "p_dt",
-        param=cell(param_row, 1) if param_row >= 0 else "p_batch_dt",
-        frequency=cell(freq_row, 1) if freq_row >= 0 else "D",
-        tgt_table_type=cell(type_row, 1) if type_row >= 0 else "",
-        load_type=cell(load_row, 1) if load_row >= 0 else "",
-        incr_logic=cell(incr_row, 1) if incr_row >= 0 else "",
+        tgt_table_cn=meta("目标表中文名称"),
+        tgt_table=meta("目标表英文名称"),
+        func_desc=meta("功能描述"),
+        partition_col=meta("分区字段", "p_dt"),
+        param=meta("参数", "p_batch_dt"),
+        frequency=meta("频度", "D"),
+        tgt_table_type=meta("目标表类型"),
+        load_type=meta("加载类型"),
+        incr_logic=meta("增量逻辑"),
     )
 
     if header_row < 0:
         return sheet
+
+    # 构建列名映射
+    col_map = {cell(header_row, j): j for j in range(len(df.columns)) if cell(header_row, j)}
 
     # 解析字段映射
     for i in range(header_row + 1, len(df)):
@@ -175,45 +174,34 @@ def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
     return sheet
 
 
+def _parse_xlsx_sheets(filepath: str) -> list:
+    """从单个 Excel 文件解析所有非跳过 sheet，返回 [MappingSheet]"""
+    results = []
+    with pd.ExcelFile(filepath) as xls:
+        fname = os.path.basename(filepath)
+        for sn in xls.sheet_names:
+            if sn in _SKIP_SHEETS:
+                continue
+            try:
+                results.append(parse_mapping_sheet(filepath, sn))
+            except Exception as e:
+                logger.warning(f"  WARN: skip {fname}/{sn}: {e}")
+    return results
+
+
 def parse_mapping_dir(mapping_dir: str) -> list:
     """遍历目录下所有 MAPPING Excel, 解析所有 sheet"""
     results = []
     for fname in sorted(os.listdir(mapping_dir)):
         if fname.startswith('~$') or not fname.endswith('.xlsx'):
             continue
-        path = os.path.join(mapping_dir, fname)
-        xls = pd.ExcelFile(path)
-        for sn in xls.sheet_names:
-            if sn in _SKIP_SHEETS:
-                continue
-            try:
-                results.append(parse_mapping_sheet(path, sn))
-            except Exception as e:
-                logger.warning(f"  WARN: skip {fname}/{sn}: {e}")
+        results.extend(_parse_xlsx_sheets(os.path.join(mapping_dir, fname)))
     return results
 
 
 def parse_dws_mapping(filepath: str) -> list:
     """解析 DWS MAPPING 文件(单文件多sheet)"""
-    results = []
-    xls = pd.ExcelFile(filepath)
-    for sn in xls.sheet_names:
-        if sn in _SKIP_SHEETS:
-            continue
-        try:
-            results.append(parse_mapping_sheet(filepath, sn))
-        except Exception as e:
-            logger.warning(f"  WARN: skip {filepath}/{sn}: {e}")
-    return results
-
-
-def _find_row_by_keyword(df, keyword: str, start_row: int = 0) -> int:
-    """在 df 中从 start_row 开始查找第一个 col 0 包含 keyword 的行"""
-    for i in range(start_row, len(df)):
-        v = df.iloc[i, 0]
-        if pd.notna(v) and keyword in str(v):
-            return i
-    return -1
+    return _parse_xlsx_sheets(filepath)
 
 
 
