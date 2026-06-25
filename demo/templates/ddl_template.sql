@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS ${schema}.${table};
+CREATE TABLE ${schema}.${table} (
+ ${columns}
+)
+COMMENT '${comment}'
+PARTITIONED BY (P_DT STRING)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\\t' NULL DEFINED AS '';
