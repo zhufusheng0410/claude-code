@@ -11,6 +11,18 @@
 - CLI 入口: `python tools/main.py --layer ALL`（系统自动检测）
 - CC Skill: `/generate-dw`
 
+### 核心模块
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| CLI 入口 | `tools/main.py` | 参数解析、系统发现、流程编排 |
+| 配置 | `tools/config.py` | 路径、Schema、别名、字段定义 |
+| IR 数据类 | `tools/core/ir.py` | TableMeta, FieldMeta, MappingRule, MappingSheet |
+| 类型映射 | `tools/core/type_mapper.py` | Oracle→Hive 类型转换 |
+| Excel 解析 | `tools/parser/` | 表级/字段级调研解析、MAPPING 解析 |
+| 代码生成 | `tools/generator/` | ODS/DWD/DWS DDL+ETL、DataX 配置 |
+| 共享工具 | `tools/utils/` | 别名查找、文件写入、输入验证、日志 |
+
 ## 目录结构
 
 ```
@@ -70,11 +82,13 @@ demo/templates/          # ETL shell 脚本模板
 | Oracle | Hive |
 |--------|------|
 | VARCHAR2/CHAR/CLOB | STRING |
-| NUMBER(p,s) s>0 | DECIMAL(min(p+4,30), min(s+2,8)) |
-| NUMBER(p,0) 整数含义 | BIGINT |
+| NUMBER(p,s) s>0 | DECIMAL(p,s) 保留原始精度 |
+| NUMBER(p,0) 整数含义 | DECIMAL(p,0) 保留原始精度 |
 | NUMBER(p,0) 代码含义 | STRING |
 | DATE/TIMESTAMP | STRING |
-| FLOAT | DECIMAL(30,8) |
+| FLOAT/BINARY_FLOAT/BINARY_DOUBLE | DECIMAL(18,2) |
+| INTEGER/INT | DECIMAL(8,0) |
+| RAW/BLOB | STRING |
 
 ## 源系统列表
 
@@ -136,6 +150,7 @@ python tools/main.py --layer ALL --output /custom/output/
 | `--layer` | `ALL` | 生成层级: `ODS` / `DWD` / `DWS` / `ALL` |
 | `--sys` | 自动发现 | 指定系统简称，如 `O32`、`HSFA`、`ZTA` |
 | `--output` | `scripts/` | 脚本输出根目录 |
+| `--verbose` / `-v` | 关闭 | 输出 DEBUG 级别详细日志 |
 
 ### CC Skill
 
@@ -169,5 +184,17 @@ python tools/main.py --layer ALL --output /custom/output/
    - DWD/DWS 层：`DWDXDAY`/`DWSXDAY`（无系统后缀）
 
 3. **文件写入**
-   - 所有脚本通过 `tools/utils/table_utils.write_file()` 统一写出
-   - 编码：UTF-8，换行：LF
+   - 普通写入: `tools/utils/table_utils.write_file()`（UTF-8, LF）
+   - 安全写入: `tools/utils/table_utils.write_file_safe()`（含错误处理，跳过无效表）
+   - 所有生成器统一使用上述工具，禁止直接 `open('w')`
+
+4. **代码生成器**
+   - ODS: `tools/generator/ods.py`（独立函数，使用 `iter_ods_tables`）
+   - DWD/DWS: `tools/generator/base.py`（`BaseGenerator` 类，使用 `write_file_safe`）
+   - DataX: `tools/generator/datax.py`（生成 JSON 配置）
+
+5. **共享工具**
+   - `table_utils.py`: `iter_ods_tables()` 消除 4 处重复过滤模式
+   - `mapping_finder.py`: `find_mapping_file/dir()` 单次 scandir 查找
+   - `validation.py`: 数据库标识符验证、路径遍历防护
+   - `logging_setup.py`: 统一日志格式、第三方库降噪
