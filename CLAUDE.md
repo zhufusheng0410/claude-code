@@ -22,6 +22,7 @@
 | Excel 解析 | `tools/parser/` | 表级/字段级调研解析、MAPPING 解析 |
 | 代码生成 | `tools/generator/` | ODS/DWD/DWS DDL+ETL、DataX 配置 |
 | 共享工具 | `tools/utils/` | 别名查找、文件写入、输入验证、日志 |
+| 血缘生成 | `tools/generator/lineage.py` | 从 MAPPING 提取表级+字段级血缘，输出 JSON |
 
 ## 目录结构
 
@@ -187,6 +188,13 @@ python tools/main.py --layer ALL --output /custom/output/
    - 普通写入: `tools/utils/table_utils.write_file()`（UTF-8, LF）
    - 安全写入: `tools/utils/table_utils.write_file_safe()`（含错误处理，跳过无效表）
    - 所有生成器统一使用上述工具，禁止直接 `open('w')`
+
+4. **血缘关系**
+   - 自动生成 JSON 格式的表级+字段级血缘
+   - 输出位置: `scripts/{系统}/{层级}/lineage/{layer}_tables.json`（表级）
+   - 字段级: `scripts/{系统}/{层级}/lineage/{layer}_fields.json`
+   - 表级血缘包含：目标表、中文名、层级、系统、上游表列表
+   - 字段级血缘包含：目标字段、源字段、映射规则/表达式、JOIN方式、过滤条件
 
 4. **代码生成器**
    - ODS: `tools/generator/ods.py`（独立函数，使用 `iter_ods_tables`）
