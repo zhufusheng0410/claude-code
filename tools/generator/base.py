@@ -335,19 +335,20 @@ class BaseGenerator:
         if add_src_fields:
             if "SSYS" not in seen:
                 group_sys = _resolve_group_sys(mappings, sys_name)
-                line_with_alias = ("     , '" + group_sys + "'").ljust(_AS_POS) + " AS SSYS"
-                select_lines.append(line_with_alias.ljust(_COMMENT_POS) + "--源系统")
+                select_lines.append(self._fmt_sys_field("SSYS", f"'{group_sys}'", "源系统"))
             if "SRC_TAB" not in seen and "SOURCE_TAB" not in seen:
                 src_tab_str = ",".join(source_tables) if source_tables else ""
-                line_with_alias = ("     , '" + src_tab_str + "'").ljust(_AS_POS) + " AS SRC_TAB"
-                select_lines.append(line_with_alias.ljust(_COMMENT_POS) + "--源表")
+                select_lines.append(self._fmt_sys_field("SRC_TAB", f"'{src_tab_str}'", "源表"))
         if "LD_TIME" not in seen:
-            line_with_alias = ("     , " + _TIMESTAMP_EXPR).ljust(_AS_POS) + " AS LD_TIME"
-            select_lines.append(line_with_alias.ljust(_COMMENT_POS) + "--加载时间")
+            select_lines.append(self._fmt_sys_field("LD_TIME", _TIMESTAMP_EXPR, "加载时间"))
         if "MODIFY_TIME" not in seen:
-            line_with_alias = ("     , " + _TIMESTAMP_EXPR).ljust(_AS_POS) + " AS MODIFY_TIME"
-            select_lines.append(line_with_alias.ljust(_COMMENT_POS) + "--修改时间")
+            select_lines.append(self._fmt_sys_field("MODIFY_TIME", _TIMESTAMP_EXPR, "修改时间"))
         return select_lines
+
+    def _fmt_sys_field(self, field_name: str, expr_value: str, comment: str) -> str:
+        """格式化系统字段行：     , expr AS field_name  --comment"""
+        line_with_alias = ("     , " + expr_value).ljust(_AS_POS) + f" AS {field_name}"
+        return line_with_alias.ljust(_COMMENT_POS) + "--" + comment
 
     def generate_etl(self, sheet: MappingSheet, sys_name: str = "O32") -> str:
         """从 MappingSheet 生成 ETL 加工 shell 脚本"""
