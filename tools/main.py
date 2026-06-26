@@ -25,7 +25,7 @@ from tools.parser.field_survey import parse_field_survey
 from tools.parser.mapping import parse_mapping_dir, parse_dws_mapping
 from tools.generator.ods import generate_all_ods_ddl, generate_all_ods_ddl_files, generate_all_ods_etl
 from tools.generator.base import create_generator
-from tools.generator.lineage import extract_lineage, generate_lineage_json
+from tools.generator.lineage import extract_lineage, generate_lineage_excel
 from tools.utils.sys_extractor import extract_sys_name
 from tools.utils.validation import validate_output_path
 from tools.utils.logging_setup import setup_logging, get_logger
@@ -148,7 +148,7 @@ def _generate_dwd_dws(layer_name, parser_func, input_path, out, logger):
 
     # 血缘关系
     lineages = extract_lineage(sheets, layer_name, sys_name)
-    generate_lineage_json(lineages, layer_dir, layer_name)
+    generate_lineage_excel(lineages, layer_dir, layer_name)
 
 
 def main():

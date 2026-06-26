@@ -1,13 +1,14 @@
 """血缘关系生成器
 
-从 MappingSheet 提取表级和字段级血缘信息，输出 JSON 文件。
+从 MappingSheet 提取表级和字段级血缘信息，输出 Excel 文件。
 血缘关系覆盖 ODS→DWD→DWS 全链路。
 """
 
-import json
 import os
+
+import pandas as pd
+
 from ..core.ir import LineageField, LineageTable
-from tools.utils.table_utils import write_file
 from tools.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -67,12 +68,18 @@ def extract_lineage(sheets: list, layer: str, sys_name: str) -> list:
     return lineages
 
 
-def generate_lineage_json(lineages: list, output_dir: str, layer: str) -> str:
-    """将血缘数据序列化为 JSON 文件。
+def generate_lineage_excel(lineages: list, output_dir: str, layer: str) -> str:
+    """将血缘数据输出为 Excel 文件（字段级）。
 
-    输出两个文件:
-    - {layer}_tables.json: 表级血缘（目标表 ← 上游表）
-    - {layer}_fields.json: 字段级血缘（目标字段 ← 源字段+转换逻辑）
+    输出一个 Excel 文件，包含以下列：
+    - 目标表英文名 / 目标表中文名
+    - 目标字段英文名 / 目标字段中文名
+    - 来源表英文名 / 来源表中文名
+    - 来源字段英文名 / 来源字段中文名
+    - 映射规则/表达式
+    - JOIN 方式
+    - 过滤条件
+    - 备注
 
     Returns:
         输出目录路径
@@ -80,39 +87,49 @@ def generate_lineage_json(lineages: list, output_dir: str, layer: str) -> str:
     lineage_dir = os.path.join(output_dir, "lineage")
     os.makedirs(lineage_dir, exist_ok=True)
 
-    # 表级血缘
-    table_data = [
-        {
-            "tgt_table": l.tgt_table,
-            "tgt_table_cn": l.tgt_table_cn,
-            "layer": l.layer,
-            "sys_name": l.sys_name,
-            "upstream_tables": l.upstream_tables,
-        }
-        for l in lineages
-    ]
-    tables_path = os.path.join(lineage_dir, f"{layer}_tables.json")
-    write_file(tables_path, json.dumps(table_data, indent=2, ensure_ascii=False))
-    logger.info(f"    表级血缘 → {tables_path}")
+    # 收集所有字段级记录
+    rows = []
+    for lt in lineages:
+        tgt_table = lt.tgt_table
+        tgt_table_cn = lt.tgt_table_cn
+        for fld in lt.mappings:
+            rows.append({
+                "目标表英文名": tgt_table,
+                "目标表中文名": tgt_table_cn,
+                "目标字段英文名": fld.tgt_field,
+                "目标字段中文名": fld.tgt_field_cn,
+                "来源表英文名": fld.src_table,
+                "来源字段英文名": fld.src_field,
+                "来源字段中文名": fld.src_field_alias,
+                "映射规则/表达式": fld.note or "",
+                "JOIN方式": fld.join_type or "",
+                "过滤条件": fld.filter_cond or "",
+                "备注": fld.note or "",
+            })
 
-    # 字段级血缘
-    field_data = [
-        {
-            "tgt_table": f.tgt_table,
-            "tgt_field": f.tgt_field,
-            "tgt_field_cn": f.tgt_field_cn,
-            "src_table": f.src_table,
-            "src_field": f.src_field,
-            "src_field_alias": f.src_field_alias,
-            "join_type": f.join_type,
-            "filter_cond": f.filter_cond,
-            "note": f.note,
-        }
-        for l in lineages
-        for f in l.mappings
-    ]
-    fields_path = os.path.join(lineage_dir, f"{layer}_fields.json")
-    write_file(fields_path, json.dumps(field_data, indent=2, ensure_ascii=False))
-    logger.info(f"    字段级血缘 → {fields_path}")
+    if not rows:
+        logger.warning(f"  血缘关系: 无数据可输出")
+        return lineage_dir
 
+    df = pd.DataFrame(rows)
+
+    # 写入 Excel
+    excel_path = os.path.join(lineage_dir, f"{layer}_lineage.xlsx")
+    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="字段级血缘")
+
+        # 同时生成表级血缘 sheet
+        table_rows = []
+        for lt in lineages:
+            table_rows.append({
+                "目标表英文名": lt.tgt_table,
+                "目标表中文名": lt.tgt_table_cn,
+                "层级": lt.layer,
+                "系统": lt.sys_name,
+                "上游表列表": "; ".join(lt.upstream_tables),
+            })
+        df_tables = pd.DataFrame(table_rows)
+        df_tables.to_excel(writer, index=False, sheet_name="表级血缘")
+
+    logger.info(f"  血缘关系 → {excel_path} ({len(rows)} 个字段映射, {len(lineages)} 张表)")
     return lineage_dir
