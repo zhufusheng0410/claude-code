@@ -4,6 +4,9 @@
 """
 
 from typing import Dict, List, Any
+from tools.utils.logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 
 def extract_physical_name(full_name: str) -> str:
@@ -49,3 +52,19 @@ def write_file(filepath: str, content: str) -> None:
     """统一文件写入，写失败时抛出 OSError"""
     with open(filepath, 'w', encoding='utf-8') as fh:
         fh.write(content)
+
+
+def write_file_safe(filepath: str, content: str, table_name: str, file_type: str) -> bool:
+    """安全写入文件，处理 ValueError（验证失败）和 IOError（IO错误）。
+
+    ValueError 时记录错误并返回 False（跳过此表），IOError 时记录并抛出。
+    """
+    try:
+        write_file(filepath, content)
+    except ValueError as e:
+        logger.error(f"  ERROR: Skipping table '{table_name}': {e}")
+        return False
+    except IOError as e:
+        logger.error(f"  ERROR: Failed to write {file_type} file {filepath}: {e}")
+        raise
+    return True

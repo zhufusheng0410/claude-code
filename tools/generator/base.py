@@ -5,7 +5,7 @@ from ..core.ir import MappingSheet
 from ..config import DWD_SCHEMA, SYS_FIELDS_DWD
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
-from tools.utils.table_utils import write_file
+from tools.utils.table_utils import write_file, write_file_safe
 
 logger = get_logger(__name__)
 
@@ -127,18 +127,6 @@ class BaseGenerator:
                 continue
         return "\n".join(parts)
 
-    def _write_file_safe(self, filepath: str, content: str, table_name: str, file_type: str):
-        """安全写入文件，处理 ValueError（验证失败）和 IOError（IO错误）"""
-        try:
-            write_file(filepath, content)
-        except ValueError as e:
-            logger.error(f"  ERROR: Skipping table '{table_name}': {e}")
-            return False
-        except IOError as e:
-            logger.error(f"  ERROR: Failed to write {file_type} file {filepath}: {e}")
-            raise
-        return True
-
     def generate_all_ddl_files(self, sheets: list, output_dir: str, sys_name: str = "O32"):
         """按表生成独立的 DDL SQL 文件"""
         ddl_dir = os.path.join(output_dir, "ddl")
@@ -149,7 +137,7 @@ class BaseGenerator:
             tbl = _split_table_name(sheet.tgt_table)
             filepath = os.path.join(ddl_dir, tbl + ".sql")
             ddl_sql = self.generate_ddl(sheet)
-            self._write_file_safe(filepath, ddl_sql, sheet.tgt_table, "DDL")
+            write_file_safe(filepath, ddl_sql, sheet.tgt_table, "DDL")
 
     def _collect_aliases(self, mappings: list) -> dict:
         """收集所有表的别名信息"""
@@ -451,7 +439,7 @@ class BaseGenerator:
             tbl = _split_table_name(sheet.tgt_table)
             filepath = os.path.join(output_dir, tbl + ".sh")
             script = self.generate_etl(sheet, sys_name)
-            self._write_file_safe(filepath, script, sheet.tgt_table, "ETL")
+            write_file_safe(filepath, script, sheet.tgt_table, "ETL")
 
 
 def create_generator(layer_name: str) -> BaseGenerator:

@@ -3,7 +3,7 @@ import json
 from ..core.ir import TableMeta, FieldMeta
 from ..config import ODS_SCHEMA_TMPL
 from ..core.type_mapper import oracle_to_hive
-from tools.utils.table_utils import write_file, iter_ods_tables
+from tools.utils.table_utils import write_file, iter_ods_tables, write_file_safe
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
 
@@ -67,16 +67,8 @@ def generate_all_ods_ddl_files(tables: list, fields_by_table: dict, output_dir: 
     os.makedirs(ddl_dir, exist_ok=True)
     for table, ods_fields in iter_ods_tables(tables, fields_by_table):
         filepath = os.path.join(ddl_dir, table.ods_table + ".sql")
-        try:
-            ddl_sql = generate_ods_ddl(table, ods_fields, sys_name)
-            write_file(filepath, ddl_sql)
-        except ValueError as e:
-            # 验证失败，跳过此表
-            logger.error(f"  ERROR: Skipping table '{table.ods_table}': {e}")
-            continue
-        except IOError as e:
-            logger.error(f"  ERROR: Failed to write DDL file {filepath}: {e}")
-            raise
+        ddl_sql = generate_ods_ddl(table, ods_fields, sys_name)
+        write_file_safe(filepath, ddl_sql, table.ods_table, "DDL")
 
 
 
@@ -186,16 +178,8 @@ def generate_all_ods_etl(tables: list, fields_by_table: dict, output_dir: str, s
     template = _load_etl_template()
     for table, ods_fields in iter_ods_tables(tables, fields_by_table):
         filepath = os.path.join(etl_dir, table.ods_table + ".sh")
-        try:
-            script = generate_ods_etl(table, ods_fields, sys_name, template)
-            write_file(filepath, script)
-        except ValueError as e:
-            # 验证失败，跳过此表
-            logger.error(f"  ERROR: Skipping table '{table.ods_table}': {e}")
-            continue
-        except IOError as e:
-            logger.error(f"  ERROR: Failed to write ETL script {filepath}: {e}")
-            raise
+        script = generate_ods_etl(table, ods_fields, sys_name, template)
+        write_file_safe(filepath, script, table.ods_table, "ETL")
 
 
 def _datax_type(src_type: str, field_cn: str = "") -> str:
