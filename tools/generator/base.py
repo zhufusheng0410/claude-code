@@ -158,22 +158,23 @@ class BaseGenerator:
             alias = mr.src_table_alias
             if not alias:
                 continue
-            info = aliases.setdefault(alias, {
-                "join_type": "",
-                "join_cond": "",
-                "filter_cond": [],
-                "src_table": mr.src_table_name or alias,
-                "src_table_cn": mr.src_table_cn or "",
-            })
+            if alias not in aliases:
+                aliases[alias] = {
+                    "join_type": "",
+                    "join_cond": "",
+                    "filter_cond": [],
+                    "src_table": mr.src_table_name or alias,
+                    "src_table_cn": mr.src_table_cn or "",
+                }
+            info = aliases[alias]
+            # 更新非空值（首次设置的优先保留，但 src_table 优先用非别名值）
             if mr.src_table_name and info["src_table"] == alias:
                 info["src_table"] = mr.src_table_name
-            if mr.src_table_cn and not info["src_table_cn"]:
-                info["src_table_cn"] = mr.src_table_cn
-            if mr.join_type and not info["join_type"]:
-                info["join_type"] = mr.join_type
-            if mr.join_cond and not info["join_cond"]:
+            info["src_table_cn"] = info["src_table_cn"] or mr.src_table_cn
+            info["join_type"] = info["join_type"] or mr.join_type
+            if mr.join_cond:
                 cond = mr.join_cond.strip()
-                info["join_cond"] = cond[3:] if cond.startswith("ON ") else cond
+                info["join_cond"] = info["join_cond"] or (cond[3:] if cond.startswith("ON ") else cond)
             if mr.filter_cond and mr.filter_cond not in info["filter_cond"]:
                 info["filter_cond"].append(mr.filter_cond)
         return aliases
