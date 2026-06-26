@@ -298,6 +298,11 @@ class BaseGenerator:
 
         return result
 
+    def _fmt_select_line(self, prefix, expr, tgt_name, comment) -> str:
+        """格式化单行 SELECT 字段：prefix + expr AS tgt_name  --comment"""
+        line_with_alias = (prefix + expr).ljust(_AS_POS) + " AS " + tgt_name
+        return line_with_alias.ljust(_COMMENT_POS) + "--" + comment
+
     def _build_select_lines(self, mappings, source_tables, sys_field_names, sys_name, add_src_fields=True):
         """
         构建 SELECT 子句，严格参照参考脚本格式：
@@ -319,18 +324,15 @@ class BaseGenerator:
             expr = self._resolve_expr(mr.src_field_alias)
             comment = mr.tgt_name_cn if mr.tgt_name_cn else ""
             if expr.upper().startswith('CASE '):
-                case_lines = self._format_case_expr(expr, mr.tgt_name, comment, prefix)
-                select_lines.extend(case_lines)
+                select_lines.extend(self._format_case_expr(expr, mr.tgt_name, comment, prefix))
             elif '\n' in expr:
                 first_line = expr.split('\n')[0].rstrip()
-                line_with_alias = (prefix + first_line).ljust(_AS_POS) + " AS " + mr.tgt_name
-                select_lines.append(line_with_alias.ljust(_COMMENT_POS) + "--" + comment)
+                select_lines.append(self._fmt_select_line(prefix, first_line, mr.tgt_name, comment))
                 for line in expr.split('\n')[1:]:
                     if line.rstrip():
                         select_lines.append("            " + line.rstrip())
             else:
-                line_with_alias = (prefix + expr).ljust(_AS_POS) + " AS " + mr.tgt_name
-                select_lines.append(line_with_alias.ljust(_COMMENT_POS) + "--" + comment)
+                select_lines.append(self._fmt_select_line(prefix, expr, mr.tgt_name, comment))
 
         # 追加系统字段
         if add_src_fields:
