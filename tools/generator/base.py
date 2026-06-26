@@ -127,6 +127,18 @@ class BaseGenerator:
                 continue
         return "\n".join(parts)
 
+    def _write_file_safe(self, filepath: str, content: str, table_name: str, file_type: str):
+        """安全写入文件，处理 ValueError（验证失败）和 IOError（IO错误）"""
+        try:
+            write_file(filepath, content)
+        except ValueError as e:
+            logger.error(f"  ERROR: Skipping table '{table_name}': {e}")
+            return False
+        except IOError as e:
+            logger.error(f"  ERROR: Failed to write {file_type} file {filepath}: {e}")
+            raise
+        return True
+
     def generate_all_ddl_files(self, sheets: list, output_dir: str, sys_name: str = "O32"):
         """按表生成独立的 DDL SQL 文件"""
         ddl_dir = os.path.join(output_dir, "ddl")
@@ -136,16 +148,8 @@ class BaseGenerator:
                 continue
             tbl = _split_table_name(sheet.tgt_table)
             filepath = os.path.join(ddl_dir, tbl + ".sql")
-            try:
-                ddl_sql = self.generate_ddl(sheet)
-                write_file(filepath, ddl_sql)
-            except ValueError as e:
-                # 验证失败，跳过此表
-                logger.error(f"  ERROR: Skipping table '{sheet.tgt_table}': {e}")
-                continue
-            except IOError as e:
-                logger.error(f"  ERROR: Failed to write DDL file {filepath}: {e}")
-                raise
+            ddl_sql = self.generate_ddl(sheet)
+            self._write_file_safe(filepath, ddl_sql, sheet.tgt_table, "DDL")
 
     def _collect_aliases(self, mappings: list) -> dict:
         """收集所有表的别名信息"""
@@ -244,7 +248,7 @@ class BaseGenerator:
             return "''"
         return raw
 
-    def _format_case_expr(self, expr, tgt_name, comment, first_field):
+    def _format_case_expr(self, expr, tgt_name, comment, prefix):
         """
         格式化 CASE 表达式为参考脚本格式：
          , CASE WHEN T1.C_CUSTTYPE IS NOT NULL
@@ -256,7 +260,6 @@ class BaseGenerator:
         if "\n" in expr:
             lines = [line.rstrip() for line in expr.split("\n") if line.strip()]
         else:
-            # 尝试智能分割长 CASE 表达式
             case_clean = expr.strip()
             if case_clean.upper().startswith("CASE") and "END" in case_clean.upper():
                 # 在 THEN 和 END 前插入换行
@@ -271,12 +274,6 @@ class BaseGenerator:
 
         result = []
         comment = comment or ""
-
-        # 确定前缀
-        if first_field:
-            prefix = "       "
-        else:
-            prefix = "     , "
 
         if len(lines) == 1:
             # 单行 CASE：整个 CASE...END 作为一行
@@ -321,7 +318,7 @@ class BaseGenerator:
             expr = self._resolve_expr(mr.src_field_alias)
             comment = mr.tgt_name_cn if mr.tgt_name_cn else ""
             if expr.upper().startswith('CASE '):
-                case_lines = self._format_case_expr(expr, mr.tgt_name, comment, prefix == "       ")
+                case_lines = self._format_case_expr(expr, mr.tgt_name, comment, prefix)
                 select_lines.extend(case_lines)
             elif '\n' in expr:
                 first_line = expr.split('\n')[0].rstrip()
@@ -452,16 +449,8 @@ class BaseGenerator:
                 continue
             tbl = _split_table_name(sheet.tgt_table)
             filepath = os.path.join(output_dir, tbl + ".sh")
-            try:
-                script = self.generate_etl(sheet, sys_name)
-                write_file(filepath, script)
-            except ValueError as e:
-                # 验证失败，跳过此表
-                logger.error(f"  ERROR: Skipping table '{sheet.tgt_table}': {e}")
-                continue
-            except IOError as e:
-                logger.error(f"  ERROR: Failed to write ETL script {filepath}: {e}")
-                raise
+            script = self.generate_etl(sheet, sys_name)
+            self._write_file_safe(filepath, script, sheet.tgt_table, "ETL")
 
 
 def create_generator(layer_name: str) -> BaseGenerator:
