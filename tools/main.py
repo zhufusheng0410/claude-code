@@ -25,6 +25,7 @@ from tools.parser.field_survey import parse_field_survey
 from tools.parser.mapping import parse_mapping_dir, parse_dws_mapping
 from tools.generator.ods import generate_all_ods_ddl, generate_all_ods_ddl_files, generate_all_ods_etl
 from tools.generator.base import create_generator
+from tools.generator.lineage import extract_lineage, generate_lineage_json
 from tools.utils.sys_extractor import extract_sys_name
 from tools.utils.validation import validate_output_path
 from tools.utils.logging_setup import setup_logging, get_logger
@@ -144,6 +145,10 @@ def _generate_dwd_dws(layer_name, parser_func, input_path, out, logger):
     etl_files_dir = os.path.join(layer_dir, "02_etl")
     generator.generate_all_etl_files(sheets, etl_files_dir, sys_name)
     logger.info(f"  {layer_name} ETL(按表) → {etl_files_dir}/ ({len(sheets)} 个.sh)")
+
+    # 血缘关系
+    lineages = extract_lineage(sheets, layer_name, sys_name)
+    generate_lineage_json(lineages, layer_dir, layer_name)
 
 
 def main():
