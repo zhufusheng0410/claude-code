@@ -376,18 +376,15 @@ class BaseGenerator:
                 if alias not in all_aliases:
                     all_aliases[alias] = info
 
-        # 依赖声明 — 按物理表名去重, 添加 "源表：" 标题
-        seen_tbl = set()
-        dep_lines = ["-- ** 源表："]
-        for alias, info in all_aliases.items():
-            src_tbl = info["src_table"]
-            src_cn = info["src_table_cn"]
-            tbl_short = _split_table_name(src_tbl)
-            if tbl_short in seen_tbl:
-                continue
-            seen_tbl.add(tbl_short)
-            padded_tbl = src_tbl.ljust(_DEP_TBL_WIDTH)
-            dep_lines.append("-- **         " + padded_tbl + src_cn)
+        # 依赖声明 — 按物理表名去重（用 dict 保持顺序），添加 "源表：" 标题
+        unique_srcs = dict.fromkeys(
+            (info["src_table"], info["src_table_cn"])
+            for info in all_aliases.values()
+        )
+        dep_lines = ["-- ** 源表："] + [
+            "-- **         " + tbl.ljust(_DEP_TBL_WIDTH) + cn
+            for tbl, cn in unique_srcs.keys()
+        ]
 
         dep_block = "\n".join(dep_lines)
 
