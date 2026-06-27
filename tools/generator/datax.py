@@ -1,3 +1,12 @@
+"""DataX JSON 配置生成器（备用）
+
+注意：此模块未被 main.py 调用。ODS ETL shell 脚本已通过模板内嵌
+DataX writer columns（${writer_columns} 变量），因此独立的 DataX JSON
+文件生成未集成到 CLI 中。
+
+如需独立生成 DataX JSON 配置文件，可调用 generate_all_datax()。
+"""
+
 import json
 import os
 from ..core.ir import TableMeta, FieldMeta

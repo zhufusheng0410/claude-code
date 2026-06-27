@@ -53,6 +53,7 @@ class MappingRule:
     src_table_name: str = ""     # 源表英文名 (e.g. ODS_XDAY_O32.ODS_O32_TUNITSTOCK_PFD)
     src_table_cn: str = ""       # 源表中文名
     src_field_name: str = ""     # 源字段英文名 (e.g. L_DATE)
+    src_field_cn: str = ""       # 源字段中文名
     join_type: str = ""          # MAIN TABLE / LEFT JOIN
     join_cond: str = ""
     filter_cond: str = ""
@@ -74,26 +75,3 @@ class MappingSheet:
     source_tables: list = field(default_factory=list)
 
 
-@dataclass
-class LineageField:
-    """字段级血缘：目标字段 ← 源表.源字段 + 转换逻辑"""
-    tgt_table: str = ""                    # 目标表名 (DWD_XXX_PFD)
-    tgt_field: str = ""                    # 目标字段名
-    tgt_field_cn: str = ""                 # 目标字段中文名
-    src_table: str = ""                    # 源表名 (ODS_XXX_PFD)
-    src_field: str = ""                    # 源字段名
-    src_field_alias: str = ""              # 映射规则/表达式 (如 T1.L_DATE)
-    join_type: str = ""                    # MAIN TABLE / LEFT JOIN
-    filter_cond: str = ""                  # 过滤条件
-    note: str = ""                         # 备注
-
-
-@dataclass
-class LineageTable:
-    """表级血缘：目标表 ← 所有上游源表"""
-    tgt_table: str = ""                    # 目标表名
-    tgt_table_cn: str = ""                 # 目标表中文名
-    layer: str = ""                        # DWD / DWS
-    sys_name: str = ""                     # 系统简称
-    upstream_tables: list = field(default_factory=list)  # [上游表名]
-    mappings: list = field(default_factory=list)         # [LineageField]

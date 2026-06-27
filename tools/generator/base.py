@@ -2,39 +2,17 @@ import os
 import re
 from collections import defaultdict
 from ..core.ir import MappingSheet
-from ..config import DWD_SCHEMA, SYS_FIELDS_DWD
+from ..config import (
+    DWD_SCHEMA, SYS_FIELDS_DWD, TIMESTAMP_EXPR, HIVE_SETTINGS,
+    _AS_POS, _COMMENT_POS, _DEP_TBL_WIDTH, DDL_PARTITIONS, DDL_ROW_FORMAT,
+    DDL_FIELD_PREFIX, DDL_FIELD_SEP,
+)
+from ..generator.ddl_common import generate_ddl_body
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
 from tools.utils.table_utils import write_file, write_file_safe
 
 logger = get_logger(__name__)
-
-# 列名最大宽度, 用于对齐（参照参考脚本格式）
-# 首字段前缀7空格，后续字段前缀"     , "(7字符)
-_AS_POS = 80        # " AS 别名" 起始列
-_COMMENT_POS = 120  # "--注释" 起始列
-_DEP_TBL_WIDTH = 55  # 依赖声明中表名列宽
-
-# 系统字段默认表达式
-_TIMESTAMP_EXPR = "FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyy-MM-dd HH:mm:ss')"
-
-# 参照脚本固定的 Hive 运行参数（写入每个 ETL 脚本头部）
-_HIVE_SETTINGS = [
-    "set hive.exec.dynamic.partition=true;",
-    "set hive.exec.dynamic.partition.mode=nonstrict;",
-    "set hive.exec.max.dynamic.partitions.pernode=10000;",
-    "set hive.exec.max.dynamic.partitions=10000;",
-    "set hive.exec.max.created.files=10000;",
-    "set mapred.max.split.size=256000000;",
-    "set mapred.min.split.size.per.node=100000000;",
-    "set mapred.min.split.size.per.rack=100000000;",
-    "set hive.merge.mapredfiles=true;",
-    "set hive.merge.mapfiles=true;",
-    "set hive.merge.smallfiles.avgsize=16000000;",
-    "set hive.merge.size.per.task=256000000;",
-    "set hive.exec.reducers.bytes.per.reducer=10240000000;",
-    "set mapreduce.job.reduces=2;",
-]
 
 
 def _split_table_name(tbl_full: str) -> str:
@@ -88,25 +66,21 @@ class BaseGenerator:
             validate_db_identifier(mr.tgt_name, "field name")
             ftype = mr.tgt_type if mr.tgt_type else "STRING"
             comment = mr.tgt_name_cn.replace("'", "''") if mr.tgt_name_cn else ""
-            field_defs.append(f"   {mr.tgt_name}  {ftype} DEFAULT NULL COMMENT '{comment}'")
+            field_defs.append(f"{mr.tgt_name}  {ftype} DEFAULT NULL COMMENT '{comment}'")
 
         sys_field_names = {mr.tgt_name for mr in unique_fields}
         for sf_name, sf_type, sf_cn in self.sys_fields:
             if sf_name not in sys_field_names:
-                # 系统字段也需验证，但通常可信，为性能可跳过。此处为安全起见验证
                 validate_db_identifier(sf_name, "system field name")
-                field_defs.append(f"   {sf_name}  {sf_type} DEFAULT NULL COMMENT '{sf_cn}'")
+                field_defs.append(f"{sf_name}  {sf_type} DEFAULT NULL COMMENT '{sf_cn}'")
 
-        lines = [
-            f"DROP TABLE IF EXISTS {self.schema}.{tbl};",
-            f"CREATE TABLE {self.schema}.{tbl} (",
-            ",\n".join(field_defs),
-            ")",
-            f"COMMENT '{sheet.tgt_table_cn}'",
-            "PARTITIONED BY ( P_DT  STRING)",
-            "ROW FORMAT DELIMITED FIELDS TERMINATED BY '\\t' NULL DEFINED AS '' ;",
-        ]
-        return "\n".join(lines)
+        return generate_ddl_body(
+            self.schema, tbl, field_defs, sheet.tgt_table_cn,
+            field_prefix=DDL_FIELD_PREFIX,
+            field_sep=DDL_FIELD_SEP,
+            partitions=DDL_PARTITIONS,
+            row_format=DDL_ROW_FORMAT,
+        )
 
     def generate_all_ddl(self, sheets: list) -> str:
         """生成所有建表 DDL（合并为一个 SQL 文件）"""
@@ -331,9 +305,9 @@ class BaseGenerator:
                 src_tab_str = ",".join(source_tables) if source_tables else ""
                 select_lines.append(self._fmt_sys_field("SRC_TAB", f"'{src_tab_str}'", "源表"))
         if "LD_TIME" not in seen:
-            select_lines.append(self._fmt_sys_field("LD_TIME", _TIMESTAMP_EXPR, "加载时间"))
+            select_lines.append(self._fmt_sys_field("LD_TIME", TIMESTAMP_EXPR, "加载时间"))
         if "MODIFY_TIME" not in seen:
-            select_lines.append(self._fmt_sys_field("MODIFY_TIME", _TIMESTAMP_EXPR, "修改时间"))
+            select_lines.append(self._fmt_sys_field("MODIFY_TIME", TIMESTAMP_EXPR, "修改时间"))
         return select_lines
 
     def _fmt_sys_field(self, field_name: str, expr_value: str, comment: str) -> str:
@@ -402,7 +376,7 @@ class BaseGenerator:
             dep_block,
             "-- **************************************************************************",
             "",
-            *_HIVE_SETTINGS,
+            *HIVE_SETTINGS,
             "",
             "INSERT OVERWRITE TABLE " + self.schema + "." + tbl + " PARTITION(P_DT = '${" + param + "}')",
         ]

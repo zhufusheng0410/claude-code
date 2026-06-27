@@ -3,6 +3,7 @@ import json
 from ..core.ir import TableMeta, FieldMeta
 from ..config import ODS_SCHEMA_TMPL
 from ..core.type_mapper import oracle_to_hive
+from ..generator.ddl_common import generate_ddl_body
 from tools.utils.table_utils import write_file, iter_ods_tables, write_file_safe
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
@@ -29,18 +30,11 @@ def generate_ods_ddl(table: TableMeta, fields: list, sys_name: str) -> str:
         hive_type = f.hive_type if f.hive_type else "STRING"
         comment = f.src_name_cn if f.src_name_cn else ""
         comment = comment.replace("'", "''")
-        field_defs.append(f"   {f.src_name}  {hive_type} DEFAULT NULL COMMENT '{comment}'")
+        field_defs.append(f"{f.src_name}  {hive_type} DEFAULT NULL COMMENT '{comment}'")
 
-    lines = [
-        f"DROP TABLE IF EXISTS {tbl};",
-        f"CREATE TABLE {tbl} (",
-        ",\n".join(field_defs),
-        ")",
-        f"COMMENT '{table.src_table_cn}'",
-        "PARTITIONED BY ( P_DT  STRING)",
-        "ROW FORMAT DELIMITED FIELDS TERMINATED BY '\\t' NULL DEFINED AS '' ;",
-    ]
-    return "\n".join(lines)
+    return generate_ddl_body(
+        schema, tbl, field_defs, table.src_table_cn
+    )
 
 
 def generate_all_ods_ddl(tables: list, fields_by_table: dict, sys_name: str) -> str:

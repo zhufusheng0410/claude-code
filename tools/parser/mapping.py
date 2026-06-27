@@ -144,6 +144,7 @@ def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
 
         # 源字段英文名 (用于构建映射)
         src_field_name = cell(i, col_map.get("源字段英文名", -1))
+        src_field_cn = cell(i, col_map.get("源字段中文名", -1))
         src_table_name = cell(i, col_map.get("源表英文名", -1))
 
         # 映射规则 - 有的格式有专门的"映射规则"列
@@ -171,6 +172,7 @@ def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
             src_table_name=src_table_name,
             src_table_cn=cell(i, col_map.get("源表中文名", -1)),
             src_field_name=src_field_name,
+            src_field_cn=src_field_cn,
             join_type=join_type_raw,
             join_cond=join_cond,
             filter_cond=_extract_filter(filter_cond),
