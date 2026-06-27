@@ -3,14 +3,17 @@ import re
 from collections import defaultdict
 from ..core.ir import MappingSheet
 from ..config import (
-    DWD_SCHEMA, SYS_FIELDS_DWD, TIMESTAMP_EXPR, HIVE_SETTINGS,
-    _AS_POS, _COMMENT_POS, _DEP_TBL_WIDTH, DDL_PARTITIONS, DDL_ROW_FORMAT,
+    DWD_SCHEMA, SYS_FIELDS_DWD,
+    DDL_PARTITIONS, DDL_ROW_FORMAT,
     DDL_FIELD_PREFIX, DDL_FIELD_SEP,
+    _AS_POS, _COMMENT_POS, _DEP_TBL_WIDTH,
+    HIVE_SETTINGS,
+    TIMESTAMP_EXPR,
 )
-from ..generator.ddl_common import generate_ddl_body
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
 from tools.utils.table_utils import write_file, write_file_safe
+from ..generator.ddl_common import generate_ddl_body
 
 logger = get_logger(__name__)
 

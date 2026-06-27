@@ -67,19 +67,16 @@ def extract_lineage(sheets: list, layer: str, sys_name: str) -> list:
 
 
 def generate_lineage_excel(lineages: list, output_dir: str, layer: str) -> str:
-    """将血缘数据输出为 Excel 文件。
+    """输出表级+字段级血缘到 Excel。
 
-    输出一个 Excel 文件，包含两个 sheet:
-    - 字段级血缘: 目标表英文名/中文名、目标字段英文名/中文名、
-                  来源表英文名/中文名、来源字段英文名/中文名、
-                  映射规则/表达式、JOIN方式、过滤条件、备注
-    - 表级血缘: 目标表英文名/中文名、层级、系统、上游表列表
-
-    Returns:
-        输出目录路径
+    字段级血缘 sheet 包含：目标表(英文名/中文名)、目标字段(英文名/中文名)、
+    来源表(英文名/中文名)、来源字段(英文名/中文名)、映射规则/表达式、JOIN方式、
+    过滤条件、备注。
+    表级血缘 sheet 包含：目标表(英文名/中文名)、层级、系统、上游表列表。
     """
     lineage_dir = os.path.join(output_dir, "lineage")
-    os.makedirs(lineage_dir, exist_ok=True)
+    if not os.path.exists(lineage_dir):
+        os.makedirs(lineage_dir)
 
     # 收集字段级记录
     rows = []
