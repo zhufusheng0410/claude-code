@@ -75,8 +75,7 @@ def generate_lineage_excel(lineages: list, output_dir: str, layer: str) -> str:
     表级血缘 sheet 包含：目标表(英文名/中文名)、层级、系统、上游表列表。
     """
     lineage_dir = os.path.join(output_dir, "lineage")
-    if not os.path.exists(lineage_dir):
-        os.makedirs(lineage_dir)
+    os.makedirs(lineage_dir, exist_ok=True)
 
     # 收集字段级记录
     rows = []

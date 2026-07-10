@@ -37,9 +37,9 @@ DDL_FIELD_SEP = ",\n"
 TIMESTAMP_EXPR = "FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyy-MM-dd HH:mm:ss')"
 
 # --- ETL 脚本对齐常量 ---
-_AS_POS = 80        # " AS 别名" 起始列
-_COMMENT_POS = 120  # "--注释" 起始列
-_DEP_TBL_WIDTH = 55  # 依赖声明中表名列宽
+AS_POS = 80        # " AS 别名" 起始列
+COMMENT_POS = 120  # "--注释" 起始列
+DEP_TBL_WIDTH = 55  # 依赖声明中表名列宽
 
 # Hive 运行参数
 HIVE_SETTINGS = [

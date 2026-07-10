@@ -6,7 +6,7 @@ from ..config import (
     DWD_SCHEMA, SYS_FIELDS_DWD,
     DDL_PARTITIONS, DDL_ROW_FORMAT,
     DDL_FIELD_PREFIX, DDL_FIELD_SEP,
-    _AS_POS, _COMMENT_POS, _DEP_TBL_WIDTH,
+    AS_POS, COMMENT_POS, DEP_TBL_WIDTH,
     HIVE_SETTINGS,
     TIMESTAMP_EXPR,
 )
@@ -243,8 +243,8 @@ class BaseGenerator:
 
         if len(lines) == 1:
             # 单行 CASE：整个 CASE...END 作为一行
-            line_with_alias = (prefix + lines[0]).ljust(_AS_POS) + " AS " + tgt_name
-            result.append(line_with_alias.ljust(_COMMENT_POS) + "--" + comment)
+            line_with_alias = (prefix + lines[0]).ljust(AS_POS) + " AS " + tgt_name
+            result.append(line_with_alias.ljust(COMMENT_POS) + "--" + comment)
         else:
             # 多行 CASE
             # 第一行（CASE...WHEN...THEN...）：没有 AS 和注释
@@ -258,15 +258,15 @@ class BaseGenerator:
             # 最后一行：END（缩进 8 空格）后跟 AS alias 和注释
             if lines[-1].upper().startswith("END"):
                 end_line = "        " + lines[-1]  # 8 空格 + END
-                end_line_with_alias = end_line.ljust(_AS_POS) + " AS " + tgt_name
-                result.append(end_line_with_alias.ljust(_COMMENT_POS) + "--" + comment)
+                end_line_with_alias = end_line.ljust(AS_POS) + " AS " + tgt_name
+                result.append(end_line_with_alias.ljust(COMMENT_POS) + "--" + comment)
 
         return result
 
     def _fmt_select_line(self, prefix, expr, tgt_name, comment) -> str:
         """格式化单行 SELECT 字段：prefix + expr AS tgt_name  --comment"""
-        line_with_alias = (prefix + expr).ljust(_AS_POS) + " AS " + tgt_name
-        return line_with_alias.ljust(_COMMENT_POS) + "--" + comment
+        line_with_alias = (prefix + expr).ljust(AS_POS) + " AS " + tgt_name
+        return line_with_alias.ljust(COMMENT_POS) + "--" + comment
 
     def _build_select_lines(self, mappings, source_tables, sys_field_names, sys_name, add_src_fields=True):
         """
@@ -315,8 +315,8 @@ class BaseGenerator:
 
     def _fmt_sys_field(self, field_name: str, expr_value: str, comment: str) -> str:
         """格式化系统字段行：     , expr AS field_name  --comment"""
-        line_with_alias = ("     , " + expr_value).ljust(_AS_POS) + f" AS {field_name}"
-        return line_with_alias.ljust(_COMMENT_POS) + "--" + comment
+        line_with_alias = ("     , " + expr_value).ljust(AS_POS) + f" AS {field_name}"
+        return line_with_alias.ljust(COMMENT_POS) + "--" + comment
 
     def generate_etl(self, sheet: MappingSheet, sys_name: str = "O32") -> str:
         """从 MappingSheet 生成 ETL 加工 shell 脚本"""
@@ -349,7 +349,7 @@ class BaseGenerator:
             for info in all_aliases.values()
         )
         dep_lines = ["-- ** 源表："] + [
-            "-- **         " + tbl.ljust(_DEP_TBL_WIDTH) + cn
+            "-- **         " + tbl.ljust(DEP_TBL_WIDTH) + cn
             for tbl, cn in unique_srcs.keys()
         ]
 
