@@ -2,7 +2,6 @@ import pandas as pd
 from ..core.ir import TableMeta
 from ..config import ODS_TABLE_TMPL, SUFFIX_FULL, SUFFIX_INCR
 from tools.utils.pandas_helpers import safe_str
-from tools.utils.table_utils import find_fields_by_table
 from tools.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)

@@ -12,17 +12,10 @@ from ..config import (
 )
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
-from tools.utils.table_utils import write_file, write_file_safe
+from tools.utils.table_utils import write_file, write_file_safe, extract_physical_name
 from ..generator.ddl_common import generate_ddl_body
 
 logger = get_logger(__name__)
-
-
-def _split_table_name(tbl_full: str) -> str:
-    """从 'SCHEMA.TABLE' 或 'TABLE' 中取出表名部分"""
-    if '.' in tbl_full:
-        return tbl_full.rsplit('.', 1)[1]
-    return tbl_full
 
 
 def _extract_sys_from_table(table_name: str) -> str:
@@ -51,7 +44,7 @@ class BaseGenerator:
 
     def generate_ddl(self, sheet: MappingSheet) -> str:
         """从 MappingSheet 生成建表 DDL"""
-        tbl = _split_table_name(sheet.tgt_table)
+        tbl = extract_physical_name(sheet.tgt_table)
 
         # 验证表名安全性，防止 SQL 注入
         validate_db_identifier(tbl, "table name")
@@ -111,7 +104,7 @@ class BaseGenerator:
         for sheet in sheets:
             if not sheet.tgt_table or not sheet.mappings:
                 continue
-            tbl = _split_table_name(sheet.tgt_table)
+            tbl = extract_physical_name(sheet.tgt_table)
             filepath = os.path.join(ddl_dir, tbl + ".sql")
             ddl_sql = self.generate_ddl(sheet)
             write_file_safe(filepath, ddl_sql, sheet.tgt_table, "DDL")
@@ -320,7 +313,7 @@ class BaseGenerator:
 
     def generate_etl(self, sheet: MappingSheet, sys_name: str = "O32") -> str:
         """从 MappingSheet 生成 ETL 加工 shell 脚本"""
-        tbl = _split_table_name(sheet.tgt_table)
+        tbl = extract_physical_name(sheet.tgt_table)
 
         # 验证表名安全性，防止 SQL 注入
         validate_db_identifier(tbl, "table name")
@@ -413,7 +406,7 @@ class BaseGenerator:
         for sheet in sheets:
             if not sheet.tgt_table or not sheet.mappings:
                 continue
-            tbl = _split_table_name(sheet.tgt_table)
+            tbl = extract_physical_name(sheet.tgt_table)
             filepath = os.path.join(output_dir, tbl + ".sh")
             script = self.generate_etl(sheet, sys_name)
             write_file_safe(filepath, script, sheet.tgt_table, "ETL")
