@@ -26,6 +26,9 @@ from tools.parser.mapping import parse_mapping_dir, parse_dws_mapping
 from tools.generator.ods import generate_all_ods_ddl, generate_all_ods_ddl_files, generate_all_ods_etl
 from tools.generator.base import create_generator
 from tools.generator.lineage import extract_lineage, generate_lineage_excel
+from tools.generator.data_dict import (
+    extract_ods_dict, extract_layer_dict, generate_data_dict, write_combined_dict,
+)
 from tools.utils.sys_extractor import extract_sys_name
 from tools.utils.validation import validate_output_path
 from tools.utils.logging_setup import setup_logging, get_logger
@@ -76,11 +79,11 @@ def _find_survey_files(survey_dir):
 
 
 def _generate_ods_for_sys(sys_key, survey_dir, out, logger):
-    """为单个系统生成 ODS 层代码"""
+    """为单个系统生成 ODS 层代码，返回该系统的 ODS 数据字典行列表"""
     ts_path, fs_path = _find_survey_files(survey_dir)
     if not ts_path or not fs_path:
         logger.warning(f"  [{sys_key}] 未找到调研文件，跳过")
-        return
+        return []
 
     sys_name = normalize_sys_name(sys_key)
 
@@ -90,7 +93,7 @@ def _generate_ods_for_sys(sys_key, survey_dir, out, logger):
     valid_tables = [t for t in tables if t.src_table in fields_by_table and is_table_reserved(t)]
     if not valid_tables:
         logger.info(f"  [{sys_name}] 无有效表，跳过")
-        return
+        return []
 
     full_cnt = sum(1 for t in valid_tables if t.load_strategy == "FULL")
     incr_cnt = len(valid_tables) - full_cnt
@@ -112,6 +115,11 @@ def _generate_ods_for_sys(sys_key, survey_dir, out, logger):
 
     generate_all_ods_etl(valid_tables, fields_by_table, grp_dir, sys_name)
     logger.info(f"    ODS ETL(按表)→ {os.path.join(grp_dir, 'etl_sh')}/ ({len(valid_tables)} 个.sh)")
+
+    # 数据字典
+    dict_rows = extract_ods_dict(valid_tables, fields_by_table, sys_name)
+    generate_data_dict(dict_rows, grp_dir, "ODS")
+    return dict_rows
 
 
 def _generate_dwd_dws(layer_name, parser_func, input_path, out, logger):
@@ -149,6 +157,11 @@ def _generate_dwd_dws(layer_name, parser_func, input_path, out, logger):
     # 血缘关系
     lineages = extract_lineage(sheets, layer_name, sys_name)
     generate_lineage_excel(lineages, layer_dir, layer_name)
+
+    # 数据字典
+    dict_rows = extract_layer_dict(sheets, layer_name, sys_name)
+    generate_data_dict(dict_rows, layer_dir, layer_name)
+    return dict_rows
 
 
 def main():
@@ -188,11 +201,16 @@ def main():
             logger.error(f"未找到系统: {args.sys}")
             sys.exit(1)
 
+    # 汇总各层数据字典行，跨系统跨层级
+    dict_by_layer = {"ODS": [], "DWD": [], "DWS": []}
+
     # --- ODS ---
     if layer in ("ODS", "ALL"):
         logger.info("─── ODS 层 ──────────────────────────────────")
         for sys_key, survey_dir in systems:
-            _generate_ods_for_sys(sys_key, survey_dir, out, logger)
+            dict_by_layer["ODS"].extend(
+                _generate_ods_for_sys(sys_key, survey_dir, out, logger)
+            )
 
     # 预计算每个系统的标准名和全部别名，供 DWD/DWS 两轮复用
     sys_info = {
@@ -207,7 +225,9 @@ def main():
             sys_name, names = sys_info[sys_key]
             dwd_dir = find_mapping_dir(DWD_MAPPING_BASE, names)
             if dwd_dir:
-                _generate_dwd_dws("DWD", parse_mapping_dir, dwd_dir, out, logger)
+                dict_by_layer["DWD"].extend(
+                    _generate_dwd_dws("DWD", parse_mapping_dir, dwd_dir, out, logger)
+                )
             else:
                 logger.info(f"  [{sys_name}] 无 DWD MAPPING，跳过")
 
@@ -218,9 +238,14 @@ def main():
             sys_name, names = sys_info[sys_key]
             dws_file = find_mapping_file(DWS_MAPPING_BASE, names, "_DWS_*.xlsx")
             if dws_file:
-                _generate_dwd_dws("DWS", parse_dws_mapping, dws_file, out, logger)
+                dict_by_layer["DWS"].extend(
+                    _generate_dwd_dws("DWS", parse_dws_mapping, dws_file, out, logger)
+                )
             else:
                 logger.info(f"  [{sys_name}] 无 DWS MAPPING，跳过")
+
+    # 汇总数据字典（跨系统跨层级）
+    write_combined_dict(dict_by_layer, out)
 
     elapsed = time.time() - t_start
     logger.info(f"─────────────────────────────────────────────")

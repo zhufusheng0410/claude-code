@@ -9,7 +9,7 @@
 - Python 3 + pandas + openpyxl
 - 解析器(Parser) → 中间表示(IR) → 生成器(Generator)
 - CLI 入口: `python tools/main.py --layer ALL`（系统自动检测）
-- CC Skill: `/generate-dw`
+- CC Skill: `/generate-dw`（代码生成）、`/generate-dict`（数据字典）
 
 ### 核心模块
 
@@ -22,7 +22,8 @@
 | Excel 解析 | `tools/parser/` | 表级/字段级调研解析、MAPPING 解析 |
 | 代码生成 | `tools/generator/` | ODS/DWD/DWS DDL+ETL、DataX 配置 |
 | 共享工具 | `tools/utils/` | 别名查找、文件写入、输入验证、日志 |
-| 血缘生成 | `tools/generator/lineage.py` | 从 MAPPING 提取表级+字段级血缘，输出 JSON |
+| 血缘生成 | `tools/generator/lineage.py` | 从 MAPPING 提取表级+字段级血缘，输出 Excel |
+| 数据字典 | `tools/generator/data_dict.py` | 汇总三层表+字段元数据，输出 Excel（分层+汇总） |
 
 ## 目录结构
 
@@ -35,7 +36,10 @@ tools/
 ├── generator/           # 代码生成器 (ODS/DWD/DWS/DataX)
 └── utils/               # 共享工具 (mapping_finder, table_utils…)
 scripts/
-└── {系统}/{层级}/       # 生成的 DDL/ETL 脚本输出目录
+├── {系统}/{层级}/       # 生成的 DDL/ETL 脚本输出目录
+│   ├── lineage/         # 血缘 Excel
+│   └── data_dict/       # 单层数据字典 Excel
+└── 数据字典_汇总.xlsx   # 跨系统跨层级汇总字典
 demo/templates/          # ETL shell 脚本模板
 ```
 
@@ -158,6 +162,13 @@ python tools/main.py --layer ALL --output /custom/output/
 ```
 /generate-dw --sys O32 --layer ALL
 /generate-dw --sys HSFA --layer DWD
+```
+
+数据字典（随代码生成一并产出，也可单独用 skill 说明触发）：
+
+```
+/generate-dict --sys O32 --layer ALL
+/generate-dict --layer ALL
 ```
 
 ## 调研文档要求
