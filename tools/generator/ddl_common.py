@@ -9,6 +9,16 @@ ODS 和 DWD/DWS 的建表语句结构相同：
 from ..config import DDL_PARTITIONS, DDL_ROW_FORMAT, DDL_FIELD_PREFIX, DDL_FIELD_SEP
 
 
+def escape_sql_comment(comment: str) -> str:
+    """转义 SQL 注释中的单引号，防止 COMMENT 子句注入或语法错误。
+
+    统一替代各生成器里散落的 `comment.replace("'", "''")`。
+    """
+    if not comment:
+        return ""
+    return comment.replace("'", "''")
+
+
 def generate_ddl_body(
     schema: str,
     tbl: str,
@@ -34,6 +44,7 @@ def generate_ddl_body(
     Returns:
         完整的 CREATE TABLE DDL 语句
     """
+    comment = escape_sql_comment(comment)
     field_defs = [f"{field_prefix}{f}" for f in fields]
     lines = [
         f"CREATE TABLE {schema}.{tbl} (",

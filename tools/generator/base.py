@@ -61,8 +61,7 @@ class BaseGenerator:
             # 验证字段名安全性
             validate_db_identifier(mr.tgt_name, "field name")
             ftype = mr.tgt_type if mr.tgt_type else "STRING"
-            comment = mr.tgt_name_cn.replace("'", "''") if mr.tgt_name_cn else ""
-            field_defs.append(f"{mr.tgt_name}  {ftype} DEFAULT NULL COMMENT '{comment}'")
+            field_defs.append(f"{mr.tgt_name}  {ftype} DEFAULT NULL COMMENT '{mr.tgt_name_cn}'")
 
         sys_field_names = {mr.tgt_name for mr in unique_fields}
         for sf_name, sf_type, sf_cn in self.sys_fields:
@@ -320,6 +319,8 @@ class BaseGenerator:
 
         sys_field_names = {sf[0] for sf in self.sys_fields}
         param = sheet.param or "p_end_dt"
+        # 防止分区参数被注入恶意字符（直接拼入生成的 INSERT 语句）
+        validate_db_identifier(param, "partition param")
 
         # 按 group_no 分组，支持多组 UNION ALL（Python 3.7+ dict 保序）
         groups = defaultdict(list)

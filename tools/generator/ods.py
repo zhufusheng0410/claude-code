@@ -3,7 +3,7 @@ import json
 from ..core.ir import TableMeta, FieldMeta
 from ..config import ODS_SCHEMA_TMPL
 from ..core.type_mapper import oracle_to_hive
-from ..generator.ddl_common import generate_ddl_body
+from ..generator.ddl_common import generate_ddl_body, escape_sql_comment
 from tools.utils.table_utils import write_file, iter_ods_tables, write_file_safe
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
@@ -28,9 +28,7 @@ def generate_ods_ddl(table: TableMeta, fields: list, sys_name: str) -> str:
         # 验证字段名安全性
         validate_db_identifier(f.src_name, "field name")
         hive_type = f.hive_type if f.hive_type else "STRING"
-        comment = f.src_name_cn if f.src_name_cn else ""
-        comment = comment.replace("'", "''")
-        field_defs.append(f"{f.src_name}  {hive_type} DEFAULT NULL COMMENT '{comment}'")
+        field_defs.append(f"{f.src_name}  {hive_type} DEFAULT NULL COMMENT '{f.src_name_cn}'")
 
     return generate_ddl_body(
         schema, tbl, field_defs, table.src_table_cn
@@ -102,7 +100,7 @@ def generate_ods_etl(table: TableMeta, fields: list, sys_name: str, template: st
         # 验证字段名安全性
         validate_db_identifier(f.src_name, "field name")
         hive_type = f.hive_type if f.hive_type else oracle_to_hive(f.src_type, f.src_name_cn)
-        comment = f.src_name_cn if f.src_name_cn else ""
+        comment = escape_sql_comment(f.src_name_cn)
         tmp_field_defs.append(f"  {f.src_name}  {hive_type}  COMMENT  '{comment}'")
     tmp_fields_str = ",\n".join(tmp_field_defs)
 
@@ -115,7 +113,9 @@ def generate_ods_etl(table: TableMeta, fields: list, sys_name: str, template: st
     src_schema_var = f"{sys_name.lower()}_src_schema"
     from_where_clause = f"\n                                FROM ${{{src_schema_var}}}.{table.src_table}"
     if table.load_strategy == "INCR" and table.incr_cond:
-        incr = table.incr_cond.strip()
+        # incr_cond 为业务增量条件（如 "L_DATE >= ..."），来自可信调研文档，直接拼入 WHERE。
+        # 仅去除换行符防止多行注入，不做语法改写以免破坏合法 SQL。
+        incr = table.incr_cond.replace("\n", " ").replace("\r", " ").strip()
         if incr and incr not in ('无', 'nan', ''):
             from_where_clause += f"\n                                WHERE {incr}  between ${{p_start_dt}} and ${{p_end_dt}}"
 

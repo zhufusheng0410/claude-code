@@ -6,6 +6,23 @@ from tools.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
 
+# 表级调研 Excel 列索引（pd.read_excel(..., header=None)，数据行从 row 3 起）。
+# 调研文档列序若调整，仅需改此处的命名常量，避免散落的魔法数字静默错列。
+COL_SRC_DB_TYPE = 0
+COL_SRC_SYS = 2
+COL_SRC_TABLE = 4
+COL_SRC_TABLE_CN = 5
+COL_SRC_SCHEMA = 6
+COL_ODS_TABLE = 7
+COL_TABLE_ROWS = 9
+COL_IS_RESERVED = 10
+COL_STORAGE_PERIOD = 14
+COL_LOAD_STRATEGY = 15
+COL_IS_PARTITION = 16
+COL_INCR_COND = 17
+COL_INCR_COND_FORMAT = 18
+COL_TOPIC = 19
+
 
 def parse_table_survey(filepath: str, sys_name: str = "O32", table_prefix: str = None) -> list:
     if table_prefix is None:
@@ -31,22 +48,22 @@ def parse_table_survey(filepath: str, sys_name: str = "O32", table_prefix: str =
     for i in range(3, len(df)):
         row = df.iloc[i]
         # 过滤：只保留指定系统的表（未指定系统则不过滤）
-        src_sys_from_excel = safe_str(row, 2)
+        src_sys_from_excel = safe_str(row, COL_SRC_SYS)
         if sys_name and src_sys_from_excel and src_sys_from_excel != sys_name:
             skipped_sys += 1
             continue
 
-        src_table = safe_str(row, 4)
+        src_table = safe_str(row, COL_SRC_TABLE)
         if not src_table:
             skipped_empty += 1
             continue  # 源表名为空，跳过
 
         # 提前计算公共变量，避免在 if not ods_table 分支内外重复
-        strategy_raw = safe_str(row, 15)
+        strategy_raw = safe_str(row, COL_LOAD_STRATEGY)
         load_strategy = "INCR" if "增量" in strategy_raw else "FULL"
         actual_sys = sys_name or src_sys_from_excel
 
-        ods_table = safe_str(row, 7)
+        ods_table = safe_str(row, COL_ODS_TABLE)
 
         # 修复：如果ODS表名为空，自动生成
         if not ods_table:
@@ -65,19 +82,19 @@ def parse_table_survey(filepath: str, sys_name: str = "O32", table_prefix: str =
 
         tables.append(TableMeta(
             src_sys=actual_sys,
-            src_db_type=safe_str(row, 0),
-            src_schema=safe_str(row, 6),
+            src_db_type=safe_str(row, COL_SRC_DB_TYPE),
+            src_schema=safe_str(row, COL_SRC_SCHEMA),
             src_table=src_table,
-            src_table_cn=safe_str(row, 5),
+            src_table_cn=safe_str(row, COL_SRC_TABLE_CN),
             ods_table=ods_table,
             load_strategy=load_strategy,
-            incr_cond=safe_str(row, 17),
-            incr_cond_format=safe_str(row, 18),
-            is_partition=safe_str(row, 16),
-            storage_period=safe_str(row, 14),
-            topic=safe_str(row, 19),
-            table_rows=safe_str(row, 9),
-            is_reserved=safe_str(row, 10),  # 列10: 是否保留
+            incr_cond=safe_str(row, COL_INCR_COND),
+            incr_cond_format=safe_str(row, COL_INCR_COND_FORMAT),
+            is_partition=safe_str(row, COL_IS_PARTITION),
+            storage_period=safe_str(row, COL_STORAGE_PERIOD),
+            topic=safe_str(row, COL_TOPIC),
+            table_rows=safe_str(row, COL_TABLE_ROWS),
+            is_reserved=safe_str(row, COL_IS_RESERVED),
         ))
 
     logger.debug(

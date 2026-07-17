@@ -48,6 +48,15 @@ def iter_ods_tables(tables: list, fields_by_table: dict):
         yield table, filter_ods_fields(tbl_fields)
 
 
+def filter_valid_ods_tables(tables: list, fields_by_table: dict) -> list:
+    """筛选需要生成的 ODS 表（保留 + 有字段），供主流程预统计/预过滤。
+
+    直接复用 iter_ods_tables 的同一过滤逻辑，避免预过滤时因表名大小写
+    与字段级调研不一致而静默漏表。
+    """
+    return [t for t, _ in iter_ods_tables(tables, fields_by_table)]
+
+
 def write_file(filepath: str, content: str) -> None:
     """统一文件写入，写失败时抛出 OSError"""
     with open(filepath, 'w', encoding='utf-8') as fh:

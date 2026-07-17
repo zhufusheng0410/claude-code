@@ -53,8 +53,14 @@ def _has_chinese(text: str) -> bool:
 
 
 def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
+    """解析单个 MAPPING sheet：按名读取后委派 _parse_sheet_df。"""
+    df = pd.read_excel(filepath, sheet_name=sheet_name, header=None)
+    return _parse_sheet_df(df)
+
+
+def _parse_sheet_df(df: pd.DataFrame) -> MappingSheet:
     """
-    解析单个 MAPPING sheet。
+    解析单个 MAPPING sheet 的 DataFrame（header=None 读取）。
 
     MAPPING Excel 的通用结构:
     - Row 0: 工作区说明 或 源表声明
@@ -71,8 +77,6 @@ def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
 
     策略: 动态扫描列头行, 按 "目标字段英文名" 定位, 再按列名映射。
     """
-    df = pd.read_excel(filepath, sheet_name=sheet_name, header=None)
-
     # 一次扫描 col 0 找所有关键词行，避免 N 次重复遍历
     _KEYWORDS = {
         "目标表中文名称", "目标表英文名称", "功能描述", "分区字段",
@@ -124,7 +128,7 @@ def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
         # 跳过注释行：目标字段英文名包含中文的行（如"初始化。第1组插入交易日历史数据"等ETL逻辑说明）
         if _has_chinese(tgt_name):
             if tgt_name not in _KNOWN_COLUMN_HEADERS:
-                logger.info(f"  SKIP comment row {i}: '{tgt_name[:80]}'")
+                logger.info("  SKIP comment row %d: '%s'", i, tgt_name[:80])
             continue
 
         tgt_type = cell(i, col_map.get("目标字段类型", 2))
@@ -187,7 +191,11 @@ def parse_mapping_sheet(filepath: str, sheet_name: str) -> MappingSheet:
 
 
 def _parse_xlsx_sheets(filepath: str) -> list:
-    """从单个 Excel 文件解析所有非跳过 sheet，返回 [MappingSheet]"""
+    """从单个 Excel 文件解析所有非跳过 sheet，返回 [MappingSheet]。
+
+    复用单个 pd.ExcelFile 对象逐 sheet 读取，避免每个 sheet 重新全文件解析
+    （多 sheet 的 DWS 文件若逐个 read_excel 会重复解析整个工作簿）。
+    """
     results = []
     with pd.ExcelFile(filepath) as xls:
         fname = os.path.basename(filepath)
@@ -195,7 +203,8 @@ def _parse_xlsx_sheets(filepath: str) -> list:
             if sn in _SKIP_SHEETS:
                 continue
             try:
-                results.append(parse_mapping_sheet(filepath, sn))
+                df = pd.read_excel(xls, sheet_name=sn, header=None)
+                results.append(_parse_sheet_df(df))
             except Exception as e:
                 logger.warning(f"  WARN: skip {fname}/{sn}: {e}")
     return results

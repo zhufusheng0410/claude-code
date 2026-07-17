@@ -1,5 +1,7 @@
 """DataX JSON 配置生成器（备用）
 
+状态：未集成到 CLI（main.py 不调用），由 tests/test_datax.py 覆盖以防腐化。
+
 注意：此模块未被 main.py 调用。ODS ETL shell 脚本已通过模板内嵌
 DataX writer columns（${writer_columns} 变量），因此独立的 DataX JSON
 文件生成未集成到 CLI 中。
@@ -73,7 +75,7 @@ def generate_datax(table: TableMeta, fields: list, sys_name: str = "O32") -> str
     return json.dumps(job, indent=2, ensure_ascii=False)
 
 
-def generate_all_datax(tables: list, fields_by_table: dict, output_dir: str, sys_name: str = "O32"):
+def generate_all_datax(tables: list, fields_by_table: dict, output_dir: str, sys_name: str = "O32") -> None:
     """为所有表生成 DataX JSON 文件"""
     datax_dir = os.path.join(output_dir, "datax")
     os.makedirs(datax_dir, exist_ok=True)

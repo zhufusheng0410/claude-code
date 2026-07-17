@@ -33,7 +33,7 @@ from tools.generator.data_dict import (
 from tools.utils.sys_extractor import extract_sys_name
 from tools.utils.validation import validate_output_path
 from tools.utils.logging_setup import setup_logging, get_logger
-from tools.utils.table_utils import is_table_reserved, write_file
+from tools.utils.table_utils import filter_valid_ods_tables, write_file
 from tools.utils.mapping_finder import find_mapping_dir, find_mapping_file
 
 
@@ -91,7 +91,7 @@ def _generate_ods_for_sys(sys_key, survey_dir, out, logger):
     tables = parse_table_survey(ts_path, sys_name, ODS_TABLE_TMPL)
     fields_by_table = parse_field_survey(fs_path)
 
-    valid_tables = [t for t in tables if t.src_table in fields_by_table and is_table_reserved(t)]
+    valid_tables = filter_valid_ods_tables(tables, fields_by_table)
     if not valid_tables:
         logger.info(f"  [{sys_name}] 无有效表，跳过")
         return []

@@ -25,6 +25,11 @@ def parse_field_survey(filepath: str) -> dict:
     码值来源(20), 是否保留建模(21), ...
     """
     df = _read_excel_safely(filepath)
+    # 校验必需列名存在：列名缺失会导致整表字段被静默跳过，应尽早明确报错
+    required_cols = ("表英文名", "字段英文名", "字段类型")
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"字段级调研缺少必需列 {missing}: {filepath}")
     result = _parse_fields_from_df(df)
     total_fields = sum(len(v) for v in result.values())
     logger.debug(f"  字段级调研解析完成: {len(result)} 张表, 共 {total_fields} 个字段 ({filepath})")
@@ -93,7 +98,8 @@ def _read_excel_safely(filepath: str) -> pd.DataFrame:
 def _parse_fields_from_df(df: pd.DataFrame) -> dict:
     """从DataFrame解析字段信息"""
     fields_by_table = {}
-    for i in range(1, len(df)):
+    # read_excel(header=0) 已剥离表头，df 每行即一条字段记录，从 index 0 起
+    for i in range(len(df)):
         row = df.iloc[i]
         tbl_name = safe_str(row, '表英文名')
         field_name = safe_str(row, '字段英文名')
