@@ -188,15 +188,15 @@ class BaseGenerator:
                 lines.append("   AND " + part)
 
     def _build_where(self, aliases: dict) -> list:
-        """构建 WHERE 子句"""
+        """构建 WHERE 子句。
+
+        filter_cond 在解析层(_extract_filter)已剥离 WHERE/AND 前缀，此处直接去空白拼接。
+        """
         conds = []
         for alias, info in aliases.items():
             for fc in info.get("filter_cond", []):
                 if fc and fc not in conds:
-                    fc_clean = fc.strip()
-                    if fc_clean.startswith("WHERE "):
-                        fc_clean = fc_clean[6:]
-                    conds.append(fc_clean)
+                    conds.append(fc.strip())
         return conds
 
     def _resolve_expr(self, raw: str) -> str:

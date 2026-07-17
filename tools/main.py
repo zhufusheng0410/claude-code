@@ -12,6 +12,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -181,7 +182,6 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     out = validate_output_path(args.output, OUTPUT_BASE)
-    import time
     t_start = time.time()
 
     systems = _discover_systems()

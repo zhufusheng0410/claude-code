@@ -1,10 +1,10 @@
 """系统简称提取和标准化工具"""
 
-from typing import Optional, Dict
+from typing import Optional
 import os
 
 
-def extract_sys_name(layer: str, path: str, config_map: Dict[str, str] = None) -> Optional[str]:
+def extract_sys_name(layer: str, path: str) -> Optional[str]:
     """
     从路径中提取系统简称
 
@@ -14,16 +14,12 @@ def extract_sys_name(layer: str, path: str, config_map: Dict[str, str] = None) -
     Args:
         layer: 层级名称 (ODS/DWD/DWS)
         path: 输入路径 (文件或目录)
-        config_map: 映射配置（可选），如未提供则使用默认映射
 
     Returns:
         提取的系统简称，提取失败返回 None
     """
     if layer == "DWD":
         parent_dir = os.path.basename(os.path.normpath(path))
-        effective_map = config_map or {}
-        if effective_map and parent_dir in effective_map:
-            return effective_map[parent_dir]
         parts = parent_dir.split('-')
         return parts[-1] if len(parts) > 1 else parent_dir
 
