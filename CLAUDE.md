@@ -2,7 +2,7 @@
 
 ## 概述
 
-本项目用于从 Excel 调研文档自动生成数据仓库各层代码，包括建表 DDL、DataX 抽数脚本和 ETL 加工 SQL。
+本项目用于从 Excel 调研文档自动生成数据仓库各层代码，包括建表 DDL、ETL 加工 SQL、血缘关系和数据字典。
 
 ## 技术架构
 
@@ -20,10 +20,11 @@
 | IR 数据类 | `tools/core/ir.py` | TableMeta, FieldMeta, MappingRule, MappingSheet |
 | 类型映射 | `tools/core/type_mapper.py` | Oracle→Hive 类型转换 |
 | Excel 解析 | `tools/parser/` | 表级/字段级调研解析、MAPPING 解析 |
-| 代码生成 | `tools/generator/` | ODS/DWD/DWS DDL+ETL、DataX 配置 |
+| 代码生成 | `tools/generator/` | ODS/DWD/DWS DDL+ETL（DataX 为备用，未集成 CLI） |
 | 共享工具 | `tools/utils/` | 别名查找、文件写入、输入验证、日志 |
 | 血缘生成 | `tools/generator/lineage.py` | 从 MAPPING 提取表级+字段级血缘，输出 Excel |
 | 数据字典 | `tools/generator/data_dict.py` | 汇总三层表+字段元数据，输出 Excel（分层+汇总） |
+| 单元测试 | `tools/tests/` | 类型映射、解析、生成、校验等 72 个用例 |
 
 ## 目录结构
 
@@ -33,8 +34,9 @@ tools/
 ├── config.py            # 路径、Schema、别名配置
 ├── core/                # IR 数据类 + 类型映射
 ├── parser/              # Excel 解析器 (ODS/DWD/DWS)
-├── generator/           # 代码生成器 (ODS/DWD/DWS/DataX)
-└── utils/               # 共享工具 (mapping_finder, table_utils…)
+├── generator/           # 代码生成器 (ODS/DWD/DWS/血缘/数据字典)
+├── utils/               # 共享工具 (mapping_finder, table_utils…)
+└── tests/               # 单元测试 (unittest)
 scripts/
 ├── {系统}/{层级}/       # 生成的 DDL/ETL 脚本输出目录
 │   ├── lineage/         # 血缘 Excel
@@ -171,6 +173,12 @@ python tools/main.py --layer ALL --output /custom/output/
 /generate-dict --layer ALL
 ```
 
+### 运行测试
+
+```bash
+python3 -m unittest discover -s tools/tests -p "test_*.py"
+```
+
 ## 调研文档要求
 
 1. **表级调研.xlsx**
@@ -201,16 +209,15 @@ python tools/main.py --layer ALL --output /custom/output/
    - 所有生成器统一使用上述工具，禁止直接 `open('w')`
 
 4. **血缘关系**
-   - 自动生成 JSON 格式的表级+字段级血缘
-   - 输出位置: `scripts/{系统}/{层级}/lineage/{layer}_tables.json`（表级）
-   - 字段级: `scripts/{系统}/{层级}/lineage/{layer}_fields.json`
+   - 自动生成 Excel 格式的表级+字段级血缘
+   - 输出位置: `scripts/{系统}/{层级}/lineage/{layer}_lineage.xlsx`
    - 表级血缘包含：目标表、中文名、层级、系统、上游表列表
    - 字段级血缘包含：目标字段、源字段、映射规则/表达式、JOIN方式、过滤条件
 
 4. **代码生成器**
    - ODS: `tools/generator/ods.py`（独立函数，使用 `iter_ods_tables`）
    - DWD/DWS: `tools/generator/base.py`（`BaseGenerator` 类，使用 `write_file_safe`）
-   - DataX: `tools/generator/datax.py`（生成 JSON 配置）
+   - DataX: `tools/generator/datax.py`（备用，未集成到 CLI；ODS ETL 已通过模板内嵌 writer columns）
 
 5. **共享工具**
    - `table_utils.py`: `iter_ods_tables()` 消除 4 处重复过滤模式
