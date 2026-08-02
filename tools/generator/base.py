@@ -13,7 +13,7 @@ from ..config import (
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
 from tools.utils.table_utils import write_file, write_file_safe, extract_physical_name
-from ..generator.ddl_common import generate_ddl_body
+from ..generator.ddl_common import generate_ddl_body, escape_sql_comment
 
 logger = get_logger(__name__)
 
@@ -61,7 +61,7 @@ class BaseGenerator:
             # 验证字段名安全性
             validate_db_identifier(mr.tgt_name, "field name")
             ftype = mr.tgt_type if mr.tgt_type else "STRING"
-            field_defs.append(f"{mr.tgt_name}  {ftype} DEFAULT NULL COMMENT '{mr.tgt_name_cn}'")
+            field_defs.append(f"{mr.tgt_name}  {ftype} DEFAULT NULL COMMENT '{escape_sql_comment(mr.tgt_name_cn)}'")
 
         sys_field_names = {mr.tgt_name for mr in unique_fields}
         for sf_name, sf_type, sf_cn in self.sys_fields:

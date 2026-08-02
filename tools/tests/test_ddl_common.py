@@ -31,6 +31,14 @@ class TestGenerateDdlBody(unittest.TestCase):
         sql = generate_ddl_body("ODS_XDAY_O32", "T1", ["C1  STRING"], "O'Hara")
         self.assertIn("COMMENT 'O''Hara'", sql)
 
+    def test_field_comment_escaped(self):
+        """字段级 COMMENT 含单引号时应被转义，防止 SQL 语法错误/注入。"""
+        field = "C1  STRING DEFAULT NULL COMMENT 'O''Hara'"
+        sql = generate_ddl_body("DWDXDAY", "T1", [field], "表注释")
+        self.assertIn("COMMENT 'O''Hara'", sql)
+        # 不应出现未转义的单引号破坏 COMMENT 结构
+        self.assertNotIn("COMMENT 'O'Hara'", sql)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,7 +28,7 @@ def generate_ods_ddl(table: TableMeta, fields: list, sys_name: str) -> str:
         # 验证字段名安全性
         validate_db_identifier(f.src_name, "field name")
         hive_type = f.hive_type if f.hive_type else "STRING"
-        field_defs.append(f"{f.src_name}  {hive_type} DEFAULT NULL COMMENT '{f.src_name_cn}'")
+        field_defs.append(f"{f.src_name}  {hive_type} DEFAULT NULL COMMENT '{escape_sql_comment(f.src_name_cn)}'")
 
     return generate_ddl_body(
         schema, tbl, field_defs, table.src_table_cn

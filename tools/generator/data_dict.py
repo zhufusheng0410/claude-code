@@ -23,7 +23,7 @@ COMBINED_DICT_NAME = "数据字典_汇总.xlsx"
 
 def _yn(value: str) -> str:
     """将主键/入ODS 等标志规整为 是/否"""
-    return "是" if str(value).strip() in ("是", "Y", "y", "1", "是主键") else "否"
+    return "是" if str(value).strip() in ("是", "Y", "y", "1", "是主键", "主键") else "否"
 
 
 def extract_ods_dict(tables: list, fields_by_table: dict, sys_name: str) -> list:
@@ -52,7 +52,7 @@ def extract_ods_dict(tables: list, fields_by_table: dict, sys_name: str) -> list
                 "Oracle类型": f.src_type or "",
                 "Hive类型": f.hive_type or "",
                 "是否主键": _yn(f.is_pk),
-                "是否入ODS": _yn(f.is_ods) if f.is_ods else "是",
+                "是否入ODS": _yn(f.is_ods or "是"),
                 "备注": f.src_name_cn_note or "",
             })
     return rows
