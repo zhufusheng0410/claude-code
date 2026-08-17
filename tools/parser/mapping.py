@@ -19,6 +19,12 @@ _KNOWN_COLUMN_HEADERS = frozenset({
     '过滤条件', '过滤条件说明',
 })
 
+# 元数据关键词集合（模块级常量，避免每次调用_parse_sheet_df 都重新创建）
+_METADATA_KEYWORDS = frozenset({
+    "目标表中文名称", "目标表英文名称", "功能描述", "分区字段",
+    "参数", "频度", "目标表类型", "加载类型", "增量逻辑", "目标字段英文名",
+})
+
 
 def _sanitize_identifier(name: str) -> str:
     """
@@ -78,10 +84,7 @@ def _parse_sheet_df(df: pd.DataFrame) -> MappingSheet:
     策略: 动态扫描列头行, 按 "目标字段英文名" 定位, 再按列名映射。
     """
     # 一次扫描 col 0 找所有关键词行，避免 N 次重复遍历
-    _KEYWORDS = {
-        "目标表中文名称", "目标表英文名称", "功能描述", "分区字段",
-        "参数", "频度", "目标表类型", "加载类型", "增量逻辑", "目标字段英文名",
-    }
+    _KEYWORDS = _METADATA_KEYWORDS
     keyword_rows: dict[str, int] = {}
     for i in range(len(df)):
         v = df.iloc[i, 0]
