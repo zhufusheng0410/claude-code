@@ -6,18 +6,23 @@ import unittest
 
 from tools.core.ir import TableMeta, FieldMeta, MappingSheet, MappingRule
 from tools.generator.data_dict import (
-    _yn, extract_ods_dict, extract_layer_dict, generate_data_dict, write_combined_dict,
+    _bool_to_yn, extract_ods_dict, extract_layer_dict, generate_data_dict, write_combined_dict,
 )
 
 
-class TestYn(unittest.TestCase):
+class TestBoolToYn(unittest.TestCase):
     def test_yes_values(self):
         for v in ("是", "Y", "y", "1", "是主键", "主键"):
-            self.assertEqual(_yn(v), "是", f"value={v!r}")
+            self.assertEqual(_bool_to_yn(v), "是", f"value={v!r}")
 
     def test_no_values(self):
-        for v in ("否", "N", "n", "0", "", "保留"):
-            self.assertEqual(_yn(v), "否", f"value={v!r}")
+        for v in ("否", "N", "n", "0", ""):
+            self.assertEqual(_bool_to_yn(v), "否", f"value={v!r}")
+
+    def test_yes_values_extended(self):
+        """测试扩展的是值列表（包括 保留）"""
+        for v in ("保留",):
+            self.assertEqual(_bool_to_yn(v), "是", f"value={v!r}")
 
 
 class TestExtractOdsDict(unittest.TestCase):

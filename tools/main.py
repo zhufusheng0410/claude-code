@@ -25,22 +25,16 @@ from tools.parser.table_survey import parse_table_survey
 from tools.parser.field_survey import parse_field_survey
 from tools.parser.mapping import parse_mapping_dir, parse_dws_mapping
 from tools.generator.ods import generate_all_ods_ddl, generate_all_ods_ddl_files, generate_all_ods_etl
-from tools.generator.base import create_generator
+from tools.generator import create_generator
 from tools.generator.lineage import extract_lineage, generate_lineage_excel
 from tools.generator.data_dict import (
     extract_ods_dict, extract_layer_dict, generate_data_dict, write_combined_dict,
 )
-from tools.utils.sys_extractor import extract_sys_name
+from tools.utils.sys_extractor import extract_sys_name, normalize_sys_name
 from tools.utils.validation import validate_output_path
 from tools.utils.logging_setup import setup_logging, get_logger
 from tools.utils.table_utils import filter_valid_ods_tables, write_file
 from tools.utils.mapping_finder import find_mapping_dir, find_mapping_file
-
-
-def normalize_sys_name(raw_name: str) -> str:
-    if not raw_name:
-        return raw_name
-    return SYSTEM_ALIAS_MAP.get(raw_name, raw_name)
 
 
 def _all_sys_names(sys_key: str) -> list:

@@ -1,9 +1,10 @@
 ﻿import os
 import json
+from typing import List, Dict
 from ..core.ir import TableMeta, FieldMeta
-from ..config import ODS_SCHEMA_TMPL
+from ..config import ODS_SCHEMA_TMPL, HIVE_DYNAMIC_PARTITION_SETTINGS
 from ..core.type_mapper import oracle_to_hive
-from ..generator.ddl_common import generate_ddl_body, escape_sql_comment
+from ..generator.ddl_common import generate_ddl_body, build_field_defs, escape_sql_comment
 from tools.utils.table_utils import write_file, iter_ods_tables, write_file_safe
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
@@ -23,19 +24,18 @@ def generate_ods_ddl(table: TableMeta, fields: list, sys_name: str) -> str:
     # 验证表名安全性，防止 SQL 注入
     validate_db_identifier(table.ods_table, "ODS table name")
 
-    field_defs = []
-    for f in fields:
-        # 验证字段名安全性
-        validate_db_identifier(f.src_name, "field name")
-        hive_type = f.hive_type if f.hive_type else "STRING"
-        field_defs.append(f"{f.src_name}  {hive_type} DEFAULT NULL COMMENT '{escape_sql_comment(f.src_name_cn)}'")
+    field_specs = [
+        (f.src_name, f.hive_type if f.hive_type else "STRING", f.src_name_cn)
+        for f in fields
+    ]
+    field_defs = build_field_defs(field_specs)
 
     return generate_ddl_body(
         schema, tbl, field_defs, table.src_table_cn
     )
 
 
-def generate_all_ods_ddl(tables: list, fields_by_table: dict, sys_name: str) -> str:
+def generate_all_ods_ddl(tables: List[TableMeta], fields_by_table: Dict[str, List[FieldMeta]], sys_name: str) -> str:
     """生成所有 ODS 建表 DDL（合并为一个 SQL 文件）"""
     schema = ODS_SCHEMA_TMPL.format(sys=sys_name)
     parts = [
@@ -53,7 +53,7 @@ def generate_all_ods_ddl(tables: list, fields_by_table: dict, sys_name: str) -> 
 
 
 
-def generate_all_ods_ddl_files(tables: list, fields_by_table: dict, output_dir: str, sys_name: str):
+def generate_all_ods_ddl_files(tables: List[TableMeta], fields_by_table: Dict[str, List[FieldMeta]], output_dir: str, sys_name: str) -> None:
     """按表生成独立的 DDL SQL 文件"""
     ddl_dir = os.path.join(output_dir, "ddl")
     os.makedirs(ddl_dir, exist_ok=True)
@@ -88,6 +88,10 @@ def _load_etl_template() -> str:
 
 def generate_ods_etl(table: TableMeta, fields: list, sys_name: str, template: str) -> str:
     """生成完整的 ODS 抽数 shell 脚本，使用模板"""
+    # 公共 API 自我防御：iter_ods_tables 已过滤无字段表，但直接调用此函数时仍需保护
+    if not fields:
+        logger.warning(f"  表 {table.ods_table} 无字段，跳过 ETL 生成")
+        return ""
     schema = ODS_SCHEMA_TMPL.format(sys=sys_name)
     tbl = table.ods_table
     # 验证表名安全性
@@ -132,13 +136,9 @@ def generate_ods_etl(table: TableMeta, fields: list, sys_name: str, template: st
     select_lines.append("     , FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyy-MM-dd HH:mm:ss') LD_TIME")
     select_columns_str = "\n".join(select_lines)
 
-    # 动态SET语句（增量表需要）
-    dynamic_sets = "" if table.load_strategy == "FULL" else (
-        "set hive.exec.dynamic.partition=true;\n"
-        "set hive.exec.dynamic.partition.mode=nonstrict;\n"
-        "set hive.exec.max.dynamic.partitions.pernode=10000;\n"
-        "set hive.exec.max.dynamic.partitions=10000;\n"
-        "set hive.exec.max.created.files=10000;"
+    # 动态SET语句（增量表需要）— 复用 config.HIVE_DYNAMIC_PARTITION_SETTINGS，避免硬编码漂移
+    dynamic_sets = "" if table.load_strategy == "FULL" else "\n".join(
+        HIVE_DYNAMIC_PARTITION_SETTINGS
     )
 
     # 分区子句
@@ -165,7 +165,7 @@ def generate_ods_etl(table: TableMeta, fields: list, sys_name: str, template: st
     return filled
 
 
-def generate_all_ods_etl(tables: list, fields_by_table: dict, output_dir: str, sys_name: str):
+def generate_all_ods_etl(tables: List[TableMeta], fields_by_table: Dict[str, List[FieldMeta]], output_dir: str, sys_name: str) -> None:
     """按表生成独立的 ETL shell 脚本"""
     etl_dir = os.path.join(output_dir, "etl_sh")
     os.makedirs(etl_dir, exist_ok=True)

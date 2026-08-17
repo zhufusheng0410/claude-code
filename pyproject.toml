@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dw-generator"
+version = "0.1.0"
+description = "数仓代码自动生成工具"
+authors = [
+    {name = "DW Generator", email = "dw@example.com"},
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "pandas>=1.3.0",
+    "openpyxl>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/example/dw-generator"
+Repository = "https://github.com/example/dw-generator"
+
+[project.scripts]
+generate-dw = "tools.main:main"

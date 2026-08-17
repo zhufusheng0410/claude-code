@@ -1,4 +1,5 @@
 import re
+from ..config import CODE_FIELD_KEYWORDS
 
 def oracle_to_hive(oracle_type: str, field_cn: str = "") -> str:
     """Oracle→Hive 类型映射，严格参照参考脚本格式。
@@ -33,7 +34,8 @@ def oracle_to_hive(oracle_type: str, field_cn: str = "") -> str:
         # 无精度定义的 NUMBER，使用默认
         return "DECIMAL(18,2)"
     if t.startswith(("FLOAT", "BINARY_FLOAT", "BINARY_DOUBLE")):
-        return "DECIMAL(18,2)"
+        # 与 docs/规范文档.md 8.1 保持一致：浮点统一 DECIMAL(30,8)，避免精度截断
+        return "DECIMAL(30,8)"
     if any(t.startswith(x) for x in ("DATE", "TIMESTAMP", "DATETIME")):
         return "STRING"
     if t.startswith("INTEGER") or t.startswith("INT"):
@@ -45,5 +47,4 @@ def oracle_to_hive(oracle_type: str, field_cn: str = "") -> str:
 def _is_code_field(field_cn: str) -> bool:
     if not field_cn:
         return False
-    code_keywords = ("代码", "编码", "编号", "标志", "标识", "类型", "分类", "方向")
-    return any(kw in field_cn for kw in code_keywords)
+    return any(kw in field_cn for kw in CODE_FIELD_KEYWORDS)

@@ -90,6 +90,9 @@ def _parse_sheet_df(df: pd.DataFrame) -> MappingSheet:
             for kw in _KEYWORDS - keyword_rows.keys():
                 if kw in s:
                     keyword_rows[kw] = i
+        # 提前终止：已找到所有关键词
+        if len(keyword_rows) == len(_KEYWORDS):
+            break
 
     def cell(row_idx: int, col_idx: int) -> str:
         if row_idx < 0 or row_idx >= len(df) or col_idx < 0 or col_idx >= len(df.columns):

@@ -3,6 +3,15 @@
 from typing import Optional
 import os
 
+from tools.config import SYSTEM_ALIAS_MAP
+
+
+def normalize_sys_name(raw_name: str) -> str:
+    """标准化系统简称：将历史别名（如 ZTA/TA）映射到标准名（如 HSZTA）"""
+    if not raw_name:
+        return raw_name
+    return SYSTEM_ALIAS_MAP.get(raw_name, raw_name)
+
 
 def extract_sys_name(layer: str, path: str) -> Optional[str]:
     """

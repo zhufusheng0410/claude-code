@@ -1,9 +1,9 @@
 import os
 import re
+from typing import List
 from collections import defaultdict
 from ..core.ir import MappingSheet
 from ..config import (
-    DWD_SCHEMA, SYS_FIELDS_DWD,
     DDL_PARTITIONS, DDL_ROW_FORMAT,
     DDL_FIELD_PREFIX, DDL_FIELD_SEP,
     AS_POS, COMMENT_POS, DEP_TBL_WIDTH,
@@ -13,7 +13,7 @@ from ..config import (
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
 from tools.utils.table_utils import write_file, write_file_safe, extract_physical_name
-from ..generator.ddl_common import generate_ddl_body, escape_sql_comment
+from ..generator.ddl_common import generate_ddl_body, build_field_defs
 
 logger = get_logger(__name__)
 
@@ -49,25 +49,17 @@ class BaseGenerator:
         # 验证表名安全性，防止 SQL 注入
         validate_db_identifier(tbl, "table name")
 
+        # 去重字段（按 tgt_name，保留首次出现），构建字段三元组
         seen = set()
-        unique_fields = []
+        field_specs = []
         for mr in sheet.mappings:
             if mr.tgt_name and mr.tgt_name not in seen:
                 seen.add(mr.tgt_name)
-                unique_fields.append(mr)
+                ftype = mr.tgt_type if mr.tgt_type else "STRING"
+                field_specs.append((mr.tgt_name, ftype, mr.tgt_name_cn))
 
-        field_defs = []
-        for mr in unique_fields:
-            # 验证字段名安全性
-            validate_db_identifier(mr.tgt_name, "field name")
-            ftype = mr.tgt_type if mr.tgt_type else "STRING"
-            field_defs.append(f"{mr.tgt_name}  {ftype} DEFAULT NULL COMMENT '{escape_sql_comment(mr.tgt_name_cn)}'")
-
-        sys_field_names = {mr.tgt_name for mr in unique_fields}
-        for sf_name, sf_type, sf_cn in self.sys_fields:
-            if sf_name not in sys_field_names:
-                validate_db_identifier(sf_name, "system field name")
-                field_defs.append(f"{sf_name}  {sf_type} DEFAULT NULL COMMENT '{sf_cn}'")
+        # 统一字段定义构建（含系统字段追加与去重）
+        field_defs = build_field_defs(field_specs, sys_fields=self.sys_fields)
 
         return generate_ddl_body(
             self.schema, tbl, field_defs, sheet.tgt_table_cn,
@@ -96,7 +88,7 @@ class BaseGenerator:
                 continue
         return "\n".join(parts)
 
-    def generate_all_ddl_files(self, sheets: list, output_dir: str, sys_name: str = "O32"):
+    def generate_all_ddl_files(self, sheets: List[MappingSheet], output_dir: str, sys_name: str = "O32") -> None:
         """按表生成独立的 DDL SQL 文件"""
         ddl_dir = os.path.join(output_dir, "ddl")
         os.makedirs(ddl_dir, exist_ok=True)
@@ -401,7 +393,7 @@ class BaseGenerator:
         lines.append(";\"")
         return "\n".join(lines)
 
-    def generate_all_etl_files(self, sheets: list, output_dir: str, sys_name: str = "O32"):
+    def generate_all_etl_files(self, sheets: List[MappingSheet], output_dir: str, sys_name: str = "O32") -> None:
         """按表生成独立的 ETL shell 脚本"""
         os.makedirs(output_dir, exist_ok=True)
         for sheet in sheets:
@@ -411,15 +403,3 @@ class BaseGenerator:
             filepath = os.path.join(output_dir, tbl + ".sh")
             script = self.generate_etl(sheet, sys_name)
             write_file_safe(filepath, script, sheet.tgt_table, "ETL")
-
-
-def create_generator(layer_name: str) -> BaseGenerator:
-    """创建对应层级的生成器实例"""
-    from ..config import DWD_SCHEMA, SYS_FIELDS_DWD, DWS_SCHEMA, SYS_FIELDS_DWS
-
-    if layer_name == "DWD":
-        return BaseGenerator(DWD_SCHEMA, SYS_FIELDS_DWD, True)
-    elif layer_name == "DWS":
-        return BaseGenerator(DWS_SCHEMA, SYS_FIELDS_DWS, False)
-    else:
-        raise ValueError(f"Unknown layer: {layer_name}")

@@ -1,7 +1,11 @@
 import os
 
-D_BASE = "/mnt/d"
-PROJECT_BASE = os.path.join(D_BASE, "项目/信达澳亚数仓/信达澳亚投研数据集市交付文档")
+# 路径支持环境变量覆盖，便于跨平台（WSL/Windows 原生/macOS/Linux）部署
+D_BASE = os.environ.get("DW_D_BASE", "/mnt/d")
+PROJECT_BASE = os.environ.get(
+    "DW_PROJECT_BASE",
+    os.path.join(D_BASE, "项目/信达澳亚数仓/信达澳亚投研数据集市交付文档"),
+)
 SURVEY_DIR = os.path.join(PROJECT_BASE, "01-系统调研文档")
 DWD_MAPPING_BASE = os.path.join(PROJECT_BASE, "04-源与目标映射MAPPING/01-DWD")
 DWS_MAPPING_BASE = os.path.join(PROJECT_BASE, "04-源与目标映射MAPPING/02-DWS")
@@ -41,13 +45,17 @@ AS_POS = 80        # " AS 别名" 起始列
 COMMENT_POS = 120  # "--注释" 起始列
 DEP_TBL_WIDTH = 55  # 依赖声明中表名列宽
 
-# Hive 运行参数
-HIVE_SETTINGS = [
+# Hive 动态分区参数（ODS 增量表 ETL 与 DWD/DWS ETL 共用，避免两处硬编码漂移）
+HIVE_DYNAMIC_PARTITION_SETTINGS = [
     "set hive.exec.dynamic.partition=true;",
     "set hive.exec.dynamic.partition.mode=nonstrict;",
     "set hive.exec.max.dynamic.partitions.pernode=10000;",
     "set hive.exec.max.dynamic.partitions=10000;",
     "set hive.exec.max.created.files=10000;",
+]
+
+# Hive 运行参数
+HIVE_SETTINGS = HIVE_DYNAMIC_PARTITION_SETTINGS + [
     "set mapred.max.split.size=256000000;",
     "set mapred.min.split.size.per.node=100000000;",
     "set mapred.min.split.size.per.rack=100000000;",
@@ -60,6 +68,9 @@ HIVE_SETTINGS = [
 ]
 
 OUTPUT_BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
+
+# 代码字段关键词（用于 type_mapper.py 中的 _is_code_field 判断）
+CODE_FIELD_KEYWORDS = ("代码", "编码", "编号", "标志", "标识", "类型", "分类", "方向")
 
 SYSTEM_ALIAS_MAP = {
     "ZTA": "HSZTA",

@@ -12,7 +12,7 @@ import os
 
 import pandas as pd
 
-from tools.utils.table_utils import iter_ods_tables, extract_physical_name
+from tools.utils.table_utils import iter_ods_tables, extract_physical_name, parse_bool
 from tools.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -21,9 +21,9 @@ logger = get_logger(__name__)
 COMBINED_DICT_NAME = "数据字典_汇总.xlsx"
 
 
-def _yn(value: str) -> str:
-    """将主键/入ODS 等标志规整为 是/否"""
-    return "是" if str(value).strip() in ("是", "Y", "y", "1", "是主键", "主键") else "否"
+def _bool_to_yn(value) -> str:
+    """将主键/入 ODS 等标志规整为 是/否，复用 parse_bool 逻辑"""
+    return "是" if parse_bool(value, default=False) else "否"
 
 
 def extract_ods_dict(tables: list, fields_by_table: dict, sys_name: str) -> list:
@@ -51,8 +51,8 @@ def extract_ods_dict(tables: list, fields_by_table: dict, sys_name: str) -> list
                 "字段中文名": f.src_name_cn or "",
                 "Oracle类型": f.src_type or "",
                 "Hive类型": f.hive_type or "",
-                "是否主键": _yn(f.is_pk),
-                "是否入ODS": _yn(f.is_ods or "是"),
+                "是否主键": _bool_to_yn(f.is_pk),
+                "是否入ODS": _bool_to_yn(f.is_ods or "是"),
                 "备注": f.src_name_cn_note or "",
             })
     return rows
@@ -89,7 +89,7 @@ def extract_layer_dict(sheets: list, layer: str, sys_name: str) -> list:
                 "字段英文名": mr.tgt_name,
                 "字段中文名": mr.tgt_name_cn or "",
                 "字段类型": mr.tgt_type or "STRING",
-                "是否主键": _yn(mr.is_pk),
+                "是否主键": _bool_to_yn(mr.is_pk),
                 "组别": mr.group_no or "",
                 "映射规则": mr.src_field_alias or "",
                 "备注": mr.note or "",

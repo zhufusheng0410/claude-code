@@ -30,8 +30,9 @@ class TestOracleToHive(unittest.TestCase):
         self.assertEqual(oracle_to_hive("NUMBER"), "DECIMAL(18,2)")
 
     def test_float_family(self):
+        # P0 回归：FLOAT/BINARY_FLOAT/BINARY_DOUBLE → DECIMAL(30,8)（与规范文档 8.1 一致）
         for t in ("FLOAT", "BINARY_FLOAT", "BINARY_DOUBLE"):
-            self.assertEqual(oracle_to_hive(t), "DECIMAL(18,2)")
+            self.assertEqual(oracle_to_hive(t), "DECIMAL(30,8)")
 
     def test_date_timestamp(self):
         for t in ("DATE", "TIMESTAMP", "DATETIME"):
