@@ -75,6 +75,9 @@ CODE_FIELD_KEYWORDS = ("代码", "编码", "编号", "标志", "标识", "类型
 SYSTEM_ALIAS_MAP = {
     "ZTA": "HSZTA",
     "TA": "HSZTA",
+    "直销": "HSDS",
+    "聚源": "JY",
+    "官网": "OFFW",
 }
 
 DATAX_ORACLE_VARS = {

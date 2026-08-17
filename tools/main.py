@@ -49,7 +49,13 @@ def _all_sys_names(sys_key: str) -> list:
 
 
 def _discover_systems():
-    """自动发现所有系统目录，返回 [(sys_key, survey_dir), ...]"""
+    """自动发现所有系统目录，返回 [(sys_key, survey_dir), ...]
+
+    支持两种目录命名格式：
+    1. "序号 - 系统中文名_系统简称" (如 "01-恒生投资交易系统_O32")
+    2. "序号 - 系统简称" (如 "05-直销"、"06-WIND")
+    """
+    import re
     systems = []
     if not os.path.isdir(SURVEY_DIR):
         return systems
@@ -57,11 +63,17 @@ def _discover_systems():
         full = os.path.join(SURVEY_DIR, entry)
         if not os.path.isdir(full) or entry.startswith('~'):
             continue
-        # 从目录名提取系统简称，如 "01-恒生投资交易系统_O32" → "O32"
+        # 格式 1: "序号 - 系统中文名_系统简称" → 提取下划线后的部分
         parts = entry.split('_', 1)
         if len(parts) == 2:
             sys_key = parts[1]
             systems.append((sys_key, full))
+        else:
+            # 格式 2: "序号 - 系统简称" → 提取短横线后的部分
+            m = re.match(r'^\d+-(.+)$', entry)
+            if m:
+                sys_key = m.group(1)
+                systems.append((sys_key, full))
     return systems
 
 
