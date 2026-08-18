@@ -50,7 +50,12 @@
 | **O32** | 恒生投资交易系统 | ORACLE (schema: FMP) | |
 | **HSFA** | 恒生估值系统 | ORACLE | |
 | **HSZTA** | 恒生中登份额登记系统 | ORACLE | 标准简称 |
-| **LOFTA** | 恒生份额登记系统 | ORACLE | |
+| **HSFTA** | 恒生份额登记系统（分TA） | ORACLE | 目录名 LOFTA 自动映射 |
+| **HSDS** | 直销系统 | 数据库 | 目录名 直销 自动映射 |
+| **WIND** | 万德数据 | - | |
+| **JY** | 聚源数据 | - | 目录名 聚源 自动映射 |
+| **OFFW** | 官网数据 | - | 目录名 官网 自动映射 |
+| **OA** | OA系统 | - | |
 
 ### 系统别名说明
 
@@ -60,13 +65,57 @@
 |---------|---------|------|
 | `ZTA` | `HSZTA` | 目录名如 `01-ZTA` |
 | `TA` | `HSZTA` | DWS 文件如 `TA_DWS_汇总层模型MAPPING.xlsx` |
+| `LOFTA` | `HSFTA` | 目录名如 `02-恒生份额登记系统_LOFTA` |
+| `直销` | `HSDS` | 目录名如 `05-直销` |
+| `聚源` | `JY` | 目录名如 `07-聚源` |
+| `官网` | `OFFW` | 目录名如 `08-官网` |
 
 系统在查找 MAPPING 文件/目录时会自动尝试所有别名，无需手动配置。
+
+## 目录结构
+
+```
+dw/
+├── tools/                    # 核心工具目录
+│   ├── config.py            # 全局配置（路径、Schema、系统映射）
+│   ├── main.py              # CLI 入口
+│   ├── core/                # 中间表示 (IR)
+│   │   ├── ir.py           # 数据类定义
+│   │   └── type_mapper.py  # Oracle→Hive 类型映射
+│   ├── parser/              # 解析器
+│   │   ├── table_survey.py # 表级调研 Excel 解析
+│   │   ├── field_survey.py # 字段级调研 Excel 解析
+│   │   ├── mapping.py      # MAPPING Excel 解析
+│   │   └── sys_extractor.py# 系统名提取
+│   ├── generator/           # 生成器
+│   │   ├── __init__.py     # 工厂函数 create_generator()
+│   │   ├── base.py         # 基础生成器（DWD/DWS DDL + ETL）
+│   │   ├── ods.py          # ODS 层生成器（DDL + ETL）
+│   │   ├── ddl_common.py   # 通用 DDL 构建函数
+│   │   ├── lineage.py      # 血缘关系提取与 Excel 生成
+│   │   └── data_dict.py    # 数据字典提取与 Excel 生成
+│   ├── utils/               # 工具函数
+│   │   ├── table_utils.py  # 表字段查询、布尔解析、文件写入
+│   │   ├── validation.py   # SQL 注入防护、路径遍历防护
+│   │   ├── logging_setup.py# 统一日志系统
+│   │   ├── mapping_finder.py# MAPPING 文件/目录查找
+│   │   ├── sys_extractor.py# 系统名标准化
+│   │   └── pandas_helpers.py# Pandas 安全取值
+│   └── tests/               # 单元测试（71 个用例）
+├── demo/templates/          # ODS ETL Shell 模板
+│   └── etl_ods_template.sh
+├── scripts/                 # 生成的脚本输出（gitignored）
+├── docs/                    # 文档目录
+│   └── 功能与规范文档.md
+├── CLAUDE.md                # 项目说明（AI 辅助用，本文件）
+├── requirements.txt         # Python 依赖
+└── pyproject.toml           # 包管理配置
+```
 
 ## 关键路径
 
 - 调研文档: `/mnt/d/项目/信达澳亚数仓/信达澳亚投研数据集市交付文档/`
-  - `01-系统调研文档/` → ODS 解析来源
+  - `01-系统调研文档/` → ODS 解析来源（9 个系统目录）
   - `04-源与目标映射MAPPING/01-DWD/` → DWD MAPPING 目录
   - `04-源与目标映射MAPPING/02-DWS/` → DWS MAPPING 文件
 - 脚本输出: `scripts/{系统}/{层级}/`
@@ -77,7 +126,7 @@
 ### CLI
 
 ```bash
-# 全流程生成（自动检测系统）
+# 全流程生成（自动检测所有系统）
 python tools/main.py --layer ALL
 
 # 仅 ODS
@@ -94,30 +143,21 @@ python tools/main.py --layer ALL --sys O32
 
 # 自定义输出目录
 python tools/main.py --layer ALL --output /custom/output/
+
+# 详细日志
+python tools/main.py --layer ALL --verbose
 ```
 
-### 参数说明
+### 生成产物
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--layer` | `ALL` | 生成层级: `ODS` / `DWD` / `DWS` / `ALL` |
-| `--sys` | 自动发现 | 指定系统简称，如 `O32`、`HSFA`、`ZTA` |
-| `--output` | `scripts/` | 脚本输出根目录 |
-| `--verbose` / `-v` | 关闭 | 输出 DEBUG 级别详细日志 |
-
-### CC Skill
-
-```
-/generate-dw --sys O32 --layer ALL
-/generate-dw --sys HSFA --layer DWD
-```
-
-数据字典（随代码生成一并产出，也可单独用 skill 说明触发）：
-
-```
-/generate-dict --sys O32 --layer ALL
-/generate-dict --layer ALL
-```
+| 产物 | 位置 | 说明 |
+|------|------|------|
+| 合并 DDL | `{系统}/{层级}/01_ddl.sql` | 所有表的 DDL 合并 |
+| 按表 DDL | `{系统}/{层级}/ddl/*.sql` | 每表一个 SQL 文件 |
+| ETL Shell | `{系统}/{层级}/etl_sh/*.sh` (ODS) 或 `02_etl/*.sh` (DWD/DWS) | 抽数/加工脚本 |
+| 血缘关系 | `{系统}/{层级}/lineage/{layer}_lineage.xlsx` | 表级+字段级血缘 |
+| 数据字典 | `{系统}/{层级}/data_dict/{layer}_dict.xlsx` | 字段级数据字典 |
+| 汇总字典 | `scripts/数据字典_汇总.xlsx` | 跨系统跨层级汇总 |
 
 ### 运行测试
 
@@ -128,7 +168,7 @@ python3 -m unittest discover -s tools/tests -p "test_*.py"
 ## 调研文档要求
 
 1. **表级调研.xlsx**
-   - "源系统英文名"字段须为 **HSZTA/HSFA/O32/LOFTA** 之一（或历史别名 ZTA/TA）
+   - "源系统英文名"字段须为标准简称之一（或历史别名）
    - "是否保留"字段须填写 `是/Y/y/保留` 才会生成对应脚本
 
 2. **字段级调研.xlsx**
@@ -154,19 +194,14 @@ python3 -m unittest discover -s tools/tests -p "test_*.py"
    - 安全写入: `tools/utils/table_utils.write_file_safe()`（含错误处理，跳过无效表）
    - 所有生成器统一使用上述工具，禁止直接 `open('w')`
 
-4. **血缘关系**
-   - 自动生成 Excel 格式的表级+字段级血缘
-   - 输出位置: `scripts/{系统}/{层级}/lineage/{layer}_lineage.xlsx`
-   - 表级血缘包含：目标表、中文名、层级、系统、上游表列表
-   - 字段级血缘包含：目标字段、源字段、映射规则/表达式、JOIN方式、过滤条件
-
-4. **代码生成器**
-   - ODS: `tools/generator/ods.py`（独立函数，使用 `iter_ods_tables`）
-   - DWD/DWS: `tools/generator/base.py`（`BaseGenerator` 类，使用 `write_file_safe`）
-   - DataX: `tools/generator/datax.py`（备用，未集成到 CLI；ODS ETL 已通过模板内嵌 writer columns）
+4. **安全验证**
+   - SQL 注入防护: `validate_db_identifier()` 验证表名/字段名
+   - 路径遍历防护: `validate_output_path()` 验证输出路径
+   - 字段名自动修复: `_sanitize_identifier()` 替换非法字符
 
 5. **共享工具**
-   - `table_utils.py`: `iter_ods_tables()` 消除 4 处重复过滤模式
+   - `table_utils.py`: `iter_ods_tables()` 消除重复过滤模式，`parse_bool()` 统一布尔判断
+   - `ddl_common.py`: `build_field_defs()` 统一 DDL 字段构建，`generate_ddl_body()` 统一 DDL 主体
    - `mapping_finder.py`: `find_mapping_file/dir()` 单次 scandir 查找
    - `validation.py`: 数据库标识符验证、路径遍历防护
    - `logging_setup.py`: 统一日志格式、第三方库降噪

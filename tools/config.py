@@ -75,6 +75,7 @@ CODE_FIELD_KEYWORDS = ("代码", "编码", "编号", "标志", "标识", "类型
 SYSTEM_ALIAS_MAP = {
     "ZTA": "HSZTA",
     "TA": "HSZTA",
+    "LOFTA": "HSFTA",
     "直销": "HSDS",
     "聚源": "JY",
     "官网": "OFFW",
@@ -90,4 +91,35 @@ DATAX_ORACLE_VARS = {
 
 DATAX_HDFS_VARS = {
     "defaultFS": "${hdfs_defaultFS}",
+}
+
+# 全局表名中文名映射（用于血缘关系中子查询展开时的中文名回退）
+# 优先级：非子查询映射 > 此全局映射 > 子查询的 src_table_cn
+# 键同时支持 带 schema 全名 和 裸表名（内部对裸表名也建索引）
+GLOBAL_TABLE_CN_MAP = {
+    # ODS 层常用表
+    "ODS_HSFA_TZQXX_PFD": "证券信息表",
+    "ODS_HSFA_TVOUCHER_PTD": "凭证主表",
+    "ODS_HSFA_TVOUCHERS_PTD": "凭证子表",
+    "ODS_HSFA_TSYSINFO_PFD": "系统信息表",
+    "ODS_HSFA_TACCOUNT_HS_PFD": "账套科目表",
+    "ODS_HSFA_TFUNDINFO_PFD": "基金信息表",
+    "ODS_HSFA_TACCOUNT_PFD": "账户表",
+    "ODS_HSFA_TTRADEDATE_PFD": "交易日历表",
+    "ODS_HSFA_TVOUCHERSJC_PTD": "月度余额表",
+    # DWD/DWS 公共表
+    "DWD_CMM_STD_DICT_CDVAL_MAP": "标准字典码值映射",
+    "DWD_CMM_STD_DICT_CLS_EMRT_INFO": "标准字典分类枚举信息",
+    "DWD_CMM_CALENDAR_INFO_PFD": "日历信息",
+    # DWD 业务表（子查询中常见，补充中文名）
+    "DWD_EVT_BOND_TRAN_BUSIN_PTD": "债券交易业务",
+    "DWD_EVT_DPSI_BILL_BUSIN_PTD": "存款票据业务",
+    "DWD_EVT_EQUI_JOUR_INFO_PTD": "权益流水信息",
+    "DWD_EVT_FIN_INV_BUSIN_PTD": "理财交易业务",
+    "DWD_EVT_FUND_TRAN_BUSIN_PTD": "基金交易业务",
+    # OA / OFFW 表
+    "ODS_OA_AGENCY_VIEW_PFD": "渠道解析规则",
+    "ODS_OA_IP_AGENCY_HIERARCHY_PFD": "网点区域信息",
+    "ODS_OFFW_WN_FUND_MANAGER_PFD": "基金经理信息",
+    "ODS_OFFW_WN_FUND_MANAGER_FUND_PFD": "官网基金经理",
 }
