@@ -1,0 +1,62 @@
+{
+ "target": "DWD_SCR_SCR_NUM_MAPP_PFD",
+ "target_cn": "证券编码映射",
+ "layer": "DWD",
+ "own_workflow": "DWD_SCR",
+ "dependency_rows": 6,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsfa_etl_04",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TZQXX_PFD",
+     "source_cn": "证券信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_06",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TSTOCKINFO_PFD",
+     "source_cn": "证券信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_SCR_HSFA_SCR_INCD_PFD",
+   "source_cn": "HSFA业务证券内码"
+  },
+  {
+   "source": "DWD_SCR_O32_SCR_INCD_PFD",
+   "source_cn": "O32业务证券内码"
+  }
+ ],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_hsfa_etl_04",
+  "ods_o32_etl_06"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

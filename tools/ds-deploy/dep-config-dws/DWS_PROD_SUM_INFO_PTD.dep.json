@@ -1,0 +1,36 @@
+{
+ "target": "DWS_PROD_SUM_INFO_PTD",
+ "target_cn": "产品层汇总信息",
+ "layer": "DWS",
+ "own_workflow": "DWS_HSFA",
+ "owner_system": "HSFA",
+ "dependency_rows": 1,
+ "cross_workflow": [],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWS_PROD_AST_INFO_PTD",
+   "source_cn": "产品资产信息"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

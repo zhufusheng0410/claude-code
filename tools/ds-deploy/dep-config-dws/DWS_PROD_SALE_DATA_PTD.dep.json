@@ -1,0 +1,44 @@
+{
+ "target": "DWS_PROD_SALE_DATA_PTD",
+ "target_cn": "产品销售数据",
+ "layer": "DWS",
+ "own_workflow": "DWS_HSFA",
+ "owner_system": "HSFA",
+ "dependency_rows": 1,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_EVT",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_EVT_TA_SALE_DATA_PTD",
+     "source_cn": "TA销售数据"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_EVT"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

@@ -1,0 +1,64 @@
+{
+ "target": "DWS_TRAN_MKT_TRAN_CNFM_PTD",
+ "target_cn": "市场交易确认",
+ "layer": "DWS",
+ "own_workflow": "DWS_ZTA",
+ "owner_system": "HSZTA",
+ "dependency_rows": 5,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PTY",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PTY_CUST_FUNDACCT_RELA_PFD",
+     "source_cn": "客户基金帐号关系"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_TRAN",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_TRAN_MKT_TRAN_CNFM_PTD",
+     "source_cn": "nan"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWS_TRAN_ACCT_OPEN_BTCH_PFD",
+   "source_cn": "交易账户开户网点"
+  },
+  {
+   "source": "DWS_TRAN_AFFI_BTCH_PTD",
+   "source_cn": "交易归属网点"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PTY",
+  "DWD_TRAN"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

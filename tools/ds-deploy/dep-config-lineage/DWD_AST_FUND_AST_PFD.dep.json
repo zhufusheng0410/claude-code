@@ -1,0 +1,54 @@
+{
+ "target": "DWD_AST_FUND_AST_PFD",
+ "target_cn": "基金资产表",
+ "layer": "DWD",
+ "own_workflow": "DWD_AST",
+ "dependency_rows": 2,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": "帐套编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TFUNDASSET_PFD",
+     "source_cn": "基金资产信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD",
+  "ods_o32_etl_03"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

@@ -1,0 +1,95 @@
+{
+ "target": "DWD_TRAN_RISK_WARN_PTD",
+ "target_cn": "风控预警",
+ "layer": "DWD",
+ "own_workflow": "DWD_TRAN",
+ "dependency_rows": 7,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": "帐套编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_SCR",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_SCR_SCR_BASIC_INFO_PFD",
+     "source_cn": "证券基本信息"
+    },
+    {
+     "source": "DWD_SCR_SCR_NUM_MAPP_PFD",
+     "source_cn": "证券编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TENTRUSTS_PTD",
+     "source_cn": "委托表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_04",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TINSTRUCTION_PTD",
+     "source_cn": "指令表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_05",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TOPERATOR_PFD",
+     "source_cn": "操作员表"
+    },
+    {
+     "source": "ODS_O32_TRATIOLOG_PTD",
+     "source_cn": "风控预警记录表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD",
+  "DWD_SCR",
+  "ods_o32_etl_02",
+  "ods_o32_etl_04",
+  "ods_o32_etl_05"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

@@ -1,0 +1,56 @@
+{
+ "target": "DWD_SCR_DIM_SCR_INFO_PFD",
+ "target_cn": "维度证券信息表",
+ "layer": "DWD",
+ "own_workflow": "DWD_SCR",
+ "dependency_rows": 4,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_07",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TTRADESTOCK_PFD",
+     "source_cn": "维度证券表"
+    },
+    {
+     "source": "ODS_O32_TTRADETYPES_PFD",
+     "source_cn": "维度定义表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_SCR_SCR_BASIC_INFO_PFD",
+   "source_cn": "证券基本信息"
+  },
+  {
+   "source": "DWD_SCR_SCR_NUM_MAPP_PFD",
+   "source_cn": "证券编码映射"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_o32_etl_07"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

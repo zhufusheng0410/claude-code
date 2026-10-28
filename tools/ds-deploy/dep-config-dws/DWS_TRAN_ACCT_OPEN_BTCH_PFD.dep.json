@@ -1,0 +1,92 @@
+{
+ "target": "DWS_TRAN_ACCT_OPEN_BTCH_PFD",
+ "target_cn": "交易账户开户网点",
+ "layer": "DWS",
+ "own_workflow": "DWS_ZTA",
+ "owner_system": "HSZTA",
+ "dependency_rows": 6,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_ACCT",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_ACCT_ACCT_CNFM_PFD",
+     "source_cn": "账户确认"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_CHNL",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CHNL_CHNL_BASIC_INFO_PFD",
+     "source_cn": "渠道基本信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_CMM",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CMM_AREA_INFO_PFD",
+     "source_cn": "地区信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_PTY",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PTY_CUST_FUNDACCT_RELA_PFD",
+     "source_cn": "客户基金帐号关系"
+    },
+    {
+     "source": "DWD_PTY_CUST_INFO_PFD",
+     "source_cn": "客户信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_oa_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_OA_AGENCY_VIEW_PFD",
+     "source_cn": "渠道解析规则"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_ACCT",
+  "DWD_CHNL",
+  "DWD_CMM",
+  "DWD_PTY",
+  "ods_oa_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

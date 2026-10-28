@@ -1,0 +1,88 @@
+{
+ "target": "DWD_PROD_PROD_BASIC_INFO_PFD",
+ "target_cn": "产品基本信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_PROD",
+ "dependency_rows": 10,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsfa_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TEUNDINEO_PED",
+     "source_cn": "基金基本信息表"
+    },
+    {
+     "source": "ODS_HSFA_TFUNDINFO_PFD",
+     "source_cn": "基金信息表"
+    },
+    {
+     "source": "ODS_HSFA_TJJXSFL_PFD",
+     "source_cn": "分级基金"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TSYSINFO_PFD",
+     "source_cn": "系统信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TFUNDINFO_PFD",
+     "source_cn": "基金信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TFUNDINFO_PFD",
+     "source_cn": "基金信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PROD_PROD_NUM_MAPP_PFD",
+   "source_cn": "产品编码映射"
+  }
+ ],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_hsfa_etl_02",
+  "ods_hsfa_etl_03",
+  "ods_hsfta_etl_02",
+  "ods_hszta_etl_02"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

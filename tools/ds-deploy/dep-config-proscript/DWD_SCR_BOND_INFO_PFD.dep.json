@@ -1,0 +1,55 @@
+{
+ "target": "DWD_SCR_BOND_INFO_PFD",
+ "target_cn": "",
+ "layer": "DWD",
+ "own_workflow": "DWD_SCR",
+ "dependency_rows": 5,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TBONDPROPERTY_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_SCR_SCR_BASIC_INFO_PFD",
+   "source_cn": ""
+  },
+  {
+   "source": "DWD_SCR_SCR_CATG_INFO_PFD",
+   "source_cn": ""
+  },
+  {
+   "source": "DWD_SCR_SCR_NUM_MAPP_PFD",
+   "source_cn": ""
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "scripts/DWD_依赖关系.xlsx",
+ "_cut_dropped": 0
+}

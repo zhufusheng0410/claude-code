@@ -1,0 +1,65 @@
+{
+ "target": "DWD_ACCT_ACCT_BTCH_RELA_PFD",
+ "target_cn": "账户网点关系",
+ "layer": "DWD",
+ "own_workflow": "DWD_ACCT",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_CHNL",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CHNL_CHNL_BASIC_INFO_PFD",
+     "source_cn": "渠道基本信息"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TACCONET_PFD",
+     "source_cn": "账号可交易网点"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TACCONET_PFD",
+     "source_cn": "账号可交易网点"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_CHNL",
+  "ods_hsfta_etl_01",
+  "ods_hszta_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

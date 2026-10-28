@@ -1,0 +1,36 @@
+{
+ "target": "DWS_CUST_FST_TRAN_BTCH_PFD",
+ "target_cn": "客户首次交易网点",
+ "layer": "DWS",
+ "own_workflow": "DWS_ZTA",
+ "owner_system": "HSZTA",
+ "dependency_rows": 1,
+ "cross_workflow": [],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWS_TRAN_MKT_TRAN_CNFM_PTD",
+   "source_cn": "市场交易确认"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

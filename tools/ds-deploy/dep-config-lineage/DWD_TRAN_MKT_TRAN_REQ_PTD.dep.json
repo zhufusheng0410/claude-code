@@ -1,0 +1,87 @@
+{
+ "target": "DWD_TRAN_MKT_TRAN_REQ_PTD",
+ "target_cn": "市场交易申请",
+ "layer": "DWD",
+ "own_workflow": "DWD_TRAN",
+ "dependency_rows": 5,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_CHNL",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CHNL_CHNL_BASIC_INFO_PFD",
+     "source_cn": "渠道基本信息"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_PROD_NUM_MAPP_PFD",
+     "source_cn": "产品编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsds_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSDS_TREQUEST_PTD",
+     "source_cn": "交易申请表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TREQUEST_PTD",
+     "source_cn": "交易申请"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TREQUEST_PTD",
+     "source_cn": "交易申请"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_CHNL",
+  "DWD_PROD",
+  "ods_hsds_etl_01",
+  "ods_hsfta_etl_03",
+  "ods_hszta_etl_03"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

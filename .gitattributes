@@ -1,0 +1,14 @@
+# 统一文本文件行尾为 LF。
+# 依据：tools/utils/table_utils.write_file 显式 newline='\n' 的教训 —— 若让 Git 按平台
+# 默认检出 CRLF，生成的 .sh 部署到 Linux 后 shebang/source 行尾带 \r 会报文件不存在。
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换
+*.xlsx binary
+*.xls binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary

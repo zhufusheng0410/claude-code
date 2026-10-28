@@ -1,0 +1,53 @@
+{
+ "target": "DWS_CUST_HOLD_AST_SUM_PFD",
+ "target_cn": "客户持有资产汇总",
+ "layer": "DWS",
+ "own_workflow": "DWS_ZTA",
+ "owner_system": "HSZTA",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PTY",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PTY_CUST_INFO_PFD",
+     "source_cn": "客户信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWS_CUST_HOLD_DETAIL_PTD",
+   "source_cn": "客户保有明细"
+  },
+  {
+   "source": "DWS_PROD_HOLD_DETAIL_PTD",
+   "source_cn": "产品保有明细"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PTY"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

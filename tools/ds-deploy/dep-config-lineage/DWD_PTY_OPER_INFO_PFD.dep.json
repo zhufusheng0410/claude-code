@@ -1,0 +1,43 @@
+{
+ "target": "DWD_PTY_OPER_INFO_PFD",
+ "target_cn": "操作员信息表",
+ "layer": "DWD",
+ "own_workflow": "DWD_PTY",
+ "dependency_rows": 1,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_05",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TOPERATOR_PFD",
+     "source_cn": "操作员表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_o32_etl_05"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

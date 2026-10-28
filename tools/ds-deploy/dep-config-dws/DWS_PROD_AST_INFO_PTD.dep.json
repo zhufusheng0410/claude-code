@@ -1,0 +1,44 @@
+{
+ "target": "DWS_PROD_AST_INFO_PTD",
+ "target_cn": "产品资产信息",
+ "layer": "DWS",
+ "own_workflow": "DWS_HSFA",
+ "owner_system": "HSFA",
+ "dependency_rows": 1,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_AST",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_AST_VALU_INFO_PTD",
+     "source_cn": "估值信息"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_AST"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

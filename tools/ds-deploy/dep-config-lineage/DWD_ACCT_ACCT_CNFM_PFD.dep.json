@@ -1,0 +1,76 @@
+{
+ "target": "DWD_ACCT_ACCT_CNFM_PFD",
+ "target_cn": "账户确认",
+ "layer": "DWD",
+ "own_workflow": "DWD_ACCT",
+ "dependency_rows": 4,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_CHNL",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CHNL_CHNL_BASIC_INFO_PFD",
+     "source_cn": "渠道基本信息"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_PTY",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PTY_CUST_NUM_MAPP_PFD",
+     "source_cn": "客户编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TACCOREQUEST_PTD",
+     "source_cn": "账户申请表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TACCOCONFIRM_PFD",
+     "source_cn": "账户确认"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_CHNL",
+  "DWD_PTY",
+  "ods_hsfta_etl_01",
+  "ods_hszta_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

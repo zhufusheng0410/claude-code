@@ -1,0 +1,102 @@
+{
+ "target": "DWD_PTY_ORG_NUM_MAPP_PFD",
+ "target_cn": "产品编码映射",
+ "layer": "DWD",
+ "own_workflow": "DWD_PTY",
+ "dependency_rows": 8,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsds_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSDS_TCUSTINFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TAGENCYINFO_PFD",
+     "source_cn": ""
+    },
+    {
+     "source": "ODS_HSFTA_TCUSTOMERINFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TAGENCYINFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TCUSTINFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_04",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TISSUER_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_07",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TTRADERIVAL_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PTY_CUST_FUNDACCT_RELA_PFD",
+   "source_cn": ""
+  }
+ ],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_TRAN"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "script-refs",
+ "_note": "★ 破环：脚本真实引用 DWD_TRAN_MKT_TRAN_CNFM_PTD，但与 DWD_TRAN→DWD_PTY 的 5 条边成环，按最小破环切掉这 1 条"
+}

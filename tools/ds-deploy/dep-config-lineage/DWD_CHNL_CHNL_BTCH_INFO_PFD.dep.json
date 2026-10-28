@@ -1,0 +1,76 @@
+{
+ "target": "DWD_CHNL_CHNL_BTCH_INFO_PFD",
+ "target_cn": "渠道网点信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_CHNL",
+ "dependency_rows": 4,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PTY",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PTY_ORG_NUM_MAPP_PFD",
+     "source_cn": "机构编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsds_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSDS_TNETSTATION_PFD",
+     "source_cn": "网点"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TNETINFO_PFD",
+     "source_cn": "网点信息"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TNETINFO_PFD",
+     "source_cn": "网点信息"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PTY",
+  "ods_hsds_etl_01",
+  "ods_hsfta_etl_02",
+  "ods_hszta_etl_02"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

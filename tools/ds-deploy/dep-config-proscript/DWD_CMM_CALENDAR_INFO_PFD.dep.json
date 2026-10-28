@@ -1,0 +1,42 @@
+{
+ "target": "DWD_CMM_CALENDAR_INFO_PFD",
+ "target_cn": "",
+ "layer": "DWD",
+ "own_workflow": "DWD_CMM",
+ "dependency_rows": 2,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsfa_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TTRADEDATE_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "scripts/DWD_依赖关系.xlsx",
+ "_cut_dropped": 0
+}

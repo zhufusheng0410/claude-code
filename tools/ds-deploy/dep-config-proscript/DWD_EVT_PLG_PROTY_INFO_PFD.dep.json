@@ -1,0 +1,66 @@
+{
+ "target": "DWD_EVT_PLG_PROTY_INFO_PFD",
+ "target_cn": "",
+ "layer": "DWD",
+ "own_workflow": "DWD_EVT",
+ "dependency_rows": 4,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_SCR",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_SCR_SCR_NUM_MAPP_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TGPZYHG_ZYQ_PFD",
+     "source_cn": ""
+    },
+    {
+     "source": "ODS_HSFA_THGJY_BDQ_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_04",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TZQXX_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "scripts/DWD_依赖关系.xlsx",
+ "_cut_dropped": 0
+}

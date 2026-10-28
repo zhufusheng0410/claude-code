@@ -1,0 +1,80 @@
+{
+ "target": "DWD_TRAN_OTC_BUSIN_CNFM_PTD",
+ "target_cn": "场外业务确认表",
+ "layer": "DWD",
+ "own_workflow": "DWD_TRAN",
+ "dependency_rows": 5,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": "帐套编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_PTY",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PTY_CNTP_NUM_MAPP_PFD",
+     "source_cn": "交易对手方编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_SCR",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_SCR_SCR_BASIC_INFO_PFD",
+     "source_cn": "证券基本信息"
+    },
+    {
+     "source": "DWD_SCR_SCR_NUM_MAPP_PFD",
+     "source_cn": "证券编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_05",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TOUTCONFIRM_PTD",
+     "source_cn": "场外业务确认"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD",
+  "DWD_PTY",
+  "DWD_SCR",
+  "ods_o32_etl_05"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

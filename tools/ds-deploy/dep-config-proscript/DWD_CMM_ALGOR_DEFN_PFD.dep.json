@@ -1,0 +1,46 @@
+{
+ "target": "DWD_CMM_ALGOR_DEFN_PFD",
+ "target_cn": "",
+ "layer": "DWD",
+ "own_workflow": "DWD_CMM",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_06",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TSTORMCOMPANYALGO_PFD",
+     "source_cn": ""
+    },
+    {
+     "source": "ODS_O32_TSTORMCOMPANY_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "scripts/DWD_依赖关系.xlsx",
+ "_cut_dropped": 0
+}

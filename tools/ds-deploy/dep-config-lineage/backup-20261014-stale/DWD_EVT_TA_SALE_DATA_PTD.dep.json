@@ -1,0 +1,52 @@
+{
+ "target": "DWD_EVT_TA_SALE_DATA_PTD",
+ "target_cn": "TA销售数据",
+ "layer": "DWD",
+ "own_workflow": "DWD_EVT",
+ "dependency_rows": 2,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TSGSH_PTD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "script-refs"
+}

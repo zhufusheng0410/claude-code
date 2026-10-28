@@ -1,0 +1,54 @@
+{
+ "target": "DWD_TRAN_CRSE_MANUAL_BUSIN_PFD",
+ "target_cn": "科目手工类业务表",
+ "layer": "DWD",
+ "own_workflow": "DWD_TRAN",
+ "dependency_rows": 2,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": "帐套编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_06",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TSUBJECTBUSINESS_PFD",
+     "source_cn": "科目类业务表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD",
+  "ods_o32_etl_06"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

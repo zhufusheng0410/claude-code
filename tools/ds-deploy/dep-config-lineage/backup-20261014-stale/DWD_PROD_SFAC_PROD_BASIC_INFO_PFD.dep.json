@@ -1,0 +1,69 @@
+{
+ "target": "DWD_PROD_SFAC_PROD_BASIC_INFO_PFD",
+ "target_cn": "帐套产品基本信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_PROD",
+ "dependency_rows": 6,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsfa_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TFUNDINFO_PFD",
+     "source_cn": "基金信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TSYSINFO_PFD",
+     "source_cn": "系统信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TFUNDINFO_PFD",
+     "source_cn": "基金信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+   "source_cn": "帐套编码映射"
+  }
+ ],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_hsfa_etl_02",
+  "ods_hsfa_etl_03",
+  "ods_o32_etl_03"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}
