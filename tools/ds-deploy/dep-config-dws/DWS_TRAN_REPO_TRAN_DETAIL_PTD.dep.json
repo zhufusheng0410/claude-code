@@ -1,0 +1,90 @@
+{
+ "target": "DWS_TRAN_REPO_TRAN_DETAIL_PTD",
+ "target_cn": "回购交易明细表",
+ "layer": "DWS",
+ "own_workflow": "DWS_O32",
+ "owner_system": "O32",
+ "dependency_rows": 11,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_AST_UNIT_PFD",
+     "source_cn": "O32资产单元表"
+    },
+    {
+     "source": "DWD_PROD_PORTF_PFD",
+     "source_cn": "O32投资组合表"
+    },
+    {
+     "source": "DWD_PROD_SFAC_PROD_BASIC_INFO_PFD",
+     "source_cn": "帐套产品基本信息"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_SCR",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_SCR_SCR_BASIC_INFO_PFD",
+     "source_cn": "证券基本信息"
+    },
+    {
+     "source": "DWD_SCR_SCR_CATG_INFO_PFD",
+     "source_cn": "证券分类信息"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_TRAN",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_TRAN_INBK_DEAL_REPLY_APPLY_PTD",
+     "source_cn": "O32银行间成交回报表"
+    },
+    {
+     "source": "DWD_TRAN_ISTCT_INFO_PTD",
+     "source_cn": "O32指令信息表"
+    },
+    {
+     "source": "DWD_TRAN_ISTCT_SCR_DETAIL_PTD",
+     "source_cn": "O32指令证券明细表"
+    },
+    {
+     "source": "DWD_TRAN_REAL_DEAL_JOUR_PTD",
+     "source_cn": "O32实时成交流水表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD",
+  "DWD_SCR",
+  "DWD_TRAN"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

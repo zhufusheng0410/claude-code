@@ -1,0 +1,52 @@
+{
+ "target": "DWD_ACCT_HOLDER_ACCT_INFO_PFD",
+ "target_cn": "",
+ "layer": "DWD",
+ "own_workflow": "DWD_ACCT",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsfa_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TGDZTDY_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_06",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TSTOCKHOLDER_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "scripts/DWD_依赖关系.xlsx",
+ "_cut_dropped": 0
+}

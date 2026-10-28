@@ -1,0 +1,38 @@
+{
+ "target": "DWD_PROD_PROD_SFAC_RELA_PFD",
+ "target_cn": "产品套账关系",
+ "layer": "DWD",
+ "own_workflow": "DWD_PROD",
+ "dependency_rows": 2,
+ "cross_workflow": [],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PROD_PROD_BASIC_INFO_PFD",
+   "source_cn": "产品基本信息"
+  },
+  {
+   "source": "DWD_PROD_SFAC_PROD_BASIC_INFO_PFD",
+   "source_cn": "帐套产品基本信息"
+  }
+ ],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

@@ -1,0 +1,62 @@
+{
+ "target": "DWD_TRAN_MKT_TRAN_REQ_PTD",
+ "target_cn": "",
+ "layer": "DWD",
+ "own_workflow": "DWD_TRAN",
+ "dependency_rows": 4,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_PROD_NUM_MAPP_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TREQUEST_PTD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TREQUEST_PTD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "scripts/DWD_依赖关系.xlsx",
+ "_cut_dropped": 0
+}

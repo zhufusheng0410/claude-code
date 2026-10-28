@@ -1,0 +1,92 @@
+{
+ "target": "DWD_PROD_PROD_SALE_FEER_INFO_PFD",
+ "target_cn": "产品销售费率信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_PROD",
+ "dependency_rows": 7,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_CHNL",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CHNL_CHNL_BASIC_INFO_PFD",
+     "source_cn": "渠道基本信息"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TFUNDAGENCY_PFD",
+     "source_cn": "基金销售商参数表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TAGENCYINFO_PFD",
+     "source_cn": "销售商信息"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TFUNDAGENCY_PFD",
+     "source_cn": "基金销售商参数表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_manual_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_MANUAL_SPEBA_MANUAL_INFO_PFD",
+     "source_cn": "专户手工信息"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PROD_PROD_NUM_MAPP_PFD",
+   "source_cn": "产品编码映射"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_CHNL",
+  "ods_hsfta_etl_02",
+  "ods_hszta_etl_01",
+  "ods_hszta_etl_02",
+  "ods_manual_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

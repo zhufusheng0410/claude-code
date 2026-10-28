@@ -1,0 +1,101 @@
+{
+ "target": "DWD_PROD_PROD_BASIC_INFO_PFD",
+ "target_cn": "",
+ "layer": "DWD",
+ "own_workflow": "DWD_PROD",
+ "dependency_rows": 9,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PTY",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PTY_ORG_NUM_MAPP_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TFUNDINFO_PFD",
+     "source_cn": ""
+    },
+    {
+     "source": "ODS_HSFA_TJJXSFL_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TSYSINFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TFUNDINFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TFUNDINFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_manual_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_MANUAL_SPEBA_MANUAL_INFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PROD_PROD_NUM_MAPP_PFD",
+   "source_cn": ""
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "scripts/DWD_依赖关系.xlsx",
+ "_cut_dropped": 0
+}

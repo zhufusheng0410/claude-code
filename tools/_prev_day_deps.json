@@ -1,0 +1,71 @@
+{
+ "generated": "2026-10-23 23:28:31",
+ "rule": "目标表脚本对上游表的【每一处】读取都是前一日惯用式 DATE_FORMAT(DATE_SUB(TO_DATE(FROM_UNIXTIME(UNIX_TIMESTAMP('${p_end_dt}','yyyyMMdd'))),1),'yyyyMMdd') ⇒ 不配调度依赖",
+ "scope": "DWD + DWS（scripts/*/dwd/02_etl、scripts/*/dws/02_etl）",
+ "edges": [
+  [
+   "DWD_PROD_PROD_NUM_MAPP_PFD",
+   "DWD_PROD_PROD_BASIC_INFO_PFD",
+   "DATE_FORMAT(DATE_SUB(TO_DATE(FROM_UNIXTIME(UNIX_TIMESTAMP('${p_end_dt}','yyyyMMdd'))),1),'yyyyMMdd')",
+   "scripts/MASTER/dwd/02_etl/DWD_PROD_PROD_NUM_MAPP_PFD.sh",
+   "DWD"
+  ],
+  [
+   "DWD_PROD_SFAC_NUM_MAPP_PFD",
+   "DWD_PROD_SFAC_PROD_BASIC_INFO_PFD",
+   "DATE_FORMAT(DATE_SUB(TO_DATE(FROM_UNIXTIME(UNIX_TIMESTAMP('${p_end_dt}','yyyyMMdd'))),1),'yyyyMMdd')",
+   "scripts/MASTER/dwd/02_etl/DWD_PROD_SFAC_NUM_MAPP_PFD.sh",
+   "DWD"
+  ],
+  [
+   "DWD_SCR_SCR_NUM_MAPP_PFD",
+   "DWD_CMM_STD_DICT_CDVAL_MAP",
+   "DATE_FORMAT(DATE_SUB(TO_DATE(FROM_UNIXTIME(UNIX_TIMESTAMP('${p_end_dt}','yyyyMMdd'))),1),'yyyyMMdd')",
+   "scripts/MASTER/dwd/02_etl/DWD_SCR_SCR_NUM_MAPP_PFD.sh",
+   "DWD"
+  ],
+  [
+   "DWD_SCR_SCR_NUM_MAPP_PFD",
+   "DWD_SCR_SCR_BASIC_INFO_PFD",
+   "DATE_FORMAT(DATE_SUB(TO_DATE(FROM_UNIXTIME(UNIX_TIMESTAMP('${p_end_dt}','yyyyMMdd'))),1),'yyyyMMdd')",
+   "scripts/MASTER/dwd/02_etl/DWD_SCR_SCR_NUM_MAPP_PFD.sh",
+   "DWD"
+  ]
+ ],
+ "by_target": {
+  "DWD_PROD_PROD_NUM_MAPP_PFD": [
+   "DWD_PROD_PROD_BASIC_INFO_PFD"
+  ],
+  "DWD_PROD_SFAC_NUM_MAPP_PFD": [
+   "DWD_PROD_SFAC_PROD_BASIC_INFO_PFD"
+  ],
+  "DWD_SCR_SCR_NUM_MAPP_PFD": [
+   "DWD_CMM_STD_DICT_CDVAL_MAP",
+   "DWD_SCR_SCR_BASIC_INFO_PFD"
+  ]
+ },
+ "mixed_kept": [
+  {
+   "target": "DWS_PROD_HOLD_DETAIL_PTD",
+   "upstream": "DWS_PROD_AST_INFO_PTD",
+   "modes": [
+    "day",
+    "other",
+    "prev"
+   ],
+   "layer": "DWS"
+  }
+ ],
+ "prev_alike_pending": [
+  {
+   "target": "DWS_PROD_SUM_INFO_PTD",
+   "upstream": "DWS_PROD_AST_INFO_PTD",
+   "modes": [
+    "day",
+    "prev_alike"
+   ],
+   "layer": "DWS",
+   "script": "scripts/HSFA/dws/02_etl/DWS_PROD_SUM_INFO_PTD.sh"
+  }
+ ]
+}

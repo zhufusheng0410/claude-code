@@ -1,0 +1,47 @@
+{
+ "target": "DWD_ACCT_CPTL_ACCT_INFO_PFD",
+ "target_cn": "资金账户信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_ACCT",
+ "dependency_rows": 2,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_05",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TBANKACCOUNT_PFD",
+     "source_cn": "银行账户信息表"
+    },
+    {
+     "source": "ODS_O32_TSELFBANKACCOUNT_PFD",
+     "source_cn": "本方账户信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_o32_etl_05"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

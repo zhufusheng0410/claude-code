@@ -1,0 +1,53 @@
+{
+ "target": "DWD_ACCT_FUND_ACCT_INFO_PFD",
+ "target_cn": "基金账户信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_ACCT",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsds_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSDS_TFUNDACCO_PFD",
+     "source_cn": "基金账号信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfta_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TACCOINFO_PFD",
+     "source_cn": "客户信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_hsds_etl_01",
+  "ods_hsfta_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

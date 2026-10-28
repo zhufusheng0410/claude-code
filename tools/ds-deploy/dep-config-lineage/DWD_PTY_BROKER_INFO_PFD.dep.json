@@ -1,0 +1,43 @@
+{
+ "target": "DWD_PTY_BROKER_INFO_PFD",
+ "target_cn": "经纪人信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_PTY",
+ "dependency_rows": 1,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsds_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSDS_TBROKER_PFD",
+     "source_cn": "经纪人信息"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_hsds_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

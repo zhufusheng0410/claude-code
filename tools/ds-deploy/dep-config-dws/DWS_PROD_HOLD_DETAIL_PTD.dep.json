@@ -1,0 +1,75 @@
+{
+ "target": "DWS_PROD_HOLD_DETAIL_PTD",
+ "target_cn": "产品保有明细",
+ "layer": "DWS",
+ "own_workflow": "DWS_ZTA",
+ "owner_system": "HSZTA",
+ "dependency_rows": 5,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_CMM",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CMM_CALENDAR_INFO_PFD",
+     "source_cn": "日历信息"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_PROD_SALE_FEER_INFO_PFD",
+     "source_cn": "产品持仓信息"
+    }
+   ]
+  },
+  {
+   "workflow": "DWS_HSFA",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWS_PROD_AST_INFO_PTD",
+     "source_cn": "产品资产信息"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWS_CUST_HOLD_DETAIL_PTD",
+   "source_cn": "客户保有明细"
+  },
+  {
+   "source": "DWS_PROD_INFO_PFD",
+   "source_cn": "产品信息"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_CMM",
+  "DWD_PROD",
+  "DWS_HSFA"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

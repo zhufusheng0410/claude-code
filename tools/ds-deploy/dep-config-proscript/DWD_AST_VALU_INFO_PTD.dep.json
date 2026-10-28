@@ -1,0 +1,94 @@
+{
+ "target": "DWD_AST_VALU_INFO_PTD",
+ "target_cn": "",
+ "layer": "DWD",
+ "own_workflow": "DWD_AST",
+ "dependency_rows": 9,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_SCR",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_SCR_SCR_BASIC_INFO_PFD",
+     "source_cn": ""
+    },
+    {
+     "source": "DWD_SCR_SCR_CATG_INFO_PFD",
+     "source_cn": ""
+    },
+    {
+     "source": "DWD_SCR_SCR_NUM_MAPP_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TACCOUNT_HS_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TJJXSFL_PFD",
+     "source_cn": ""
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TSYSINFO_PFD",
+     "source_cn": ""
+    },
+    {
+     "source": "ODS_HSFA_TTMP_H_GZB_PTD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "scripts/DWD_依赖关系.xlsx",
+ "_cut_dropped": 0
+}

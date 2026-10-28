@@ -1,0 +1,48 @@
+{
+ "target": "DWD_CMM_INTR_PARA_PFD",
+ "target_cn": "利率参数表",
+ "layer": "DWD",
+ "own_workflow": "DWD_PROD",
+ "dependency_rows": 2,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_04",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TINTERESTRATE_PFD",
+     "source_cn": "利率参数表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+   "source_cn": ""
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_o32_etl_04"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

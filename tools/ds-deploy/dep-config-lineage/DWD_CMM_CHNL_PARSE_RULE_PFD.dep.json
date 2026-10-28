@@ -1,0 +1,43 @@
+{
+ "target": "DWD_CMM_CHNL_PARSE_RULE_PFD",
+ "target_cn": "渠道解析规则",
+ "layer": "DWD",
+ "own_workflow": "DWD_CMM",
+ "dependency_rows": 1,
+ "cross_workflow": [
+  {
+   "workflow": "ods_oa_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_OA_AGENCY_VIEW_PFD",
+     "source_cn": "渠道解析规则"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_oa_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

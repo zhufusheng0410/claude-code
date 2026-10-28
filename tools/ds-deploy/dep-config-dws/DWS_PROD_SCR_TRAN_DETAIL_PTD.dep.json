@@ -1,0 +1,60 @@
+{
+ "target": "DWS_PROD_SCR_TRAN_DETAIL_PTD",
+ "target_cn": "产品证券交易明细",
+ "layer": "DWS",
+ "own_workflow": "DWS_HSFA",
+ "owner_system": "HSFA",
+ "dependency_rows": 6,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_EVT",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_EVT_BOND_TRAN_BUSIN_PTD",
+     "source_cn": "债券交易业务"
+    },
+    {
+     "source": "DWD_EVT_DPSI_BILL_BUSIN_PTD",
+     "source_cn": "存款票据业务"
+    },
+    {
+     "source": "DWD_EVT_EQUI_JOUR_INFO_PTD",
+     "source_cn": "权益流水信息"
+    },
+    {
+     "source": "DWD_EVT_FIN_INV_BUSIN_PTD",
+     "source_cn": "理财交易业务"
+    },
+    {
+     "source": "DWD_EVT_FUND_TRAN_BUSIN_PTD",
+     "source_cn": "基金交易业务"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_EVT"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

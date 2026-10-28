@@ -1,0 +1,59 @@
+{
+ "target": "DWD_PTY_DELR_INFO_PFD",
+ "target_cn": "交易员信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_PTY",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_05",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TRIVALTRADER_PFD",
+     "source_cn": "银行间交易对手交易员信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_06",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TSTOCKRIVALTRADER_PFD",
+     "source_cn": "交易所交易对手交易员信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PTY_CNTP_NUM_MAPP_PFD",
+   "source_cn": "交易对手方编码映射"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_o32_etl_05",
+  "ods_o32_etl_06"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

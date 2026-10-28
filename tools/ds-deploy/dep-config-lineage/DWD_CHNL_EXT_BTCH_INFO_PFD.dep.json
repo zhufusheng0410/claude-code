@@ -1,0 +1,63 @@
+{
+ "target": "DWD_CHNL_EXT_BTCH_INFO_PFD",
+ "target_cn": "外部网点信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_CHNL",
+ "dependency_rows": 4,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_CMM",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CMM_AREA_INFO_PFD",
+     "source_cn": "区域信息"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_oa_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_OA_AGENCY_VIEW_PFD",
+     "source_cn": "渠道解析规则"
+    },
+    {
+     "source": "ODS_OA_IP_AGENCY_HIERARCHY_PFD",
+     "source_cn": "网点区域信息"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_CHNL_CHNL_BASIC_INFO_PFD",
+   "source_cn": "渠道基本信息"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_CMM",
+  "ods_oa_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

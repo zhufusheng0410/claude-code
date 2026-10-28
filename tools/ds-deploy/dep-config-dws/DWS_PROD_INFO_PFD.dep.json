@@ -1,0 +1,68 @@
+{
+ "target": "DWS_PROD_INFO_PFD",
+ "target_cn": "产品信息",
+ "layer": "DWS",
+ "own_workflow": "DWS_ZTA",
+ "owner_system": "HSZTA",
+ "dependency_rows": 8,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_PROD_BASIC_INFO_PFD",
+     "source_cn": "产品基本信息"
+    },
+    {
+     "source": "DWD_PROD_PROD_EXTN_INFO_PFD",
+     "source_cn": "产品扩展信息"
+    },
+    {
+     "source": "DWD_PROD_PROD_ROLE_INFO_PFD",
+     "source_cn": "产品角色"
+    },
+    {
+     "source": "DWD_PROD_PROD_SFAC_RELA_PFD",
+     "source_cn": "产品套账关系"
+    },
+    {
+     "source": "DWD_PROD_PROD_WARN_HIS_INFO_PFD",
+     "source_cn": "产品预警历史信息"
+    },
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": "帐套编码映射"
+    },
+    {
+     "source": "DWD_PROD_SFAC_PROD_BASIC_INFO_PFD",
+     "source_cn": "帐套产品基本信息"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

@@ -1,0 +1,47 @@
+{
+ "target": "DWD_CMM_ALGOR_DEFN_PFD",
+ "target_cn": "算法定义表",
+ "layer": "DWD",
+ "own_workflow": "DWD_CMM",
+ "dependency_rows": 2,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_06",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TSTORMCOMPANYALGO_PFD",
+     "source_cn": "算法定义表"
+    },
+    {
+     "source": "ODS_O32_TSTORMCOMPANY_PFD",
+     "source_cn": "算法提供商明细表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_o32_etl_06"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

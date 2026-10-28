@@ -1,0 +1,66 @@
+{
+ "target": "DWS_TRAN_AFFI_BTCH_PTD",
+ "target_cn": "交易归属网点",
+ "layer": "DWS",
+ "own_workflow": "DWS_ZTA",
+ "owner_system": "HSZTA",
+ "dependency_rows": 4,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_CMM",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CMM_AREA_INFO_PFD",
+     "source_cn": "地区信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_TRAN",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_TRAN_MKT_TRAN_CNFM_PTD",
+     "source_cn": "nan"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_oa_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_OA_AGENCY_VIEW_PFD",
+     "source_cn": "渠道解析规则"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_CMM",
+  "DWD_TRAN",
+  "ods_oa_etl_01"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

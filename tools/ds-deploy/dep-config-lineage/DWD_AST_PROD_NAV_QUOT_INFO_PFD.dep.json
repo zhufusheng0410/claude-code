@@ -1,0 +1,64 @@
+{
+ "target": "DWD_AST_PROD_NAV_QUOT_INFO_PFD",
+ "target_cn": "产品净值行情信息",
+ "layer": "DWD",
+ "own_workflow": "DWD_AST",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_PROD_NUM_MAPP_PFD",
+     "source_cn": "产品编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TFUNDDAY_PFD",
+     "source_cn": "基金日信息"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_CMM",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CMM_CALENDAR_INFO_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD",
+  "ods_hszta_etl_02"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

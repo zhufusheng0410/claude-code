@@ -1,0 +1,57 @@
+{
+ "target": "DWD_PTY_OPER_FUND_PRVL_PFD",
+ "target_cn": "操作员基金权限表",
+ "layer": "DWD",
+ "own_workflow": "DWD_PTY",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_05",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TOPFUNDRIGHT_PFD",
+     "source_cn": "操作员基金权限表"
+    },
+    {
+     "source": "ODS_O32_TROLE_PFD",
+     "source_cn": "角色表"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": ""
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_o32_etl_05"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

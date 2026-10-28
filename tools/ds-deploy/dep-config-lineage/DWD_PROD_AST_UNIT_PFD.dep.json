@@ -1,0 +1,59 @@
+{
+ "target": "DWD_PROD_AST_UNIT_PFD",
+ "target_cn": "O32资产单元表",
+ "layer": "DWD",
+ "own_workflow": "DWD_PROD",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "ods_o32_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TASSET_PFD",
+     "source_cn": "资产单元基本信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_o32_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_O32_TFUNDINFO_PFD",
+     "source_cn": "基金信息表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+   "source_cn": "帐套编码映射"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_o32_etl_01",
+  "ods_o32_etl_03"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

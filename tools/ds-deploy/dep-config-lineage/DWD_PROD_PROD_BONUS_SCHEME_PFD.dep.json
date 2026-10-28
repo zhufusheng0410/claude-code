@@ -1,0 +1,59 @@
+{
+ "target": "DWD_PROD_PROD_BONUS_SCHEME_PFD",
+ "target_cn": "产品分红方案",
+ "layer": "DWD",
+ "own_workflow": "DWD_PROD",
+ "dependency_rows": 3,
+ "cross_workflow": [
+  {
+   "workflow": "ods_hsfta_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFTA_TPROFITSCHEMA_PFD",
+     "source_cn": "基金分红方案"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hszta_etl_03",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSZTA_TPROFITSCHEMA_PFD",
+     "source_cn": "基金分红方案"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [
+  {
+   "source": "DWD_PROD_PROD_NUM_MAPP_PFD",
+   "source_cn": "产品编码映射"
+  }
+ ],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "ods_hsfta_etl_02",
+  "ods_hszta_etl_03"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}

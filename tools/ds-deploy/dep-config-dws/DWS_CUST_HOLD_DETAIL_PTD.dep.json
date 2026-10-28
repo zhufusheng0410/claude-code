@@ -1,0 +1,88 @@
+{
+ "target": "DWS_CUST_HOLD_DETAIL_PTD",
+ "target_cn": "客户保有明细",
+ "layer": "DWS",
+ "own_workflow": "DWS_ZTA",
+ "owner_system": "HSZTA",
+ "dependency_rows": 6,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_ACCT",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_ACCT_ACCT_UNP_YIEL_PTD",
+     "source_cn": "账户未付收益"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_AST",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_AST_CUST_HLDP_ALTR_DETAIL_PTD",
+     "source_cn": "客户持仓变更明细"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_CHNL",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_CHNL_CHNL_BASIC_INFO_PFD",
+     "source_cn": "渠道基本信息表"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_PROD_BASIC_INFO_PFD",
+     "source_cn": "产品基本信息"
+    }
+   ]
+  },
+  {
+   "workflow": "DWD_PTY",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PTY_CUST_FUNDACCT_RELA_PFD",
+     "source_cn": "客户基金帐号关系"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_ACCT",
+  "DWD_AST",
+  "DWD_CHNL",
+  "DWD_PROD",
+  "DWD_PTY"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dws/lineage"
+}

@@ -1,0 +1,77 @@
+{
+ "target": "DWD_EVT_DPSI_BILL_BUSIN_PTD",
+ "target_cn": "存款票据业务",
+ "layer": "DWD",
+ "own_workflow": "DWD_EVT",
+ "dependency_rows": 6,
+ "cross_workflow": [
+  {
+   "workflow": "DWD_PROD",
+   "code": null,
+   "sources": [
+    {
+     "source": "DWD_PROD_SFAC_NUM_MAPP_PFD",
+     "source_cn": "帐套编码映射"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_01",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TCAP_CKYWLL_PFD",
+     "source_cn": "存款业务利率表"
+    },
+    {
+     "source": "ODS_HSFA_TCAP_CKYWLS_PTD",
+     "source_cn": "存款业务交易流水表"
+    },
+    {
+     "source": "ODS_HSFA_TCAP_CKYW_PTD",
+     "source_cn": "存款业务主表"
+    }
+   ]
+  },
+  {
+   "workflow": "ods_hsfa_etl_02",
+   "code": null,
+   "sources": [
+    {
+     "source": "ODS_HSFA_TFUNDINFO_PFD",
+     "source_cn": "基金信息表"
+    },
+    {
+     "source": "ODS_HSFA_TJYDS_PFD",
+     "source_cn": "交易对手表"
+    }
+   ]
+  }
+ ],
+ "same_workflow_predecessors": [],
+ "mapping_deps": [],
+ "no_workflow_sources": [],
+ "unresolved_workflows": [
+  "DWD_PROD",
+  "ods_hsfa_etl_01",
+  "ods_hsfa_etl_02"
+ ],
+ "dependent_task_params": {
+  "localParams": [],
+  "resourceList": [],
+  "rawScript": "",
+  "dependence": {
+   "relation": "AND",
+   "dependTaskList": [
+    {
+     "relation": "AND",
+     "dependItemList": []
+    }
+   ],
+   "checkInterval": 60,
+   "failurePolicy": "DEPENDENT_FAILURE_FAILURE",
+   "failureWaitingTime": 0
+  }
+ },
+ "_source": "dwd/lineage"
+}
