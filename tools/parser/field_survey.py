@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 import tempfile
 import shutil
 import os
@@ -6,6 +6,9 @@ import re
 import zipfile
 from ..core.ir import FieldMeta
 from ..core.type_mapper import oracle_to_hive
+from tools.utils.excel_reader import (
+    apply_header_row0, frame_to_str, read_workbook_sheets,
+)
 from tools.utils.pandas_helpers import safe_str, safe_float
 from tools.utils.logging_setup import get_logger
 
@@ -37,7 +40,16 @@ def parse_field_survey(filepath: str) -> dict:
 
 
 def _read_excel_safely(filepath: str) -> pd.DataFrame:
-    """安全读取Excel，自动处理autoFilter问题"""
+    """安全读取Excel，自动处理autoFilter问题。
+
+    ★ 2026-10-18：优先 calamine 快路径（tools/utils/excel_reader.py，语义对齐
+    read_excel(header=0, dtype=str)），不可用/失败时回退 openpyxl 并修复 autoFilter。
+    注：calamine 直接读原始文件即可绕过 openpyxl 的 autoFilter 报错（再兜底现修逻辑）。
+    """
+    sheets = read_workbook_sheets(filepath)
+    if sheets:
+        return frame_to_str(apply_header_row0(next(iter(sheets.values()))))
+
     # 尝试直接读取
     try:
         xls = pd.ExcelFile(filepath, engine='openpyxl')
@@ -66,7 +78,8 @@ def _read_excel_safely(filepath: str) -> pd.DataFrame:
                             content = f.read()
                         if '<autoFilter' in content:
                             content = re.sub(r'<autoFilter[^>]*>.*?</autoFilter>', '', content, flags=re.DOTALL)
-                            with open(fpath, 'w', encoding='utf-8') as f:
+                            # newline='' 避免 Windows 上把 \n 改写成 \r\n，污染 xlsx 内部 XML
+                            with open(fpath, 'w', encoding='utf-8', newline='') as f:
                                 f.write(content)
 
         # 重新打包为临时 Excel 文件

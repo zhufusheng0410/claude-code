@@ -1,7 +1,6 @@
 #!/bin/sh
 #初始化环境变量：
 source /home/dolphinscheduler/hadoop_env
-source ${source_path}
 inceptor_beeline()
 {
     beeline -u ${hive_jdbc} -n ${hive_username} -p ${hive_password}   -e "$1"
@@ -19,7 +18,7 @@ json_obj=$(cat <<'EOF'
   "job": {
     "setting": {
       "speed": {
-        "channel": 3
+        "channel": 1
       },
       "errorLimit": {
         "record": 0,
@@ -31,11 +30,11 @@ json_obj=$(cat <<'EOF'
         "reader": {
           "name": "oraclereader",
           "parameter": {
-            "username": "${o32_username}",
-            "password": "${o32_password}",
+            "username": "${sys_username}",
+            "password": "${sys_password}",
             "connection": [{
               "querySql": ["${query_sql}"],
-              "jdbcUrl": ["${o32_jdbc}"]
+              "jdbcUrl": ["${sys_jdbc}"]
             }]
           }
         },
@@ -46,15 +45,13 @@ json_obj=$(cat <<'EOF'
             "compress": "",
             "defaultFS": "${defaultFS}",
             "hadoopConfig": {
-              "dfs.nameservices": "${service}",
-              "dfs.namenode.rpc-address.${service}.${node1}": "hdfsnamenode-${namenode}",
-              "dfs.namenode.rpc-address.${service}.${node2}": "hdfssecondary-${namenode}",
-              "dfs.client.failover.proxy.provider.${service}": "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+              "dfs.data.transfer.protection": "${hdfs_transfer_protection}",
+              "dfs.client.use.datanode.hostname": "${hdfs_use_datanode_hostname}"
             },
             "fieldDelimiter": "\\u0001",
             "fileName": "${tmp_table_name}",
             "fileType": "text",
-            "path": "${o32_path}/${tmp_table_name}",
+            "path": "${sys_path}/${tmp_table_name}",
             "writeMode": "append",
             "encoding": "utf-8",
             "haveKerberos": "${haveKerberos}",
@@ -69,9 +66,9 @@ json_obj=$(cat <<'EOF'
 EOF
 )
 
-sudo -u ${ds_user} echo $json_obj>${json_path}${tmp_table_name}.json
+printf '%s' "$json_obj" > "${json_path}${tmp_table_name}.json"
 
-sudo -u ${ds_user} python ${datax_path} ${json_path}${tmp_table_name}.json
+sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" "${json_path}${tmp_table_name}.json"
 
 if [ $? -ne 0 ]; then
    echo "导入到${tmp_table}表失败"

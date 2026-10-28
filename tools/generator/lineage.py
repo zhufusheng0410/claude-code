@@ -34,40 +34,12 @@ def _global_cn(table: str) -> str:
     return _GLOBAL_CN_INDEX.get(table) or _GLOBAL_CN_INDEX.get(_strip_schema_ref(table), "")
 
 
-# 正则：从子查询中提取真实表名（支持 schema.table 格式）及行尾注释
-# 匹配 FROM/JOIN 后的表名（含可选 -- 注释）
-_TABLE_REF_RE = re.compile(
-    r'(?:FROM|JOIN)\s+([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)?)\s*(?:[A-Za-z0-9_]+)?\s*(?:--\s*([^\n]*))?',
-    re.IGNORECASE,
+# ★ 2026-10-12：子查询识别/表名提取下沉到 core.sql_tables（parser/generator 共用），
+#   此处保留私有名别名，兼容既有内部调用与历史注释。
+from ..core.sql_tables import (
+    extract_tables_from_subquery as _extract_tables_from_subquery,
+    is_subquery as _is_subquery,
 )
-
-
-def _extract_tables_from_subquery(subquery: str) -> list[tuple[str, str]]:
-    """从子查询 SQL 中提取引用的真实表名，返回 [(表名, 行尾注释), ...]"""
-    if not subquery:
-        return []
-    # 查找 FROM/JOIN 后的表名及注释
-    matches = _TABLE_REF_RE.findall(subquery)
-    seen = set()
-    result = []
-    for table, comment in matches:
-        if table and table not in seen:
-            seen.add(table)
-            comment = comment.strip() if comment else ""
-            result.append((table, comment))
-    return result
-
-
-def _is_subquery(value: str) -> bool:
-    """判断字符串是否为子查询（包含 SELECT 或以 -- 注释开头后跟 SELECT）"""
-    if not value:
-        return False
-    v = value.strip().upper()
-    # 兼容全宽括号（中文括号）
-    # 也兼容以 -- 注释开头的 SQL 块
-    return (v.startswith("SELECT") or
-            (v.startswith("(") or v.startswith("（")) and "SELECT" in v or
-            v.startswith("--") and "SELECT" in v)
 
 
 def _looks_like_alias(name: str) -> bool:
@@ -85,13 +57,6 @@ def _looks_like_real_table(name: str) -> bool:
     return any(prefix in name.upper() for prefix in ("ODS_", "DWD_", "DWS_"))
 
 
-def _strip_schema(full_name: str) -> str:
-    """去掉 schema 前缀，返回裸表名"""
-    if '.' in full_name:
-        return full_name.rsplit('.', 1)[-1]
-    return full_name
-
-
 def _build_table_cn_lookup(sheet_mappings) -> dict:
     """构建真实表名（含裸表名） -> 中文名的查找表，忽略子查询"""
     lookup = {}
@@ -105,11 +70,11 @@ def _build_table_cn_lookup(sheet_mappings) -> dict:
                 real_table = table_cn
                 real_cn = _global_cn(real_table) or real_table
                 # 同时存全名和裸名
-                for key in (real_table, _strip_schema(real_table)):
+                for key in (real_table, _strip_schema_ref(real_table)):
                     lookup[key] = real_cn
             else:
                 # 同时存全名和裸名
-                for key in (table_name, _strip_schema(table_name)):
+                for key in (table_name, _strip_schema_ref(table_name)):
                     lookup[key] = table_cn
     return lookup
 

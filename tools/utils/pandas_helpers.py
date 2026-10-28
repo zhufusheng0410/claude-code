@@ -5,7 +5,7 @@
 """
 
 import pandas as pd
-from typing import Any, Union, Optional
+from typing import Any, Union
 
 
 def safe_str(row: pd.Series, col: Any) -> str:

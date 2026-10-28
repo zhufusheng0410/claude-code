@@ -6,7 +6,7 @@ import unittest
 
 from tools.core.ir import TableMeta, FieldMeta, MappingSheet, MappingRule
 from tools.generator.data_dict import (
-    _bool_to_yn, extract_ods_dict, extract_layer_dict, generate_data_dict, write_combined_dict,
+    _bool_to_yn, extract_ods_dict, extract_layer_dict, write_combined_dict,
 )
 
 

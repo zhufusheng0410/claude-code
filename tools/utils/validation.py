@@ -13,8 +13,14 @@ def validate_db_identifier(name: str, identifier_type: str = "identifier") -> No
     """
     验证数据库对象名（表名、字段名）安全性
 
-    规则：只允许字母、数字、下划线（不强制要求以字母开头，兼容历史数据）
+    规则：只允许字母、数字、下划线（**不强制要求以字母开头**，兼容历史数据）
     这样可以防止 SQL 注入（排除危险字符如单引号、分号、空格等）
+
+    ★ 2026-10-26 评审：**不要收紧成「必须字母/下划线开头」**。实测甲方 MAPPING 的
+      目标字段名存在数字开头的真实数据（`7D_AROR` / `1V1_INIT_CNOR` /
+      `1VN_INIT_CNOR_QTY`，见 scripts/O32/dwd/02_etl/DWD_AST_FUND_AST_PFD.sh），
+      收紧后这些表会在 build_field_defs 处抛 ValueError、整表被跳过。
+      Hive 本身接受数字开头的标识符。
 
     Args:
         name: 要验证的名称
@@ -26,7 +32,7 @@ def validate_db_identifier(name: str, identifier_type: str = "identifier") -> No
     if not name:
         raise ValueError(f"{identifier_type} cannot be empty")
 
-    # 只允许字母、数字、下划线（可以数字开头）
+    # 只允许字母、数字、下划线（允许数字开头，兼容历史数据）
     if not re.match(r'^[A-Za-z0-9_]+$', name):
         raise ValueError(
             f"Invalid {identifier_type} '{name}': must contain only alphanumeric and underscore"

@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.config import (
     SURVEY_DIR, DWD_MAPPING_BASE, DWS_MAPPING_BASE, OUTPUT_BASE,
-    ODS_SCHEMA_TMPL, ODS_TABLE_TMPL, SYSTEM_ALIAS_MAP
+    ODS_TABLE_TMPL, SYSTEM_ALIAS_MAP
 )
 
 from tools.parser.table_survey import parse_table_survey
@@ -129,9 +129,14 @@ def _generate_ods_for_sys(sys_key, survey_dir, out, logger):
     return dict_rows
 
 
-def _generate_dwd_dws(layer_name, parser_func, input_path, out, logger):
-    """生成 DWD/DWS 层代码"""
-    raw_sys = extract_sys_name(layer_name, input_path)
+def _generate_dwd_dws(layer_name, parser_func, input_path, out, logger, sys_override=None):
+    """生成 DWD/DWS 层代码
+
+    sys_override: 显式指定输出系统名。用于「00-主数据」这类**不在 SURVEY_DIR 里**的
+                  独立 MAPPING 目录 —— 从路径推断会得到中文名（`00-主数据` → `主数据`），
+                  必须覆盖成 ASCII 名（如 MASTER）才能落到 scripts/<名>/ 下。
+    """
+    raw_sys = sys_override or extract_sys_name(layer_name, input_path)
     sys_name = normalize_sys_name(raw_sys)
 
     input_desc = os.path.basename(os.path.normpath(input_path))
@@ -179,6 +184,12 @@ def main():
     p.add_argument("--layer", choices=["ODS", "DWD", "DWS", "ALL"], default="ALL")
     p.add_argument("--sys", help="指定系统简称，如 O32/HSFA/ZTA。不指定则自动发现所有系统")
     p.add_argument("--output", default=OUTPUT_BASE, help="脚本输出目录")
+    p.add_argument("--dwd-mapping-dir",
+                   help="直接指定 DWD MAPPING 目录，跳过「SURVEY_DIR 自动发现系统」"
+                        "（用于 00-主数据 这类独立 MAPPING 目录）")
+    p.add_argument("--sys-name",
+                   help="覆盖从路径推断出的系统名（决定输出目录 scripts/<名>/）；"
+                        "配合 --dwd-mapping-dir 使用")
     p.add_argument("--verbose", "-v", action="store_true", help="输出 DEBUG 级别详细日志")
 
     args = p.parse_args()
@@ -189,6 +200,28 @@ def main():
 
     out = validate_output_path(args.output, OUTPUT_BASE)
     t_start = time.time()
+
+    # ★ 2026-10-04 新增：直接指定 DWD MAPPING 目录（如 00-主数据）。
+    #   这类目录不在 01-系统调研文档 下，走不了「自动发现系统」那条路；
+    #   且路径推断出的系统名是中文（00-主数据 → 主数据），必须用 --sys-name 覆盖。
+    if args.dwd_mapping_dir:
+        if layer not in ("DWD", "ALL"):
+            logger.error("--dwd-mapping-dir 只对 --layer DWD 有意义")
+            sys.exit(1)
+        if not os.path.isdir(args.dwd_mapping_dir):
+            logger.error(f"--dwd-mapping-dir 不是目录: {args.dwd_mapping_dir}")
+            sys.exit(1)
+        logger.info(f"──────── 指定 DWD MAPPING 目录模式 ────────")
+        logger.info(f"  输入: {args.dwd_mapping_dir}")
+        rows = _generate_dwd_dws("DWD", parse_mapping_dir, args.dwd_mapping_dir,
+                                 out, logger, sys_override=args.sys_name)
+        # ⚠ 不调用 write_combined_dict：它会覆盖 scripts/数据字典_汇总.xlsx（那是全 8 个
+        #   系统的汇总），而本模式只生成了「主数据」一层。本层字典已由 generate_data_dict
+        #   落到 scripts/<sys>/dwd/data_dict/。
+        logger.info(f"  本层数据字典行: {len(rows)}（未刷新 scripts/ 汇总字典）")
+        logger.info("─────────────────────────────────────────────")
+        logger.info(f"完成  耗时 {time.time() - t_start:.1f}s  输出 → {out}")
+        return
 
     systems = _discover_systems()
     if not systems:

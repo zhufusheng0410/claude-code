@@ -26,6 +26,21 @@ SYS_FIELDS_DWD = [
     ("MODIFY_TIME", "STRING", "修改时间"),
 ]
 
+# ★ 2026-09-28 新增：ODS 层的系统字段。
+#   为什么需要它：ODS 的 ETL 生成器（ods.py::generate_ods_etl）在 INSERT … SELECT 末尾
+#   【恒定追加】一列 LD_TIME（加载时间），但 generate_ods_ddl 此前【不追加任何系统字段】，
+#   导致「建表列数 = 业务列数(42)」而「SELECT 列数 = 业务列数 + 1(43)」，
+#   执行时报：
+#     SemanticException [Error 10044]: Cannot insert into target table because
+#     column number/types are different: Table insclause-0 has 42 columns,
+#     but query has 43 columns.
+#   参考生产 DWD 建表脚本（05-脚本/01-建表语句/01-DWD建表脚本.sql）的约定，
+#   ODS 只需 LD_TIME（不需要 SSYS/SRC_TAB/MODIFY_TIME 这三列）。
+#   改这里 = 让 ODS 目标表列数与 ETL 的 SELECT 列数对齐。
+SYS_FIELDS_ODS = [
+    ("LD_TIME", "STRING", "加载时间"),
+]
+
 SYS_FIELDS_DWS = [
     ("LD_TIME", "STRING", "加载时间"),
     ("MODIFY_TIME", "STRING", "修改时间"),
@@ -45,6 +60,23 @@ AS_POS = 80        # " AS 别名" 起始列
 COMMENT_POS = 120  # "--注释" 起始列
 DEP_TBL_WIDTH = 55  # 依赖声明中表名列宽
 
+# ★★★ 2026-10-10 新增：Hive 4.x **兼容性开关**（必须放在最前面，set 顺序即作用域）
+#
+# `hive.strict.checks.type.safety` 默认 false，但本集群开了严格模式
+# ⇒ 任何「非 STRING 列 vs 字符串字面量」的比较都会报
+#   `SemanticException [Error 10014] Wrong arguments ''20261009'':
+#    Unsafe compares between different types are disabled`
+# 真实踩坑（18:53 实测）：`ODS_OA_COMM_REGION_HIERARCHY_PFD.effective_from` 是
+# **`decimal(8,0)`**，而 MAPPING 的过滤条件写的是「拉链区间 vs 当前分区日期」：
+#       AND T1.EFFECTIVE_FROM <= '${p_end_dt}'
+# ⇒ decimal 与 string 比较 ⇒ 10014。逐列改类型不可行（列类型因表而异，
+#   有 decimal / string / timestamp），**放宽这两个开关是唯一稳定解**。
+# 这也是甲方/行业惯例的 ETL 头；**Hive 4.0+ 行为一致**。
+HIVE_COMPAT_SETTINGS = [
+    "set hive.strict.checks.type.safety=false;",
+    "set hive.mapred.mode=nonstrict;",
+]
+
 # Hive 动态分区参数（ODS 增量表 ETL 与 DWD/DWS ETL 共用，避免两处硬编码漂移）
 HIVE_DYNAMIC_PARTITION_SETTINGS = [
     "set hive.exec.dynamic.partition=true;",
@@ -55,7 +87,7 @@ HIVE_DYNAMIC_PARTITION_SETTINGS = [
 ]
 
 # Hive 运行参数
-HIVE_SETTINGS = HIVE_DYNAMIC_PARTITION_SETTINGS + [
+HIVE_SETTINGS = HIVE_COMPAT_SETTINGS + HIVE_DYNAMIC_PARTITION_SETTINGS + [
     "set mapred.max.split.size=256000000;",
     "set mapred.min.split.size.per.node=100000000;",
     "set mapred.min.split.size.per.rack=100000000;",

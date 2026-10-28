@@ -19,7 +19,10 @@ def find_mapping_file(base_dir: str, names: Sequence[str], suffix: str) -> Optio
         找到的第一个匹配文件路径，未找到返回 None
     """
     try:
-        entries = [(e.name, e.path) for e in os.scandir(base_dir) if e.is_file()]
+        # ★ 2026-10-12：跳过 `*_备份-*.xlsx` 留档件 —— 与原文件同目录时
+        #   fnmatch 可能先命中备份，旧值静默覆盖新值（见 parser/mapping.py 注释）。
+        entries = [(e.name, e.path) for e in os.scandir(base_dir)
+                   if e.is_file() and '_备份' not in e.name]
     except FileNotFoundError:
         return None
     for name in names:
