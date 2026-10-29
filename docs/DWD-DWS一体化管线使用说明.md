@@ -245,9 +245,9 @@ DWD：
 
 - 10 个工作流，全部 ONLINE；成员表/作业数/依赖项以 `depcfg` 打印为准（不写死，避免过期）
 - DS 中的 rawScript 与 `scripts/*/dwd/02_etl` 逐字节一致（由 `ds-sync-dwd-scripts.py` 保证）
-- 占位仅剩 `DEFAULT_EMPTY` 3 张（SALE_FEER / TAIL / WARN_HIS，临时表族结构缺口）
+- 空脚本占位 `DEFAULT_EMPTY` **当前为空集**（原 3 张 SALE_FEER / TAIL / WARN_HIS 已于 2026-10-27 转正）
 - **主数据跑真实脚本**（2026-10-23 用户拍板，旧 `MASTER_EMPTY_TPL` 口径作废；`--master-placeholder` 可回滚）
-- **工作流归属例外**写 `WORKFLOW_OVERRIDE`（两处同步）；**上游读前一日分区（T-1）⇒ 不配调度依赖**
+- **工作流归属例外**写 `tools/core/dwd_ownership.py::WORKFLOW_OVERRIDE`（单一来源）；**上游读前一日分区（T-1）⇒ 不配调度依赖**
 - 两条口径的判定与处置见 `docs/功能与规范文档.md` §15.3
 
 ---

@@ -6,8 +6,8 @@
 ----
 2026-10-08 DS 定义层被有意清空（42 工作流 / 729 任务 / 42 调度），原因是
 `DWD_CHNL`/`DWD_PROD`/`DWD_SCR` 的 DEPENDENT 自环导致 API 删不掉
-（详见 `/mnt/d/datax/.dx-tmp/ds-wipe-sql.py` 与 MEMORY.md）。备份
-`/mnt/d/datax/.dx-tmp/backup-ds-20261008-154010.sql` 保存了全部定义。
+（详见 MEMORY.md）。备份 pg_dump 保存了全部定义；脚本默认从
+`tools/.dx-tmp/backup-ds-20261008-154010.sql` 读，可用 `DW_DS_DUMP` / `--dump` 指向别处。
 
 本脚本**不用「每 20 个脚本」硬推**，而是：
   1) 从备份 pg_dump 里读出「每个工作流的任务清单（按创建序）」，
@@ -48,15 +48,17 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import dw_paths  # noqa: E402
 from ds_client import DSClient  # noqa: E402
 from ds_config import ds_admin_password, ds_admin_user, pg_conn  # noqa: E402
 from ds_text import read_script  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-REPO = os.environ.get("DW_REPO", os.path.dirname(os.path.dirname(HERE)))
+REPO = dw_paths.REPO
 DUMP = os.environ.get(
-    "DW_DS_DUMP", "/mnt/d/datax/.dx-tmp/backup-ds-20261008-154010.sql")
+    "DW_DS_DUMP", os.path.join(dw_paths.REPO, "tools", ".dx-tmp",
+                               "backup-ds-20261008-154010.sql"))
 PROJECT = os.environ.get("DW_DS_PROJECT", "dw")
 TENANT = "dolphinscheduler"
 EXEC = "SERIAL_WAIT"

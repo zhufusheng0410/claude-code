@@ -43,20 +43,25 @@ docs/superpowers/
 tools/.dx-tmp/
 .dx-tmp/
 
+# 归档区：退役脚本、历史调试脚本、一次性排查产物（2026-10-29 从 tools/ds-deploy 收敛）
+tools/.archive/
+
+# AI 助手会话记忆（本地笔记，不入库）
+.workbuddy/
+.workbuddy-ai/
+
 # 本地凭据（ds_config.py 读取；源码内不留任何口令字面量）
 tools/ds-deploy/.env.local
 .env.local
 .dw-secrets.env
 
-# ds-deploy 下的一次性排查/备份产物（`_` 前缀）：手工跑过的临时脚本与备份目录。
+# ds-deploy 下的一次性排查/备份产物（`_` 前缀）兜底：临时脚本请放 tools/.archive/。
 # ★ 这类脚本历史上曾直连元库、内嵌口令字面量（_poll_1460.py / _stop_orphans.py），
 #   一旦 `git add -A` 就会把口令写进 git 历史（删不掉，`git log -S` 可翻出）。
 tools/ds-deploy/_*.py
 tools/ds-deploy/_*.sql
 tools/ds-deploy/_*.json
 tools/ds-deploy/_*/
-# _legacy 与 _debug-history 是留档（ds-dwd-pipeline 会读 _legacy/_prev_day_deps.json），
-# 保持可见以便按需归档，不随 `git add -A` 自动纳入 → 这里不否定，一并忽略。
 
 # OS
 .DS_Store

@@ -22,8 +22,9 @@ DROP+CREATE 后目标结构与脚本 SELECT 严格一致。
 --------------------
 DWD 表之间有上下游（如 DWD_PROD_SCR_* 依赖 DWD_SCR_SCR_NUM_MAPP_PFD、
 DWD_CMM_STD_DICT_CDVAL_MAP）——上游没数据，下游跑出来也是空。
-依赖边来自 `dep-config-lineage/*.dep.json`（`ds-build-dependent-from-lineage.py` 的产物，
-★权威血缘）；先 Kahn 拓扑定序，再在拓扑序上用**前向边**做最长路径分层，
+依赖边来自 `dep-config-proscript/*.dep.json`（现役口径，`ds-deploy-dwd-workflow.py`
+与 `ds-deploy-all-dwd.py` 的 DEFAULT 同一份）；`--depcfg` 可指向旧口径
+`dep-config-lineage` 做回退对比。先 Kahn 拓扑定序，再在拓扑序上用**前向边**做最长路径分层，
 保证「上游层 < 下游层」。环（甲方依赖表里有 2-环）按原序放开并告警。
 
 资源闸门与并发
@@ -65,7 +66,10 @@ _spec.loader.exec_module(V)
 
 REPORT_DIR = os.path.normpath(os.path.join(HERE, "..", ".dx-tmp"))
 REPORT_PATH = os.path.join(REPORT_DIR, "dwd-etl-run.json")
-DEPCFG_DEFAULT = os.path.join(HERE, "dep-config-lineage")
+# ★ 2026-10-29：默认对齐现役口径。原先指向旧口径 `dep-config-lineage`（110 份），
+#   而部署端（ds-deploy-dwd-workflow.py）早已默认 `dep-config-proscript` ⇒
+#   真实执行的拓扑序与部署依赖可能不同源。回退对比用 `--depcfg …/dep-config-lineage`。
+DEPCFG_DEFAULT = os.path.join(HERE, "dep-config-proscript")
 MEM_FLOOR_GIB = 1.6          # Tez AM 1.5G + 余量
 MEM_WAIT_MAX_MIN = 90        # 内存闸门最长等待
 EXEC_DATE_DEFAULT = "20261010"

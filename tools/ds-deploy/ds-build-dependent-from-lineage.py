@@ -32,10 +32,16 @@ import argparse
 import collections
 import difflib
 import glob
+import importlib.util
 import json
 import os
 import re
 import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import dw_paths  # noqa: E402
+
 
 def _wsl_path(p):
     r"""Windows 路径在 WSL 里不存在时回退 `/mnt/<盘>/...`（本工具两种环境都跑）。"""
@@ -46,9 +52,17 @@ def _wsl_path(p):
     return alt if os.path.isdir(alt) else p
 
 
-REPO = _wsl_path(r"C:\Users\84148\Desktop\trae\claude-code\scripts")
-OUT = _wsl_path(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "dep-config-lineage"))
+def _load_core(name, f):
+    """按文件路径加载 `tools/core/` 下的共享模块（本目录文件名带连字符，不能走包导入）。"""
+    path = os.path.join(os.path.dirname(HERE), "core", f)
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+REPO = _wsl_path(dw_paths.SCRIPTS)
+OUT = _wsl_path(os.path.join(HERE, "dep-config-lineage"))
 PCODE = 185582190746560
 CHUNK = 20
 
@@ -100,16 +114,11 @@ def norm(name):
 
 TBL_LAYER = {}       # 表 -> "MASTER" / "DWD" / "ODS"（按血缘来源打标）
 
-# ★ 表 → 工作流 的显式归属覆盖（默认只认表名前缀，见 own_workflow）。
-# 2026-10-23（用户决定）：DWD_PTY_OPER_FUND_PRVL_PFD 搬到 DWD_PROD。
-#   原因：它唯一的上游映射表 DWD_PROD_SFAC_NUM_MAPP_PFD 在 DWD_PROD；
-#   留在 DWD_PTY 会形成工作流级环（PROD 等 PTY、PTY 的 dep 节点又等 PROD），
-#   实测 PTY 跑到 40+ 分钟仍卡在 dep_DWD_PTY_OPER_FUND_PRVL_PFD。
-WORKFLOW_OVERRIDE = {
-    "DWD_PTY_OPER_FUND_PRVL_PFD": "DWD_PROD",
-    # 2026-10-23（用户决定）：搬到 DWD_PROD —— 上游映射表在 PROD。
-    "DWD_CMM_INTR_PARA_PFD": "DWD_PROD",
-}
+# ★ 表 → 工作流 的归属口径：**唯一来源** `tools/core/dwd_ownership.py`。
+#   此前本文件与 `tools/dwd-pipeline.py` 各复制一份 WORKFLOW_OVERRIDE，靠文档提醒同步；
+#   2026-10-29 起两处都只做薄委托，口径变更只改共享模块。
+_OWNERSHIP = _load_core("dwd_ownership", "dwd_ownership.py")
+WORKFLOW_OVERRIDE = _OWNERSHIP.WORKFLOW_OVERRIDE
 
 
 def own_workflow(table):
@@ -123,10 +132,7 @@ def own_workflow(table):
     血缘来自 `scripts/MASTER/dwd/lineage` 的表与 01-DWD 的表同主题同名，
     归属同一个 `DWD_<主题>` 工作流（TBL_LAYER 仅作信息保留，不改变归属）。
     """
-    m = re.match(r"^(DWD)_([A-Z0-9]+)_", table)
-    if m and table.upper() in WORKFLOW_OVERRIDE:
-        return WORKFLOW_OVERRIDE[table.upper()]
-    return f"DWD_{m.group(2)}" if m else "(未知)"
+    return _OWNERSHIP.own_workflow(table)
 
 
 # --------------------------------------------------------------------------- #
