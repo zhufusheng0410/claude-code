@@ -82,7 +82,7 @@ claude-code/
     ├── generator/  # DDL / ETL / 血缘 / 数据字典 生成器
     ├── utils/      # 共享工具（写文件、校验、查找、日志、Excel 读盘）
     ├── ds-deploy/  # DolphinScheduler 部署工具链（唯一权威源，见其 README）
-    ├── tests/      # unittest 单元测试（16 文件 / 303 个 test_* 用例）
+    ├── tests/      # unittest 单元测试（18 文件 / 347 个 test_* 用例）
     └── .dx-tmp/    # 运行报告等临时产物（gitignored）
 ```
 
@@ -213,10 +213,11 @@ python tools/main.py --layer ALL|ODS|DWD|DWS [--sys O32] [--output DIR]
 | `ddl` | 甲方建表脚本补/替 DDL（`parse_jf_ddl()` `sanitize_ddl()`），重建各系统 `01_ddl.sql` |
 | `lineage` | 脚本依赖梳理 → `scripts/DWD_依赖关系.xlsx`（7 sheet）；`PREV_IDIOM_RE` 识别 T-1 免配边 |
 | `depcfg` | xlsx → `tools/ds-deploy/dep-config-proscript/*.dep.json` |
-| `verify` | `bash -n`、DDL 并入完整性、可选 `--ds` 来源审计 |
+| `verify` | `bash -n`、DDL 并入完整性、可选 `--ds` 来源审计（本地索引扫 `GROUPS`，**含主数据**；占位/缺脚本非 0 即失败） |
 | `all` | owner→convert→distribute→ddl→lineage→depcfg→verify 串跑 |
 
-关键常量：`WORKFLOW_OVERRIDE`（工作流归属例外，**与 `ds-build-dependent-from-lineage.py` 两处同步**）、
+关键常量：`WORKFLOW_OVERRIDE` / `own_workflow()`（工作流归属，**唯一来源 `tools/core/dwd_ownership.py`**，
+本文件与 `ds-build-dependent-from-lineage.py` 均为薄委托）、
 `SCHEDULE_EXCLUDE`（配置表排除）、`PREV_IDIOM_RE`/`PREV_IDIOM_VARS`（T-1 只读前一日判定，
 `${P_BATCH_DT}` 变体 `prev_alike` **只报不删**）、`PART_LABEL/PART_ORDER`（分区读取口径分类）、
 `RE_SET_DROP`/`PART_FIX`/`EVT_CAST_FIX`（方言修复规则）、`safe_sysname()`（防路径穿越）。
@@ -258,9 +259,9 @@ DWS 依赖关系报表生成（配合 `scripts/DWS_依赖关系.xlsx` 使用）�
 | 类别 | 脚本 |
 |---|---|
 | **部署/落库** | `ds-deploy-api.py`（★JSON 契约 `dw-ds-deploy/v1`：`export/plan/import`，幂等 upsert）、`ds-deploy-all-dwd.py`（逆拓扑全删→正拓扑重建，`--layer DWD\|DWS`）、`ds-deploy-ods-all.py`、`ds-deploy-dwd-workflow.py`（单工作流，公共 HTTP 库）、`ds-add-dwd-table.py`、`ds-rebuild-from-inventory.py`（灾后重建，两阶段提交） |
-| **一键管线** | `ds-dwd-pipeline.py`（四段 `lineage/diff/config/deploy`，无 `--apply` 绝不写） |
+| **一键管线** | `tools/dw-pipeline.py`（现役唯一入口；原 `ds-dwd-pipeline.py` 已退役归档 `tools/.archive/retired/`） |
 | **脚本同步** | `ds-sync-dwd-scripts.py`、`ds-sync-ods-scripts.py`（逐字节比对，只推 sha1 变更，先 OFFLINE 再 PUT） |
-| **依赖构建** | `ds-build-dependent-from-lineage.py`（★DWD，读 `scripts/*/dwd/lineage/DWD_lineage.xlsx` → `dep-config-proscript`；含 `own_workflow()`/`WORKFLOW_OVERRIDE`/`build_job_index`）、`ds-build-dws-dependent-from-lineage.py`（DWS → `dep-config-dws`） |
+| **依赖构建** | `ds-build-dependent-from-lineage.py`（★DWD，读 `scripts/*/dwd/lineage/DWD_lineage.xlsx` → `dep-config-proscript`；`own_workflow()`/`WORKFLOW_OVERRIDE` 委托自 `tools/core/dwd_ownership.py`）、`ds-build-dws-dependent-from-lineage.py`（DWS → `dep-config-dws`） |
 | **运行/跑批** | `ds-run.py`、`ds-run-hive-sql.py`、`run-dwd-etl-direct.py`（绕 DS 直跑 Hive：Kahn 拓扑 + 最长路径分层、内存闸门、行数回采，报告 `tools/.dx-tmp/dwd-etl-run.json`） |
 | **调度** | `ds-schedule.py`（`ensure/create/switch/release`；`LAYERS/DWD_SLOTS` 必须与部署拓扑同序） |
 | **体检/守卫** | `ds-check-running.py`（★★ 动 DS 前必跑）、`ds-check-tables-exist.py`、`ds-verify-dwd-layout.py`、`validate-dwd-syntax.py`（Hive `EXPLAIN` 沙箱编译，报告 `tools/.dx-tmp/dwd-syntax-check.json`） |
@@ -388,17 +389,17 @@ python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 [--dry-run|--skip-
 
 ### 7.3 约定速查
 
-- **dry-run 优先**：`dwd-pipeline` / `dw-pipeline` / `ds-dwd-pipeline` 默认不落盘，`--apply` 才执行。
+- **dry-run 优先**：`dwd-pipeline` / `dw-pipeline` 默认不落盘，`--apply` 才执行。
 - **gen vs jf**：gen = 生成器自产（`main.py`）；jf = 甲方交付脚本搬移 + 方言修复。
 - **MASTER 例外**：主数据脚本/DDL/血缘均为甲方交付 + 手工定稿，任何 gen 重生成都会覆盖。
 - **写盘统一走** `table_utils.write_file / write_file_safe`（UTF-8 + LF）。
-- 临时产物一律进 `tools/.dx-tmp/`（gitignored）；`scripts/` 也在 gitignore 中。
+- 临时产物一律进 `tools/.dx-tmp/`（gitignored）；归档/退役脚本进 `tools/.archive/`（gitignored）；`scripts/` 也在 gitignore 中。
 
 ---
 
 ## 8. 测试与文档
 
-### 8.1 测试（`tools/tests/`，unittest，16 文件 / 303 个 `test_*`）
+### 8.1 测试（`tools/tests/`，unittest，18 文件 / 347 个 `test_*`）
 
 | 测试文件 | 被测对象 | 用例数 |
 |---|---|---|
@@ -412,6 +413,7 @@ python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 [--dry-run|--skip-
 | `test_table_utils.py` / `test_data_dict.py` | 工具 / 数据字典 | 各 11 |
 | `test_table_survey.py` / `test_validation.py` | 表级解析 / 安全校验 | 各 7 / 7 |
 | `test_excel_reader.py` | calamine/openpyxl 双路径 | 6 |
+| `test_project_consistency.py` | 口径守门（归属字典单一来源、`AGENTS.md`≡`CLAUDE.md`） | 4 |
 | 其余（`test_dwd_pipeline` `test_dw_pipeline` `test_sys_extractor` `test_field_survey`） | 管线与解析 | 3–8 |
 
 ```bash

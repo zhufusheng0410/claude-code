@@ -43,6 +43,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dw_paths  # noqa: E402
 from ds_text import normalize_newlines  # noqa: E402
 from ds_client import DSClient, task_definitions  # noqa: E402
 
@@ -57,8 +58,8 @@ def _p(p: str) -> str:
     return p
 
 
-SCRIPTS = _p(r"C:\Users\84148\Desktop\trae\claude-code\scripts")
-BACKUP_DIR = _p(r"D:\datax\backup\dwd-rawscript-before")
+SCRIPTS = _p(dw_paths.SCRIPTS)
+BACKUP_DIR = _p(os.path.join(dw_paths.BACKUP_ROOT, "dwd-rawscript-before"))
 PREFIX = "DWD_"
 # Hive 4.2 运行时**不允许**修改的参数（实测：`Cannot modify inceptor.cross.join.enabled
 # at runtime. It is not in list of params that are allowed to be modified at runtime`，

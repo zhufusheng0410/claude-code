@@ -45,14 +45,15 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import dw_paths  # noqa: E402
 from ds_client import DSClient  # noqa: E402
 from ds_config import ds_admin_password, ds_admin_user, pg_conn  # noqa: E402
 from ds_text import normalize_newlines  # noqa: E402
 
 DOCKER = "docker"   # WSL 环境直接调 Linux docker CLI（原 r'C:\Program Files\...\docker.exe' 仅 Windows 可用）
-REPO = os.environ.get("DW_REPO", os.path.dirname(os.path.dirname(HERE)))
+REPO = dw_paths.REPO
 PROJECT = os.environ.get("DW_DS_PROJECT", "dw")
-BACKUP_DIR = "/mnt/d/datax/backup/ods-sync/rawscript-before"
+BACKUP_DIR = os.path.join(dw_paths.BACKUP_ROOT, "ods-sync", "rawscript-before")
 SKIP_FILES = {"deploy-to-worker.sh"}
 SRC_LINE = "source ${source_path}"
 

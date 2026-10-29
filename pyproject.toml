@@ -9,7 +9,6 @@ description = "数仓代码自动生成工具"
 authors = [
     {name = "DW Generator", email = "dw@example.com"},
 ]
-readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
 classifiers = [
@@ -22,9 +21,9 @@ dependencies = [
     "openpyxl>=3.0.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/example/dw-generator"
-Repository = "https://github.com/example/dw-generator"
-
 [project.scripts]
 generate-dw = "tools.main:main"
+
+[tool.setuptools]
+# 显式列包，避免 flat-layout 自动发现把 demo/docs/scripts 误当顶层包。
+packages = ["tools", "tools.core", "tools.generator", "tools.parser", "tools.utils"]

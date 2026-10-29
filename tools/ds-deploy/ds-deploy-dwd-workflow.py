@@ -74,6 +74,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dw_paths  # noqa: E402
 from ds_client import task_definitions  # noqa: E402
 from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
 from ds_text import read_script  # noqa: E402
@@ -96,7 +97,7 @@ def _wsl_path(p):
     return alt if os.path.isdir(alt) else p
 
 
-REPO = _wsl_path(os.environ.get("DW_REPO", r"C:\Users\84148\Desktop\trae\claude-code"))
+REPO = _wsl_path(dw_paths.REPO)
 # 依赖配置：`dep-config-proscript` —— 来自 `scripts/DWD_依赖关系.xlsx`（配置表排除），
 # 与当前 DS 的 112 张表 / 10 个工作流口径一致。
 # （旧口径 `dep-config-lineage` 仅保留作历史回退，可用 `--dep-dir` 指向。）

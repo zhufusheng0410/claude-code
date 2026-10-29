@@ -81,20 +81,22 @@
   `python tools/main.py --layer DWD --sys-name MASTER`**（会覆盖甲方脚本与手工血缘）。
 - **主数据随 DWD 批次执行真实脚本**（2026-10-23 用户拍板，取代 10-15 旧口径）：`scripts/MASTER/dwd/02_etl/*.sh`
   在 DS 上就是真实 rawScript、按依赖参与跑批；`--master-placeholder` 可回滚为 `MASTER_EMPTY_TPL` 空跑占位。
-- 脚本同步 `ds-sync-dwd-scripts.py` 对 `MASTER` 一视同仁（推真实脚本）；仅对 `DEFAULT_EMPTY` 3 张
-  （SALE_FEER / TAIL / WARN_HIS，临时表族结构缺口）**不推**（详见 `tools/ds-deploy/README.md` 铁律 8）。
+- 脚本同步 `ds-sync-dwd-scripts.py` 对 `MASTER` 一视同仁（推真实脚本）；空脚本占位白名单
+  `DEFAULT_EMPTY` **当前为空集**（SALE_FEER / TAIL / WARN_HIS 于 2026-10-27 逐条 EXPLAIN 通过后
+  转正、同步工具与部署工具两处同步清空〔J-36〕）；跑批期某张表过不了时用 `--empty-tables` 显式追加
+  （详见 `tools/ds-deploy/README.md` 铁律 8）。
 - 无 MAPPING 的 DWD 表 DDL 落档 `scripts/MASTER/dwd/ddl/`（STD_DICT_CDVAL_MAP / CALENDAR_INFO /
   CLS_EMRT_INFO 等），已并入 `01_ddl.sql`；数据来源见各文件头注释。
-- 校验口径：DDL 全量通过；ETL 唯一预期内缺口 = `DEFAULT_EMPTY` trio
-  （`SALE_FEER` / `TAIL` / `WARN_HIS`，临时表族结构缺口，处置待裁决）。
+- 校验口径：DDL 全量通过；ETL **109/109 真实脚本、0 占位、0 缺脚本**（`DEFAULT_EMPTY` 已清空）。
 
 ## DWD 工作流归属与调度依赖口径（2026-10-23 定稿）
 
 ### 归属：默认按表名前缀，个别表用 `WORKFLOW_OVERRIDE`
 
-- 默认唯一规则：`DWD_<主题>_…` → 工作流 `DWD_<主题>`（`tools/dwd-pipeline.py::_own_workflow`）。
-- 例外只写在 `WORKFLOW_OVERRIDE`，**两处必须同步**：`tools/dwd-pipeline.py`（现役 depcfg 生成器）
-  与 `tools/ds-deploy/ds-build-dependent-from-lineage.py`（旧入口，且被 DWS 构建器复用）。
+- 默认唯一规则：`DWD_<主题>_…` → 工作流 `DWD_<主题>`（`tools/core/dwd_ownership.py::own_workflow`）。
+- 例外只写在 `WORKFLOW_OVERRIDE`，**唯一来源 `tools/core/dwd_ownership.py`**（2026-10-29）：
+  `tools/dwd-pipeline.py` 与 `tools/ds-deploy/ds-build-dependent-from-lineage.py` 都只是薄委托，
+  不再各存一份；守门用例 `tools/tests/test_project_consistency.py`。
 - 已定清单（用户 2026-10-23 拍板，**下次同类照此办理**）：
 
   | 表 | 原工作流 | 归到 | 理由 |
@@ -210,7 +212,8 @@ dw/
 │   ├── dw-pipeline.py       # DWD+DWS 一体化：脚本来源/DDL/血缘/依赖/删除/部署/排版/校验
 │   ├── core/                # 中间表示 (IR)
 │   │   ├── ir.py           # 数据类定义
-│   │   └── type_mapper.py  # Oracle→Hive 类型映射
+│   │   ├── type_mapper.py  # Oracle→Hive 类型映射
+│   │   └── dwd_ownership.py# DWD 表→工作流归属唯一口径（WORKFLOW_OVERRIDE）
 │   ├── parser/              # 解析器
 │   │   ├── table_survey.py # 表级调研 Excel 解析
 │   │   ├── field_survey.py # 字段级调研 Excel 解析
@@ -242,7 +245,8 @@ dw/
 │   │   ├── ds-build-dependent-from-lineage.py      # DWD 血缘→依赖配置
 │   │   └── ds-build-dws-dependent-from-lineage.py  # DWS 血缘→依赖配置
 │   ├── .dx-tmp/             # 运行报告等临时产物（gitignored）
-│   └── tests/               # 单元测试（315 个用例）
+│   ├── .archive/            # 归档：退役脚本/历史调试/一次性排查产物（gitignored）
+│   └── tests/               # 单元测试（347 个用例）
 ├── demo/templates/          # ODS ETL Shell 模板
 │   └── etl_ods_template.sh
 ├── scripts/                 # 生成的脚本输出（gitignored）
@@ -356,7 +360,8 @@ python3 tools/ds-deploy/validate-dwd-syntax.py --only DWD_AGMT_DPSI_AGMT_PFD  # 
   失败语句探针照样打印），教训已写进 `validate-dwd-syntax.py::run_batch` 注释。
 - 2026-10-19（J-31）：沙箱模式把**表名**含 `_TMP` 的 DROP/CREATE 真执行（多段脚本列数假阴性
   根治）；`--sys` 只过滤 ETL，DDL 恒全量 → 单系统校验不必再退 `--real`。
-- **真实执行**（重建 DDL + 落数据）用 `tools/ds-deploy/run-dwd-etl-direct.py`，
+- **真实执行**（重建 DDL + 落数据）用 `tools/ds-deploy/run-dwd-etl-direct.py`
+  （默认读现役 `dep-config-proscript`，`--depcfg` 可回退旧口径 `dep-config-lineage`），
   其结果才是可信口径：
 
 ```bash
@@ -369,6 +374,8 @@ python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 --dry-run  # 只�
 ```bash
 python3 -m unittest discover -s tools/tests -p "test_*.py"
 ```
+
+CI：`.github/workflows/ci.yml` 在 push/PR 时跑同一命令（Python 3.12 + requirements）。
 
 ## DS 部署与校验工具（tools/ds-deploy/）
 
@@ -407,8 +414,8 @@ python3 tools/dwd-pipeline.py all --apply --ds  # 末尾连 DS 审计脚本来�
 
 工作流重建 / 排版 / 删除优先走 `tools/dw-pipeline.py deploy|delete|layout`；
 直接调 `ds-deploy-all-dwd.py`、`ds-relayout.py dwd|dws` 仍可用。
-`tools/ds-deploy/ds-dwd-pipeline.py` 是 DS 侧血缘/依赖差异/配置/部署管线，
-与本工具的「甲方 txt 搬移 + 仓库血缘 xlsx」分工不同。
+`tools/ds-deploy/ds-dwd-pipeline.py` 已于 **2026-10-29 退役**（归档 `tools/.archive/retired/`），
+其 `lineage/diff/config/deploy` 能力由本工具与 `tools/dw-pipeline.py verify` 承接。
 
 ## DWD+DWS 一体化（tools/dw-pipeline.py）
 

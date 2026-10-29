@@ -25,11 +25,12 @@
 > |---|---|
 > | `dep-config-proscript/` (109) | **现役** DWD 依赖配置（`DW_DEPCFG` 默认） |
 > | `dep-config-dws/` (24) | DWS 依赖配置（`DW_DEPCFG_DWS` 默认） |
-> | `dep-config-lineage/` (111) | 旧口径 DWD 依赖配置（历史回退，`--dep-dir` 可指） |
-> | `_expect/` (22) | 部署期望结果（`_diff_expect_vs_ds.py` 用） |
-> | `_pipeline/` (9) | 管线 dry-run 日志与快照 |
-> | `_debug-history/` (10) | 历史调试脚本归档 |
-> | `_legacy/` (20) | 一次性分析/生成脚本（`gen-deploy.py`、`_build_lineage*.py`、`_check_*ods*.py`、`_probe_ods_*.py` 等）+ 结果 json/log |
+> | `dep-config-lineage/` (110) | 旧口径 DWD 依赖配置（历史回退，`--dep-dir` 可指） |
+>
+> ★ **2026-10-29 归档**：`_expect/`、`_pipeline/`、`_debug-history/`、`_legacy/`、
+> `_*.py` / `_*.sql` / `_*.json` 与 `_bak_*` / `_backup_*` 目录已整体移入
+> `tools/.archive/ds-deploy/`（gitignored，本机可查，不入库）；
+> 退役的 `ds-dwd-pipeline.py` 在 `tools/.archive/retired/`。
 >
 > ⇒ **`D:\datax` 今后只管 docker 集群**（启停、镜像、bind mount 源、集群体检/YARN/Hive 客户端）；
 > DS 调度、数仓血缘、建模全在本仓库。`ds-ui-patch/` 与 `apply-all-patches.py` 属部署链，
@@ -51,8 +52,10 @@ pip install pyyaml          # ds-check-mount-sources / apply-all-patches 需要
 | `DW_DS` | `http://localhost:12345/dolphinscheduler` | DS API 基址 |
 | `DW_DS_USER` / `DW_DS_PWD` | `admin` / 无（**必须显式提供**） | 登录 |
 | `DW_DS_PROJECT` | `dw` | 项目名 |
-| `DW_REPO` | `C:\Users\84148\Desktop\trae\claude-code` | 脚本与血缘所在的生成器仓库根 |
+| `DW_REPO` | 仓库根（由 `dw_paths.py` 位置推导） | 脚本与血缘所在的生成器仓库根 |
 | `DW_DEPCFG` | `tools/ds-deploy/dep-config-proscript` | DWD 依赖配置目录（DWS 用 `dep-config-dws`） |
+| `DW_BACKUP_ROOT` | `tools/.dx-tmp/backup` | 同步/重建前的备份根 |
+| `DW_REPORT_DIR` | `tools/.dx-tmp` | 运行报告目录 |
 
 > 2026-10-20：`ds-deploy-all-dwd.py` / `ds-deploy-dwd-workflow.py` 已支持 `--layer DWS`
 > （依赖目录 `tools/ds-deploy/dep-config-dws`），`ds-relayout.py` 新增 `dws` 子命令。
@@ -191,8 +194,9 @@ python run-dwd-etl-direct.py --date 20261010 --no-count  # 跳过行数回采
   对已存在的表必须自拼 `DROP TABLE IF EXISTS`，否则全部 `AlreadyExistsException`
   （2026-10-11 踩坑）；重建后目标结构与脚本 SELECT **严格一致**，
   天然规避线上旧表漂移导致的 `Error 10044`。
-- **按 `dep-config-lineage` 血缘分层**执行：先 Kahn 拓扑定序，再在拓扑序上取**前向边**
+- **按 `dep-config-proscript` 血缘分层**执行：先 Kahn 拓扑定序，再在拓扑序上取**前向边**
   做最长路径分层 ⇒ 层号严格满足「上游层 < 下游层」，同层互不依赖。环按原序放开并告警。
+  （`--depcfg` 可指向旧口径 `dep-config-lineage` 做回退对比。）
 - **默认串行 + 内存闸门**（`MemAvailable < 1.6GiB` 等待）。`--exec-par N` 可开**层内并行**，
   但 **并发 DAG > 2 会打爆 worker**（10-08 踩过）⇒ 非必要别调高（默认 1）。
   跑批前可先停 DS 容器腾内存（`docker stop dolphinscheduler-{api,master,worker,alert}`）。
@@ -277,8 +281,9 @@ python run-dwd-etl-direct.py --date 20261010 --no-count  # 跳过行数回采
    ⇒ **严禁 `main.py --layer DWD --sys-name MASTER` 重生成**（会覆盖甲方脚本与手工血缘）。
    DS 侧 23 个主数据作业**跑真实脚本**（★2026-10-23 用户要求，推翻 10-15「占位不跑」；
    回滚用 `ds-deploy-dwd-workflow.py --master-placeholder`）；
-   `ds-sync-dwd-scripts.py` 对 `system==MASTER` 一视同仁推实脚本，仅对 `DEFAULT_EMPTY` 3 张
-   （SALE_FEER/TAIL/WARN_HIS，临时表族多段结构待处置）**不推**——推后者跑批必失败。
+   `ds-sync-dwd-scripts.py` 对 `system==MASTER` 一视同仁推实脚本；空脚本占位白名单 `DEFAULT_EMPTY`
+   **当前为空集**（SALE_FEER/TAIL/WARN_HIS 2026-10-27 逐条 EXPLAIN 通过后转正，同步工具与部署工具
+   两处同步清空〔J-36〕）；需要临时占位时用 `--empty-tables` 显式列出。
    （AST_BAL / VOU 2026-10-16 修复转正（J-30、真编译通过），已移出本名单。）
    ⚠ 该工具历史写死 Windows 路径，现已加盘符→WSL 归一化（`_p()`），WSL 下可直接跑。
 
@@ -290,20 +295,20 @@ python run-dwd-etl-direct.py --date 20261010 --no-count  # 跳过行数回采
 #    scripts/MASTER/dwd/lineage/DWD_lineage.xlsx；严禁 python tools/main.py --layer DWD
 #    --sys-name MASTER（会覆盖甲方脚本与手工血缘）。丢失恢复 = 甲方交付包重取 + git 恢复血缘。
 
-# 1) 血缘 → 依赖配置（tools/ds-deploy/dep-config-lineage，117 个 dep.json
-#    = 87 消费方 + 23 主数据 + 7 个 _PTD 旧名孤儿〔PTY 后缀修复遗留，构建时自动跳过〕）
+# 1) 血缘 → 依赖配置（现役口径 `tools/ds-deploy/dep-config-proscript`，由
+#    `tools/dwd-pipeline.py depcfg` 生成；`dep-config-lineage` 仅作历史回退）
 python ds-build-dependent-from-lineage.py
 
 # 2) 逆拓扑全删 → 正拓扑重建 11 个 DWD 工作流（作业级跨工作流依赖）
 #    ★ 主数据 23 张**配真实脚本**（2026-10-23 用户要求；`--master-placeholder` 可回滚旧占位口径）。
-#      --empty-tables 仍可用于非主数据的临时占位（当前 DEFAULT_EMPTY 3 张已是内置默认；
+#      --empty-tables 仍可用于临时占位（`DEFAULT_EMPTY` 当前为空集；
 #      AST_BAL/VOU 已修复转正（J-30））。
 python ds-deploy-all-dwd.py --dry-run     # 只看拓扑序
 python ds-deploy-all-dwd.py --empty-tables \
   "DWD_PROD_PROD_BASIC_INFO_PFD,DWD_SCR_O32_SCR_INCD_PFD,DWD_SCR_HSFA_SCR_INCD_PFD"
 
 # 3) 复核：无 gate、一作业一依赖、跨工作流项数、ONLINE
-python ds-dwd-pipeline.py diff            # 结构体检（逐节点三方比对：血缘 vs dep.json vs DS）
+python ../dw-pipeline.py verify --layers DWD,DWS --ds   # 结构体检（血缘 vs dep.json vs DS）
 
 # 4) 定时调度（此前全 DS 0 条）：ODS 03:15 起每 15 分、DWD 按拓扑 12:00→15:30
 python ds-schedule.py ensure --check      # 只体检
@@ -311,8 +316,9 @@ python ds-schedule.py ensure --apply      # 补 globalParams + 建调度 + 上�
 python ds-verify-dwd-layout.py            # 排版复算（DWD 格式：dep 就近成对、零交叉）
 ```
 
-- **工作流归属例外**（2026-10-23）：默认只认表名前缀 `DWD_<主题>_`；例外写 `WORKFLOW_OVERRIDE`
-  （`tools/dwd-pipeline.py` 与同目录 `ds-build-dependent-from-lineage.py` **两处同步**）。当前 2 张：
+- **工作流归属例外**（2026-10-23；2026-10-29 改为单一来源）：默认只认表名前缀 `DWD_<主题>_`；
+  例外只写 `tools/core/dwd_ownership.py::WORKFLOW_OVERRIDE`（`tools/dwd-pipeline.py` 与
+  `ds-build-dependent-from-lineage.py` 都只是薄委托，不再各存一份）。当前 2 张：
   `DWD_PTY_OPER_FUND_PRVL_PFD`、`DWD_CMM_INTR_PARA_PFD` → `DWD_PROD`（唯一上游映射表在 PROD，
   否则成工作流级环/跨流长等待）。口径：**上游映射表在哪，表就放哪**。
 - **T-1 免配调度依赖**（2026-10-23）：上游按批次日-1 分区读，字面形态为
@@ -320,11 +326,12 @@ python ds-verify-dwd-layout.py            # 排版复算（DWD 格式：dep 就�
   （空白/换行任意；`UNIX_TIMESTAMP` 内可多包 `CAST(… AS STRING)`）⇒ `lineage` 标 `不配依赖(只读前一日)`、
   `depcfg` 跳过。**不是「含 `DATE_SUB` 就算」**（周/月偏移会误判）；`${P_BATCH_DT}` 变体只报不删。
   详见 `docs/功能与规范文档.md` §15.3。
-- 空脚本占位只剩一类：**`DEFAULT_EMPTY` 3 张**（SALE_FEER / WARN_HIS / TAIL，临时表族多段结构待处置
-  〔J-30〕，占位保依赖边、跑即过）。`ds-sync-dwd-scripts.py` 对此 3 张**不推实脚本**（否则跑批必失败）。
+- 空脚本占位：**`DEFAULT_EMPTY` 当前为空集**（原 3 张 SALE_FEER / WARN_HIS / TAIL 于 2026-10-27
+  逐条 `EXPLAIN` 通过后转正，同步工具与部署工具两处同步清空〔J-36〕）；需要临时占位时显式传
+  `--empty-tables`。`ds-sync-dwd-scripts.py` 对名单内的表**不推实脚本**（否则跑批必失败）。
   ★ **主数据 23 张 2026-10-23 起恢复正常脚本**（`scripts/MASTER/dwd/02_etl/` 直接推 DS、按依赖参与跑批），
   旧 `MASTER_EMPTY_TPL` 占位口径作废（`--master-placeholder` 可回滚）。
-  （AST_BAL / VOU 2026-10-16 修复转正〔J-30、真编译通过〕；整体 ETL 校验 107/110，余 3 = 临时表族。）
+  （AST_BAL / VOU 2026-10-16 修复转正〔J-30、真编译通过〕；整体 ETL 校验 109/109、0 占位。）
 - 跨工作流项形如 `{definitionCode: <上游工作流code>, depTaskCode: <具体作业code>,
   dateValue: "today", DEPENDENT_ON_TASK}`；**无作业可等的源表自动跳过并打印清单**
   （甲方维表 `DWD_CMM_STD_DICT_CDVAL_MAP` 等、未部署的 ODS 表、6 条
@@ -374,7 +381,7 @@ python ds-verify-dwd-layout.py            # 排版复算（DWD 格式：dep 就�
 >   `_run_chain_pty`（链式跑 ODS 05→06→PTY 探针）/ `_poll_chain`（实例终态轮询）/ `_run_remaining`（接手卡死 runner）/
 >   `_run_manual_batch`（10-16 手工批总控）/ `_add_pbatchdt`（补 P_BATCH_DT 全局参数）/ `_sync_master_real`（主数据 23 张换真脚本）/
 >   `_verify_depnode_acct`（ACCT dep 节点专项核）/ `_verify_ods_placeholder`（ODS 占位核）/ `_verify_onedep.py`（结构体检，
->   能力并入 `ds-dwd-pipeline.py diff`）/ `_verify_onedep.sql`（根目录残留，原件已在 T1）/ `_trigger_wf`（触发直连版，被 `ds-run` 覆盖）
+>   能力并入 `tools/dw-pipeline.py verify`）/ `_verify_onedep.sql`（根目录残留，原件已在 T1）/ `_trigger_wf`（触发直连版，被 `ds-run` 覆盖）
 > - **2026-10-19**：再归档 8 个一次性脚本（T5）→ `backup/retired-20261019-T5/`：
 >   `_patch_pbatchdt_param`（P_BATCH_DT 补丁，已复核 globalParams 生效）/ `_patch_org_num_mapp_dialect`（date 方言补丁，DS 已与仓库版字节一致后无需）/
 >   `_patch_noop_tasks` / `_noop_tasks_generic` / `_noop_restore_generic`（E2E NOOP 三件套，DS 侧 NOOP 残留复核 = 0）/
@@ -382,7 +389,8 @@ python ds-verify-dwd-layout.py            # 排版复算（DWD 格式：dep 就�
 >   另：`backup/` 目录**未纳入 git**（删除不可从 git 恢复）；如需清理先确认 `D:\datax\backup` 有对应批次副本。
 
 - **部署 / 落库**：`ds-deploy-api.py`（★统一接口）· `ds-deploy-all-dwd.py` · `ds-deploy-ods-all.py` · `ds-deploy-dwd-workflow.py` · `ds-add-dwd-table.py` · `ds-rebuild-from-inventory.py`
-- **一键管线（血缘→依赖差异→依赖配置→部署/排版）**：`ds-dwd-pipeline.py`（★ 2026-10-16 起四段 `lineage/diff/config/deploy`；无 `--apply` 绝不写任何东西）
+- **一键管线（血缘→依赖差异→依赖配置→部署/排版）**：`tools/dw-pipeline.py`
+  （★ 现役唯一入口；原 `ds-dwd-pipeline.py` 已于 2026-10-29 退役归档到 `tools/.archive/retired/`）
 - **脚本同步 / 批量改**：`ds-sync-dwd-scripts.py` · **`ds-sync-ods-scripts.py`**〔并 `ds-batch-update-ods-scripts` + `ds-sync-ods-scripts-batch`〕
 - **依赖构建**：`ds-build-dependent-from-lineage.py`（★现役口径）· `ds-build-dws-dependent-from-lineage.py`
 - **运行 / 跑批**：**`ds-run.py`**〔并 `manual` / `task` / `ods-serial` / `dwd-serial` / `rerun-failed` 5 个〕· `ds-run-hive-sql.py` · `run-dwd-etl-direct.py`（真实执行 DWD ETL，见上章）
