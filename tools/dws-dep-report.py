@@ -27,7 +27,6 @@
 """
 import argparse
 import collections
-import importlib.util
 import re
 import sys
 import time
@@ -41,11 +40,13 @@ REPO = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO / 'scripts'
 TARGET_XLSX = SCRIPTS / 'DWS_依赖关系.xlsx'
 
+# 仓库根入 sys.path → 复用 tools/core/loader.py（统一「按路径加载模块」）
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from tools.core.loader import load as _load_file  # noqa: E402
+
 # ---- 复用 DWD 侧判定逻辑（单一真源） -------------------------------------- #
-_spec = importlib.util.spec_from_file_location(
-    'dwdpipe', str(REPO / 'tools' / 'dwd-pipeline.py'))
-P = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(P)
+P = _load_file(REPO / 'tools' / 'dwd-pipeline.py', 'dwdpipe')
 
 SYS = P.SYS                       # ('HSFA', 'HSZTA', 'O32')
 SYS2DS = {'HSFA': 'DWS_HSFA', 'HSZTA': 'DWS_ZTA', 'O32': 'DWS_O32'}

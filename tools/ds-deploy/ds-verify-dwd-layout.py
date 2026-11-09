@@ -21,7 +21,6 @@ DS 存进去的坐标会不会被 UI 改、有没有漏边，只有**回读**才
     python tools/ds-verify-dwd-layout.py --workflow DWD_PROD --prefix DWD_PROD_
 """
 import argparse
-import importlib.util
 import json
 import os
 import sys
@@ -34,14 +33,12 @@ from ds_client import dependence_of, task_definitions  # noqa: E402
 from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+from ds_load import load as _load_file  # noqa: E402
 
 
 def _load(name):
     """按**文件路径**导入（文件名带连字符 ⇒ 不能 `import ds-deploy-...`）。"""
-    spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, name + ".py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return _load_file(os.path.join(HERE, name + ".py"), name)
 
 DS = "http://localhost:12345/dolphinscheduler"
 USER = ds_admin_user()

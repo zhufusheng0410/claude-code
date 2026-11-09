@@ -195,5 +195,24 @@ class TestDwsTableSysMap(unittest.TestCase):
                              'DWS_BOTH': 'HSFA'})  # ddl 落位优先于清单
 
 
+class TestDwdDdlCmd(unittest.TestCase):
+    """DWD DDL 子命令参数：`--no-strict` 绝不能转发。
+
+    ★ 回归点（2026-11-08）：`dwd-pipeline.py ddl` 没有 `--no-strict` 开关，
+      早先 `dw-pipeline.py ddl/all --layers DWD --no-strict` 会把它转发过去，
+      子进程 argparse 报 `unrecognized arguments`，整条管线在 DDL 步中断。
+    """
+
+    def test_no_strict_not_forwarded(self):
+        args = argparse.Namespace(apply=False, no_strict=True)
+        cmd = WP._dwd_ddl_cmd(args)
+        self.assertNotIn('--no-strict', cmd)
+        self.assertEqual([str(x) for x in cmd], [str(WP.PY), str(WP.DWD_PIPE), 'ddl'])
+
+    def test_apply_still_forwarded(self):
+        args = argparse.Namespace(apply=True, no_strict=True)
+        self.assertEqual(WP._dwd_ddl_cmd(args)[-1], '--apply')
+
+
 if __name__ == '__main__':
     unittest.main()

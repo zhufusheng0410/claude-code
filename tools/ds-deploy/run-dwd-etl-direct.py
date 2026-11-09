@@ -49,7 +49,6 @@ validate-dwd-syntax.py::run_batch 的历史教训注释）。
 """
 import argparse
 import glob
-import importlib.util
 import json
 import os
 import re
@@ -59,10 +58,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-_spec = importlib.util.spec_from_file_location(
-    "VLD", os.path.join(HERE, "validate-dwd-syntax.py"))
-V = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(V)
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+from ds_load import load as _load_file  # noqa: E402
+
+V = _load_file(os.path.join(HERE, "validate-dwd-syntax.py"), "VLD")
 
 REPORT_DIR = os.path.normpath(os.path.join(HERE, "..", ".dx-tmp"))
 REPORT_PATH = os.path.join(REPORT_DIR, "dwd-etl-run.json")

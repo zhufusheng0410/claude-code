@@ -44,9 +44,13 @@ import sys
 import time
 
 HERE = pathlib.Path(__file__).resolve().parent
-REPO_ROOT = HERE.parent.parent
-SCRIPTS_DIR = REPO_ROOT / "scripts"
-CACHE = pathlib.Path("D:/datax/.dx-tmp/cbo-refs.json")
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+import dw_paths  # noqa: E402
+
+REPO_ROOT = pathlib.Path(dw_paths.REPO)
+SCRIPTS_DIR = pathlib.Path(dw_paths.SCRIPTS)
+CACHE = pathlib.Path(dw_paths.REPORT_DIR) / "cbo-refs.json"
 
 WORKER = "dolphinscheduler-worker"
 META_DB = "hive-metastore-db"
@@ -95,15 +99,16 @@ def scan_refs(rebuild: bool = False) -> list[dict]:
 def _psql(sql: str) -> list[str]:
     """在 metastore 容器里跑一条 psql，返回非空行。
 
-    注意：SQL 必须压成单行。多行 SQL 里换行会经 sh -c 传给 psql，
-    psql 会把行首的 ``\\n`` 当成元命令报 ``invalid command \\n``。
+    SQL 走 stdin，不经 ``sh -c``。多行不用压成一行，引号也不会被 shell 吃掉。
+    同形：``ds-wipe-workflows.py::psql``（那边连的是 dolphinscheduler 库）。
     """
-    flat = re.sub(r"\s+", " ", sql).strip()
     cmd = [
-        "docker", "exec", META_DB, "sh", "-c",
-        f'psql -U {META_USER} -d {META_NAME} -tAc {json.dumps(flat)}',
+        "docker", "exec", "-i", META_DB,
+        "psql", "-U", META_USER, "-d", META_NAME, "-tA",
     ]
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    r = subprocess.run(
+        cmd, input=sql, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
     if r.returncode != 0:
         raise RuntimeError(f"psql 失败: {r.stderr.strip()[:300]}")
     return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
@@ -263,7 +268,8 @@ def cmd_gen(args) -> int:
     if not stmts:
         print("没有匹配的表。放宽 --min-refs 或补 --partition。")
         return 1
-    out = HERE / "_cbo_analyze.sql"
+    out = pathlib.Path(dw_paths.REPORT_DIR) / "cbo_analyze.sql"
+    out.parent.mkdir(parents=True, exist_ok=True)
     body = "-- 由 cbo-stats.py 生成，分区={}，列统计={}\n".format(
         args.partition or "-", "on" if args.with_columns else "off"
     ) + "\n".join(s for _, s in stmts) + "\n"
@@ -285,7 +291,8 @@ def cmd_run(args) -> int:
             print(f"  [dry-run] {tbl}: {s}")
         return 0
 
-    log_path = HERE / f"_cbo_run_{time.strftime('%Y%m%d-%H%M%S')}.json"
+    log_path = pathlib.Path(dw_paths.REPORT_DIR) / f"cbo_run_{time.strftime('%Y%m%d-%H%M%S')}.json"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     results = []
     ok_n = fail_n = 0
     t0 = time.time()

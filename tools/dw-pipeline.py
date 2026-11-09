@@ -29,18 +29,15 @@ import sys
 import time
 from pathlib import Path
 
-# tools/core 下的小模块按路径加载（只依赖 re，不走包导入），每个文件只执行一次。
-_CORE_MODS = {}
+# 仓库根入 sys.path，才能 import tools.core.loader（按绝对路径缓存，跨脚本同一份）。
+REPO = Path(__file__).resolve().parents[1]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from tools.core.loader import load as _load_file  # noqa: E402
 
 
 def _core_module(path):
-    if path not in _CORE_MODS:
-        import importlib.util as _ilu
-        spec = _ilu.spec_from_file_location(path.stem, path)
-        mod = _ilu.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        _CORE_MODS[path] = mod
-    return _CORE_MODS[path]
+    return _load_file(path)
 
 
 def _load_ddl_verify():
@@ -48,7 +45,6 @@ def _load_ddl_verify():
     return _core_module(DDL_VERIFY)
 
 
-REPO = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO / "scripts"
 SYS = ("HSFA", "HSZTA", "O32")
 DWD_PIPE = REPO / "tools/dwd-pipeline.py"
@@ -123,6 +119,16 @@ def layers_of(args):
 def _ap(args):
     """`--apply` 透传：子脚本自身也是 dry-run 语义，必须显式转达。"""
     return ["--apply"] if getattr(args, "apply", False) else []
+
+
+def _dwd_ddl_cmd(args):
+    """DWD DDL 子命令参数：只透传 `--apply`。
+
+    ★ 2026-11-08：`--no-strict` 只对 DWS 落盘自检有意义，`dwd-pipeline.py ddl`
+      并未声明该开关；早先无条件转发 ⇒ `ddl/all --layers DWD --no-strict`
+      在子进程 argparse 处直接失败（`all` 整条中断）。DWD 侧没有自检门，不转发。
+    """
+    return [PY, DWD_PIPE, "ddl"] + _ap(args)
 
 
 def _dry(args):
@@ -582,11 +588,7 @@ def cmd_ddl(args):
     if "DWD" in layers:
         print("== DWD DDL ==")
         if args.source == "jf":
-            # 传递 --no-strict 给子命令
-            cmd = [PY, DWD_PIPE, "ddl"] + _ap(args)
-            if not strict:
-                cmd += ["--no-strict"]
-            rc |= run(cmd)[0]
+            rc |= run(_dwd_ddl_cmd(args))[0]
         else:
             for s in SYS:
                 p = SCRIPTS / s / "dwd/01_ddl.sql"
@@ -998,7 +1000,7 @@ def _shell_syntax(p):
     return "skip" if ("\x00" in err or "拒绝" in err) else "bad"
 
 
-def verify_dws(use_ds):
+def verify_dws(use_ds, strict=False):
     rc = 0
     print("== DWS 本地 ==")
     total = 0
@@ -1029,6 +1031,11 @@ def verify_dws(use_ds):
     if skipped_all:
         print(f"  ⚠ {skipped_all}/{total} 个脚本的 bash -n 未能执行（环境安全策略拦截），"
               f"语法结果不可判定")
+        # ★ 2026-10-29：默认仅告警（沿用旧行为）；--strict 下视为失败，
+        #   避免「环境拦住 bash ⇒ 全部 skip ⇒ rc=0 假绿」。
+        if strict:
+            print("  ✗ --strict：存在无法判定的脚本，按失败处理")
+            rc = 1
     print(f"  DWS 脚本合计 {total}")
     if total != DWS_EXPECT_SCRIPTS:
         rc = 1
@@ -1103,7 +1110,7 @@ def cmd_verify(args):
         cmd = [PY, DWD_PIPE, "verify"] + (["--ds"] if args.ds else [])
         rc |= run(cmd)[0]
     if "DWS" in layers:
-        rc |= verify_dws(args.ds)
+        rc |= verify_dws(args.ds, strict=getattr(args, "strict", False))
     return rc
 
 
@@ -1153,6 +1160,9 @@ OPT = {
         action="store_true", help="用甲方 02-DWS执行脚本 原文覆盖 scripts 里的 DWS 脚本")),
     "no_strict": (("--no-strict",), dict(
         action="store_true", help="DDL 校验发现差异时不阻断（默认阻断）")),
+    "strict": (("--strict",), dict(
+        action="store_true",
+        help="校验「无法判定」时按失败处理（如 bash 被环境拦截导致语法检查全 skip）")),
 }
 
 # 子命令 → (处理函数, 用到的参数, 一行说明)
@@ -1170,8 +1180,8 @@ SUBCOMMANDS = {
     "layout": (cmd_layout, ("layers", "apply"), "只重排工作流坐标"),
     "repair": (cmd_repair, ("layers", "apply"),
                "拼接副本修复：只保留第 1 个 beeline 的完整 SQL"),
-    "verify": (cmd_verify, ("layers", "ds"), "校验脚本/DDL/依赖配置"),
-    "all": (cmd_all, ("layers", "source", "apply", "ds", "deploy", "gen_err", "raw", "no_strict"),
+    "verify": (cmd_verify, ("layers", "ds", "strict"), "校验脚本/DDL/依赖配置"),
+    "all": (cmd_all, ("layers", "source", "apply", "ds", "deploy", "gen_err", "raw", "no_strict", "strict"),
             "串跑 scripts→ddl→lineage→config→(deploy)→verify"),
 }
 

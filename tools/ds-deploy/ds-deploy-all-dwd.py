@@ -38,15 +38,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+from ds_load import load as _load_file  # noqa: E402
 
 
 def _load(name):
     """按**文件路径**导入（文件名带连字符 ⇒ 不能 `import ds-deploy-...`）。"""
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, name + ".py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return _load_file(os.path.join(HERE, name + ".py"), name)
 
 
 D = _load("ds-deploy-dwd-workflow")             # 复用它的 neutralize_selfdeps

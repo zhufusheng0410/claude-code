@@ -26,7 +26,6 @@
 import argparse
 import collections
 import difflib
-import importlib.util
 import json
 import os
 import re
@@ -45,6 +44,10 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 #   `exists()` 就为真 ⇒ 产物全部写进假仓库 `C:\mnt\c\…`（实测把 HSFA DDL 混成 82 张）。
 #   ⇒ 仓库用 `__file__` 定位；交付目录按哨兵子目录 `05-脚本` 判定，均不再依赖挂载点。
 REPO = Path(__file__).resolve().parents[1]
+# 仓库根入 sys.path → 复用 tools/core/loader.py（统一「按路径加载模块」，不再各抄样板）
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from tools.core.loader import load as _load_file  # noqa: E402
 _CAND_DELIVERY = [
     Path(os.environ["DW_DELIVERY"]) if os.environ.get("DW_DELIVERY") else None,
     Path('/mnt/d/项目/信达澳亚数仓/信达澳亚投研数据集市交付文档'),
@@ -538,11 +541,8 @@ def _load_shared_sanitize():
       （86KB，连带 openpyxl/pandas）⇒ 缺 openpyxl 的环境里 DWS DDL 直接崩。
       抽成独立小模块后，两边都不再引入重依赖。
     """
-    import importlib.util as _ilu
-    _p = Path(__file__).resolve().parent / 'core' / 'ddl_sanitize.py'
-    _spec = _ilu.spec_from_file_location('_ddl_sanitize', _p)
-    _mod = _ilu.module_from_spec(_spec)
-    _spec.loader.exec_module(_mod)
+    _mod = _load_file(Path(__file__).resolve().parent / 'core' / 'ddl_sanitize.py',
+                      '_ddl_sanitize')
     return _mod.sanitize_ddl
 
 
@@ -1534,10 +1534,7 @@ def cmd_prevday(args):
 # DS 依赖配置
 # --------------------------------------------------------------------------- #
 def _load_module(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return _load_file(path, name)
 
 
 def _script_of(table):

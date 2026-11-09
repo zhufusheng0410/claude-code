@@ -18,7 +18,6 @@
     python ds-relayout.py ods [--apply] [--only ods_hsfa_etl_01] [--force] [--col-w 416] [--per-row 3]
 """
 import argparse
-import importlib.util
 import json
 import os
 import sys
@@ -27,13 +26,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_client import project_code, task_definitions  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+from ds_load import load as _load_file  # noqa: E402
 
 
 def _load(name, f):
-    s = importlib.util.spec_from_file_location(name, os.path.join(HERE, f))
-    m = importlib.util.module_from_spec(s)
-    s.loader.exec_module(m)
-    return m
+    return _load_file(os.path.join(HERE, f), name)
 
 
 D = _load("DWDDEPLOY", "ds-deploy-dwd-workflow.py")

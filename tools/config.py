@@ -1,14 +1,69 @@
 import os
 
-# 路径支持环境变量覆盖，便于跨平台（WSL/Windows 原生/macOS/Linux）部署
-D_BASE = os.environ.get("DW_D_BASE", "/mnt/d")
-PROJECT_BASE = os.environ.get(
-    "DW_PROJECT_BASE",
-    os.path.join(D_BASE, "项目/信达澳亚数仓/信达澳亚投研数据集市交付文档"),
-)
+# ── 输入根目录探测（2026-10-29）──────────────────────────────────────────────
+# 历史写法：`D_BASE = os.environ.get("DW_D_BASE", "/mnt/d")`。
+# 为什么必须改：本项目在 **Windows 原生 Python** 下运行时，`/mnt/d` 会被解析成
+# `C:\mnt\d`（本机恰好残留了这个镜像目录，`os.path.isdir("/mnt/d")` 返回 True），
+# 于是「路径看起来存在、其实读不到项目交付文档」——生成器拿空目录静默跑出空表。
+# ⇒ 改为**按「交付文档目录是否真的存在」探测**，而不是只探 D 盘根。
+#   探测优先级：DW_D_BASE 显式覆盖 > Windows 盘符 > POSIX 挂载点；首个能命中
+#   `<根>/项目/信达澳亚数仓/信达澳亚投研数据集市交付文档` 的胜出。
+_PROJECT_REL = os.path.join("项目", "信达澳亚数仓", "信达澳亚投研数据集市交付文档")
+
+
+def _d_base_candidates():
+    """候选 D 盘根，按优先级排序。
+
+    显式 `DW_D_BASE` 一经设置就不再猜测（用户说了算）。
+    Windows 原生 Python 不能用 `/mnt/d` / `/d`（会被当成本地盘相对路径），必须盘符。
+    """
+    env = os.environ.get("DW_D_BASE")
+    if env:
+        return [env]
+    if os.name == "nt":
+        return ["D:/", "E:/"]
+    return ["/mnt/d", "/d", "/data"]
+
+
+def _detect_d_base():
+    cands = _d_base_candidates()
+    for c in cands:
+        try:
+            if os.path.isdir(os.path.join(c, _PROJECT_REL)):
+                return c
+        except OSError:
+            pass
+    return cands[0]   # 都没命中：返回首选，交给 missing_inputs() 给出清晰报错
+
+
+D_BASE = _detect_d_base()
+PROJECT_BASE = os.path.normpath(
+    os.environ.get("DW_PROJECT_BASE") or os.path.join(D_BASE, _PROJECT_REL))
 SURVEY_DIR = os.path.join(PROJECT_BASE, "01-系统调研文档")
 DWD_MAPPING_BASE = os.path.join(PROJECT_BASE, "04-源与目标映射MAPPING/01-DWD")
 DWS_MAPPING_BASE = os.path.join(PROJECT_BASE, "04-源与目标映射MAPPING/02-DWS")
+
+
+def missing_inputs():
+    """返回「输入目录缺失」的可读说明列表（空列表 = 输入齐全）。
+
+    生成器启动时调用。区别于让下游 `os.listdir` 抛异常或读到空 Excel：
+    这里直接告诉用户**该设哪个环境变量、指向哪里**。
+    """
+    problems = []
+    if not os.path.isdir(PROJECT_BASE):
+        problems.append(
+            "交付文档根目录不存在: %s\n"
+            "  ⇒ 请设置 DW_D_BASE 指向 D 盘根（Windows 用 'D:/'，WSL 用 '/mnt/d'），\n"
+            "    或设置 DW_PROJECT_BASE 直接指向交付文档目录"
+            % PROJECT_BASE)
+        return problems          # 根都没有，再谈子目录没意义
+    for label, p in (("调研文档目录", SURVEY_DIR),
+                     ("DWD MAPPING 目录", DWD_MAPPING_BASE),
+                     ("DWS MAPPING 目录", DWS_MAPPING_BASE)):
+        if not os.path.isdir(p):
+            problems.append("%s 不存在: %s" % (label, p))
+    return problems
 
 # --- 路径/Schema ---
 ODS_SCHEMA_TMPL = "ODS_XDAY_{sys}"

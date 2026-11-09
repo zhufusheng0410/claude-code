@@ -38,7 +38,6 @@
 """
 
 import argparse
-import importlib.util
 import json
 import os
 import sys
@@ -48,18 +47,15 @@ from ds_text import read_script  # noqa: E402
 from ds_client import project_code  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+from ds_load import load as _load_file  # noqa: E402
 DEPLOYER = os.path.join(HERE, "ds-deploy-dwd-workflow.py")
 
 # ── 复用既有部署工具的函数，避免逻辑分叉 ────────────────────────────────── #
-_spec = importlib.util.spec_from_file_location("DWDDEPLOY", DEPLOYER)
-D = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(D)
+D = _load_file(DEPLOYER, "DWDDEPLOY")
 
 # 调度快照/恢复复用同步脚本（同一套「改工作流会级联下线」的处理）
 SYNC_PATH = os.path.join(HERE, "ds-sync-dwd-scripts.py")
-_s2 = importlib.util.spec_from_file_location("DS_SYNC", SYNC_PATH)
-SYNC = importlib.util.module_from_spec(_s2)
-_s2.loader.exec_module(SYNC)
+SYNC = _load_file(SYNC_PATH, "DS_SYNC")
 
 PCODE_NAME = D.PROJECT
 TENANT = "default"

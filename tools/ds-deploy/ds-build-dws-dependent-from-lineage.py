@@ -28,19 +28,18 @@
 import argparse
 import collections
 import glob
-import importlib.util
 import json
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+from ds_load import load as _load_file  # noqa: E402
 
 
 def _load(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return _load_file(path, name)
 
 
 DWD = _load("dwd_builder", os.path.join(HERE, "ds-build-dependent-from-lineage.py"))

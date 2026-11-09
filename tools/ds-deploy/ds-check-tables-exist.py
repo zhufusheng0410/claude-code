@@ -10,26 +10,22 @@
 只读，不改任何东西。用法: python tools/ds-check-tables-exist.py
 """
 import collections
-import importlib.util
 import json
 import os
 import re
 import subprocess
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_client import project_code, task_definitions  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+from ds_load import load as _load_file  # noqa: E402
 DOCKER = os.environ.get("DOCKER", "docker")   # WSL：用 PATH 里的 docker（原 C:\...\docker.exe 仅 Windows 可用）
 JDBC = ("jdbc:hive2://hiveserver2:10000/default;principal=hive/hiveserver2@DATAX.COM")
 
-_spec = importlib.util.spec_from_file_location("DWDDEPLOY", os.path.join(HERE, "ds-deploy-dwd-workflow.py"))
-D = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(D)
-
-_s2 = importlib.util.spec_from_file_location("DS_ADD_DWD", os.path.join(HERE, "ds-add-dwd-table.py"))
-ADD = importlib.util.module_from_spec(_s2)
-_s2.loader.exec_module(ADD)
+D = _load_file(os.path.join(HERE, "ds-deploy-dwd-workflow.py"), "DWDDEPLOY")
+ADD = _load_file(os.path.join(HERE, "ds-add-dwd-table.py"), "DS_ADD_DWD")
 
 
 def beeline(sql):

@@ -41,7 +41,6 @@ JSON 结构（schema = dw-ds-deploy/v1）
 """
 import argparse
 import datetime as dt
-import importlib.util
 import json
 import os
 import re
@@ -52,13 +51,11 @@ from ds_client import project_code, task_definitions  # noqa: E402
 from ds_text import read_script  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+from ds_load import load as _load_file  # noqa: E402
 
 
 def load(mod, f):
-    s = importlib.util.spec_from_file_location(mod, os.path.join(HERE, f))
-    m = importlib.util.module_from_spec(s)
-    s.loader.exec_module(m)
-    return m
+    return _load_file(os.path.join(HERE, f), mod)
 
 
 D = load("DWDDEPLOY", "ds-deploy-dwd-workflow.py")

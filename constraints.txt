@@ -1,0 +1,18 @@
+# 依赖版本约束（constraints）—— 供本地与 CI 共用，保证「同一份代码装出同一套依赖」。
+#
+# 用法：
+#   pip install -r requirements.txt -c constraints.txt
+#
+# 为什么单独一个文件：requirements.txt 写的是「最低可用版本」（>=），适合库；
+# 而本仓库是**交付工具**，需要可复现的运行环境，故用 constraints 锁定上限/精确版本。
+# 升级原则：升级前跑一遍 `python -m unittest discover -s tools/tests -t .`，
+# 通过后再同步改这里。requirements.txt 里的 `-c constraints.txt` 会带上本文件，
+# CI 只跑 `pip install -r requirements.txt`。
+
+# --- 核心（生成器强依赖）---
+pandas==2.2.3
+openpyxl==3.1.5
+
+# --- 可选加速（MAPPING Excel 冷读；缺失时 parser/mapping.py 自动回退 openpyxl）---
+# 用区间而非精确值：它是可选项，且各平台 wheel 版本滞后不一，锁太死会拖累安装。
+python-calamine>=0.2.0,<0.4

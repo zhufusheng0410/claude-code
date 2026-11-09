@@ -32,7 +32,6 @@ import argparse
 import collections
 import difflib
 import glob
-import importlib.util
 import json
 import os
 import re
@@ -41,6 +40,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import dw_paths  # noqa: E402
+
+from ds_load import load as _load_file  # noqa: E402
 
 
 def _wsl_path(p):
@@ -54,11 +55,7 @@ def _wsl_path(p):
 
 def _load_core(name, f):
     """按文件路径加载 `tools/core/` 下的共享模块（本目录文件名带连字符，不能走包导入）。"""
-    path = os.path.join(os.path.dirname(HERE), "core", f)
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return _load_file(os.path.join(os.path.dirname(HERE), "core", f), name)
 
 
 REPO = _wsl_path(dw_paths.SCRIPTS)

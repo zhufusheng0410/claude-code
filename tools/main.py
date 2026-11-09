@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.config import (
     SURVEY_DIR, DWD_MAPPING_BASE, DWS_MAPPING_BASE, OUTPUT_BASE,
-    ODS_TABLE_TMPL, SYSTEM_ALIAS_MAP
+    ODS_TABLE_TMPL, SYSTEM_ALIAS_MAP, missing_inputs,
 )
 
 from tools.parser.table_survey import parse_table_survey
@@ -223,9 +223,18 @@ def main():
         logger.info(f"完成  耗时 {time.time() - t_start:.1f}s  输出 → {out}")
         return
 
+    # ★ 2026-10-29：输入路径不可用时给出可操作报错，而不是让下游读到空 Excel。
+    problems = missing_inputs()
+    if problems:
+        logger.error("输入路径不可用，无法生成：")
+        for msg in problems:
+            for line in msg.splitlines():
+                logger.error("  " + line)
+        sys.exit(1)
+
     systems = _discover_systems()
     if not systems:
-        logger.error(f"未在 {SURVEY_DIR} 中发现任何系统目录")
+        logger.error(f"未在 {SURVEY_DIR} 中发现任何系统目录（目录存在但没有系统子目录）")
         sys.exit(1)
 
     logger.info(f"发现 {len(systems)} 个系统: {', '.join(s[0] for s in systems)}")
