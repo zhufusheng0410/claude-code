@@ -26,6 +26,7 @@
 import argparse
 import collections
 import difflib
+import functools
 import json
 import os
 import re
@@ -241,63 +242,134 @@ def add_subquery_alias(sql):
     return ''.join(out), added
 
 
+# --------------------------------------------------------------------------- #
+# 脚本转换：每个修复都是独立纯函数 (sql, table) -> (new_sql, count)
+# _TRANSFORMS 的顺序即语义，不可随意调整。
+# --------------------------------------------------------------------------- #
+def _dedupe_shebang(sql):
+    """甲方偶把两份脚本粘连；保留最后一个 shebang 起的正文。"""
+    if sql.count('#!/bin/sh') > 1:
+        return sql[sql.rfind('#!/bin/sh'):], 1
+    return sql, 0
+
+
+def _normalize_env(sql, table):
+    """env 路径标准化，并删掉冗余的 source_path 行。"""
+    sql = sql.replace('source ${hadoop_env}',
+                      'source /home/dolphinscheduler/hadoop_env')
+    sql = re.sub(r'(?m)^[ \t]*source[ \t]+\$\{source_path\}[ \t]*\n', '', sql)
+    return sql, 0
+
+
+def _normalize_beeline(sql, table):
+    """补全 beeline 的 -n / -p 参数。"""
+    return re.sub(
+        r'(?m)^([ \t]*)beeline -u \$\{hive_jdbc\}.*$',
+        r'\1beeline -u ${hive_jdbc} -n ${hive_username} -p ${hive_password}   -e "$1"',
+        sql), 0
+
+
+def _drop_inceptor_sets(sql, table):
+    """删除 Inceptor 专有 SET（Hive 4.2 不认）。"""
+    lines = sql.lstrip('\n').split('\n')
+    kept = [ln for ln in lines if not RE_SET_DROP.match(ln)]
+    return '\n'.join(kept), len(lines) - len(kept)
+
+
+def _insert_type_safety(sql, table):
+    """缺少时插入类型安全开关（位置：首条 set 之前）。"""
+    if SAFETY in sql:
+        return sql, 0
+    lines = sql.split('\n')
+    bidx = max((k for k, x in enumerate(lines) if x.startswith('-- **')), default=-1)
+    sidx = next((k for k in range(bidx + 1, len(lines))
+                 if lines[k].strip().startswith('set ')), len(lines))
+    lines.insert(sidx, SAFETY)
+    return '\n'.join(lines), 1
+
+
+def _fix_date_format3(sql, table):
+    """三参数 DATE_FORMAT → 两参（Hive 4.2 只认两参）。"""
+    return fix_date_format3(sql)
+
+
+def _escape_as_date(sql, table):
+    """Hive 保留字 DATE 作别名时加反引号（并对 shell 二次转义）。"""
+    return re.subn(r'\bAS\s+DATE\b(?![\w`])', 'AS \\`DATE\\`', sql)
+
+
+def _replace_sysdate(sql, table):
+    """SYSDATE → DATE_FORMAT(CURRENT_DATE,'yyyyMMdd')。"""
+    n = len(re.findall(r'\bSYSDATE\b', sql))
+    if not n:
+        return sql, 0
+    return re.sub(r'\bSYSDATE\b', "DATE_FORMAT(CURRENT_DATE,'yyyyMMdd')", sql), n
+
+
+def _scr_cast(sql, table):
+    """SCR 表的类型转换修复（按表生效）。"""
+    if table not in SCR3_TABLES:
+        return sql, 0
+    return RE_SCR3.subn(SCR3_FIX, sql)
+
+
+def _add_partition(sql, table):
+    """补分区子句（按表生效）。"""
+    if table not in PART_FIX:
+        return sql, 0
+    pat = re.compile(r'(INSERT\s+OVERWRITE\s+TABLE\s+DWDXDAY\.' + table +
+                     r')(?![\w])(?!\s+PARTITION)')
+    return pat.subn(r"\1 PARTITION (P_DT= '${P_BATCH_DT}')", sql)
+
+
+def _evt_cast(sql, table):
+    """EVT 表的类型转换修复（按表生效，可多条规则）。"""
+    if table not in EVT_CAST_FIX:
+        return sql, 0
+    total = 0
+    for pat, rep in EVT_CAST_FIX[table]:
+        sql, n = re.subn(pat, rep, sql)
+        total += n
+    return sql, total
+
+
+def _add_subquery_alias(sql, table):
+    """给未命名的子查询补 SUBT1 别名。"""
+    return add_subquery_alias(sql)
+
+
+#: (stats 键, 变换函数)。顺序即语义。
+_TRANSFORMS = (
+    ('sets_dropped', _drop_inceptor_sets),
+    ('safety', _insert_type_safety),
+    ('date_format3', _fix_date_format3),
+    ('as_date', _escape_as_date),
+    ('sysdate', _replace_sysdate),
+    ('scr_cast', _scr_cast),
+    ('partition', _add_partition),
+    ('evt_cast', _evt_cast),
+    ('subt1', _add_subquery_alias),
+)
+
+
 def convert(raw, stats=None, table=''):
     s = raw.replace('\r\n', '\n').replace('\r', '\n').lstrip('\ufeff')
-    if s.count('#!/bin/sh') > 1:
-        s = s[s.rfind('#!/bin/sh'):]
-        if stats is not None:
-            stats['dedupe_head'] += 1
+    s, n = _dedupe_shebang(s)
+    if stats is not None:
+        stats['dedupe_head'] += n
+
     if 'inceptor_beeline "' not in s:
         raise ValueError('找不到 inceptor_beeline "')
-    s = s.replace('source ${hadoop_env}', 'source /home/dolphinscheduler/hadoop_env')
-    s = re.sub(r'(?m)^[ \t]*source[ \t]+\$\{source_path\}[ \t]*\n', '', s)
-    s = re.sub(r'(?m)^([ \t]*)beeline -u \$\{hive_jdbc\}.*$',
-               r'\1beeline -u ${hive_jdbc} -n ${hive_username} -p ${hive_password}   -e "$1"', s)
-    out = s.lstrip('\n')
-    lines = out.split('\n')
-    kept = [ln for ln in lines if not RE_SET_DROP.match(ln)]
-    if stats is not None:
-        stats['sets_dropped'] += len(lines) - len(kept)
-    out = '\n'.join(kept)
-    if SAFETY not in out:
-        lines = out.split('\n')
-        bidx = max((k for k, x in enumerate(lines) if x.startswith('-- **')), default=-1)
-        sidx = next((k for k in range(bidx + 1, len(lines)) if lines[k].strip().startswith('set ')),
-                    len(lines))
-        lines.insert(sidx, SAFETY)
-        out = '\n'.join(lines)
+
+    s, _ = _normalize_env(s, table)
+    s, _ = _normalize_beeline(s, table)
+
+    for key, fn in _TRANSFORMS:
+        s, n = fn(s, table)
         if stats is not None:
-            stats['safety'] += 1
-    out, nd = fix_date_format3(out)
-    if stats is not None:
-        stats['date_format3'] += nd
-    out, nq = re.subn(r'\bAS\s+DATE\b(?![\w`])', 'AS \\`DATE\\`', out)
-    if stats is not None:
-        stats['as_date'] += nq
-    n = len(re.findall(r'\bSYSDATE\b', out))
-    if n:
-        out = re.sub(r'\bSYSDATE\b', "DATE_FORMAT(CURRENT_DATE,'yyyyMMdd')", out)
-        if stats is not None:
-            stats['sysdate'] += n
-    if table in SCR3_TABLES:
-        out, nc = RE_SCR3.subn(SCR3_FIX, out)
-        if stats is not None:
-            stats['scr_cast'] += nc
-    if table in PART_FIX:
-        pat = re.compile(r'(INSERT\s+OVERWRITE\s+TABLE\s+DWDXDAY\.' + table +
-                         r')(?![\w])(?!\s+PARTITION)')
-        out, np_ = pat.subn(r"\1 PARTITION (P_DT= '${P_BATCH_DT}')", out)
-        if stats is not None:
-            stats['partition'] += np_
-    if table in EVT_CAST_FIX:
-        for pat, rep in EVT_CAST_FIX[table]:
-            out, nc = re.subn(pat, rep, out)
-            if stats is not None:
-                stats['evt_cast'] += nc
-    out, na = add_subquery_alias(out)
-    if stats is not None:
-        stats['subt1'] += na
-    return out.rstrip('\n') + '\n'
+            stats[key] += n
+
+    return s.rstrip('\n') + '\n'
 
 
 def norm_lines(txt):
@@ -534,6 +606,10 @@ NEED_DDL = [
 ]
 
 
+_CORE_DDL_SANITIZE = _load_file(Path(__file__).resolve().parent / 'core' / 'ddl_sanitize.py',
+                                '_ddl_sanitize')
+
+
 def _load_shared_sanitize():
     """`sanitize_ddl` 的单一来源：`tools/core/ddl_sanitize.py`（只依赖 re）。
 
@@ -541,21 +617,39 @@ def _load_shared_sanitize():
       （86KB，连带 openpyxl/pandas）⇒ 缺 openpyxl 的环境里 DWS DDL 直接崩。
       抽成独立小模块后，两边都不再引入重依赖。
     """
-    _mod = _load_file(Path(__file__).resolve().parent / 'core' / 'ddl_sanitize.py',
-                      '_ddl_sanitize')
-    return _mod.sanitize_ddl
+    return _CORE_DDL_SANITIZE.sanitize_ddl
+
+
+def _load_shared_strip_drop():
+    """`strip_drop_stmts` 的单一来源（同一模块，DWD/DWS 两条 DDL 链路共用）。
+
+    ★ 2026-11-09（评审 A1）：甲方 DDL 的 `DROP TABLE IF EXISTS` **可能不带分号**，
+      只认「DROP 行以 ; 结尾」的剥法会漏剥 ⇒ DROP 与 CREATE 粘连成一条语句，
+      beeline 执行即 ParseException（DWS 侧已实证，见 ddl_sanitize 模块注释）。
+    """
+    return _CORE_DDL_SANITIZE.strip_drop_stmts
 
 
 sanitize_ddl = _load_shared_sanitize()
+strip_drop_stmts = _load_shared_strip_drop()
 
 
 def parse_jf_ddl():
+    """甲方 01-DWD建表脚本.sql → {表名大写: 该表 CREATE 语句原文}。
+
+    ★ 2026-11-09（评审 A1）：补上 `strip_drop_stmts` 剥 DROP（分号可有可无）。
+      甲方 DWD 建表脚本当前**一条 DROP 都没有**，此改动对现盘是 no-op；
+      但 DWS 侧已经实测过「DROP 缺分号 + 紧跟 CREATE」这种写法，DWD 下次
+      更新若出现同样形态就会被静默带进 `ddl/*.sql` 与 `01_ddl.sql`。
+      两条 DDL 链路从此共用 `core/ddl_sanitize.py` 的同一套剥离规则。
+    """
     raw = JF_DDL.read_text(encoding='utf-8', errors='replace')
     stmts = {}
     for chunk in re.split(r';\s*(?:\r?\n)', raw):
         m = RE_CREATE.search(chunk)
         if m:
-            stmts.setdefault(m.group(1).upper(), chunk.strip())
+            stmts.setdefault(m.group(1).upper(),
+                             strip_drop_stmts(chunk.strip()))
     return stmts
 
 
@@ -750,8 +844,13 @@ _PDT_STOP = re.compile(
     r'UNION|LIMIT|HAVING|CLUSTER|DISTRIBUTE|SORT|LATERAL|CROSS|SELECT|SET)\b', re.I)
 
 
+@functools.lru_cache(maxsize=None)
 def _strip_sql_comments(s):
-    """去掉 -- 行注释（不误伤单引号里的内容）。"""
+    """去掉 -- 行注释（不误伤单引号里的内容）。
+
+    ★ 2026-11-09：纯函数，加记忆化。原先每分析一张上游表就把整段脚本重新
+      逐字符扫一遍（实测 1605 次、耗时占 lineage 的 ~60%）。
+    """
     out, i, n, q = [], 0, len(s), False
     while i < n:
         c = s[i]
@@ -857,10 +956,15 @@ def _classify_part(expr):
     return 'other'
 
 
+@functools.lru_cache(maxsize=None)
 def partition_modes(script, src):
-    """返回脚本里【每一处】读 src 这张表的分区口径列表，如 ['prev','prev']。
+    """返回脚本里【每一处】读 src 这张表的分区口径，如 ('prev','prev')。
 
-    空列表 = 脚本里没有对 src 的 FROM/JOIN 引用。
+    空元组 = 脚本里没有对 src 的 FROM/JOIN 引用。
+
+    ★ 2026-11-09：纯函数 + 记忆化 —— 原先它是 lineage 的计算热点
+      （1605 次调用；`needs_schedule_dep` 内部对同一 (脚本, 上游) 算了两次）。
+      返回**元组**而非 list，避免缓存值被调用方原地修改后污染后续查询。
     """
     src_u = src.upper()
     out = []
@@ -891,15 +995,19 @@ def partition_modes(script, src):
             out.extend(found)
         else:
             out.extend(['mixed:' + '+'.join(sorted(set(found)))] * refs)
-    return out
+    return tuple(out)
 
 
+@functools.lru_cache(maxsize=None)
 def partition_set(script, src):
-    """把 partition_modes 折叠成口径集合（mixed:x+y 展开）。"""
+    """把 partition_modes 折叠成口径集合（mixed:x+y 展开）。
+
+    ★ 2026-11-09：记忆化；返回 frozenset（不可变），调用方只做比较/迭代。
+    """
     ms = set()
     for m in partition_modes(script, src):
         ms |= set(m[6:].split('+')) if m.startswith('mixed:') else {m}
-    return ms
+    return frozenset(ms)
 
 
 def needs_schedule_dep(script, src):
@@ -956,8 +1064,19 @@ def _partition_note(s, src):
     return f'；读{txt}分区'
 
 
-def _parse_script(p):
-    s = p.read_text(encoding='utf-8', errors='replace')
+def _parse_script(s):
+    """从脚本**内容**解析出 (目标表列表, 上游源表列表)。
+
+    ★ 2026-11-09：原签名收 Path 并自行 read_text，而两个调用方都已先读过同一文件
+      ⇒ 每个脚本被读两遍、正则跑两遍。改为直接收文本。
+    ★ 2026-11-09（评审 C1）：入口**保留** PathLike 兼容。本模块被
+      `dws-dep-report.py` 等脚本按路径加载后**跨文件调用**（那边仍然传 Path），
+      签名一收紧就 `TypeError: expected string or bytes-like object,
+      got 'PosixPath'` —— 实测 dws-dep-report.py 整条命令 100% 崩溃。
+      纯文本入参按原样（省一次读盘）；只有真传了路径才读一次。
+    """
+    if isinstance(s, os.PathLike):
+        s = Path(s).read_text(encoding='utf-8', errors='replace')
     targets = _uniq(t.upper() for t in TGT.findall(s))
     real = [t for t in targets if '_TMP' not in t]
     srcs = _uniq(x.upper() for x in SRC.findall(s))
@@ -1114,7 +1233,7 @@ def cmd_lineage(args):
     for g in GROUPS:
         for p in sorted(etl_dir(g).glob('*.sh')):
             s = p.read_text(encoding='utf-8', errors='replace')
-            real, srcs = _parse_script(p)
+            real, srcs = _parse_script(s)
             cache = {}                      # src → (need, modes, part, why)
             for tgt in real:
                 for src in srcs:
@@ -1363,13 +1482,19 @@ def cmd_lineage(args):
     ws7.append(['项目', '内容'])
     for c in ws7[1]:
         c.font, c.fill = bold, fill
-    n_sh_all = sum(len(list(etl_dir(g).glob('*.sh'))) for g in GROUPS)
-    n_ddl_all = sum(len(list(ddl_dir(g).glob('*.sql'))) for g in GROUPS)
+    # ★ 2026-11-09：分组计数只扫一次，供「说明」页与引导页共用（原先两处各算了一遍）。
+    #   分组明细也由实盘算出，不再硬编码快照 —— 见 CLAUDE.md「文档记录约定」：
+    #   「不记临时结果：表数/作业数快照…跑批一变就失真」。
+    sh_counts = {g: len(list(etl_dir(g).glob('*.sh'))) for g in GROUPS}
+    ddl_counts = {g: len(list(ddl_dir(g).glob('*.sql'))) for g in GROUPS}
+    n_sh = sum(sh_counts.values())
+    n_ddl = sum(ddl_counts.values())
+    sh_breakdown = ' / '.join('%s %d' % (g, sh_counts[g]) for g in GROUPS)
     info_rows = [
         ['生成时间', time.strftime('%Y-%m-%d %H:%M:%S')],
-        ['脚本范围', 'scripts/{系统}/dwd/02_etl 下 %d 个脚本（HSFA 22 / HSZTA 26 / O32 38 / 主数据 23）'
-         % n_sh_all],
-        ['建表语句', 'scripts/{系统}/dwd/ddl 下 %d 张表 + 各系统 01_ddl.sql；汇总在 scripts/建表语句/' % n_ddl_all],
+        ['脚本范围', 'scripts/{系统}/dwd/02_etl 下 %d 个脚本（%s）'
+         % (n_sh, sh_breakdown)],
+        ['建表语句', 'scripts/{系统}/dwd/ddl 下 %d 张表 + 各系统 01_ddl.sql；汇总在 scripts/建表语句/' % n_ddl],
         ['依赖口径', '从脚本 INSERT 目标与 FROM/JOIN 源表解析；_TMP 不计入主依赖'],
         ['上游层级', '上游是 ODS 或 DWD 同层表；DWD 不依赖 DWS 层（实测 0 条）'],
         ['主数据口径', 'scripts/MASTER/dwd/02_etl 的 23 个为主数据手工稿；2026-10-23 起随 DWD 批次跑真实脚本'],
@@ -1386,13 +1511,11 @@ def cmd_lineage(args):
         for c in row:
             c.alignment = Alignment(vertical='top', wrap_text=True)
 
-    n_sh = sum(len(list(etl_dir(g).glob('*.sh'))) for g in GROUPS)
-    n_ddl = sum(len(list(ddl_dir(g).glob('*.sql'))) for g in GROUPS)
     build_cover(
         wb,
         'DWD 依赖关系工作簿 · 引导页',
         f'交付范围：{len(GROUPS)} 个分组 / {n_sh} 个脚本 / {n_ddl} 张建表语句'
-        f'（HSFA 22 / HSZTA 26 / O32 38 / 主数据 23）',
+        f'（{sh_breakdown}）',
         [
             '本工作簿 = scripts/{系统}/dwd/02_etl 下 DWD 脚本的逻辑梳理结果（甲方 01-DWD执行脚本 转换而来）。',
             '「语法校验」= Shell bash -n + Hive DDL 沙箱建表 + Hive EXPLAIN 编译（不执行、不落数据）。',
@@ -1469,7 +1592,7 @@ def cmd_prevday(args):
                 continue
             seen_files.add(p.resolve())
             s = p.read_text(encoding='utf-8', errors='replace')
-            real, srcs = _parse_script(p)
+            real, srcs = _parse_script(s)
             for src in srcs:
                 need, ms, _why = needs_schedule_dep(s, src)
                 if need is None:
@@ -1533,16 +1656,33 @@ def cmd_prevday(args):
 # --------------------------------------------------------------------------- #
 # DS 依赖配置
 # --------------------------------------------------------------------------- #
-def _load_module(name, path):
-    return _load_file(path, name)
 
 
-def _script_of(table):
-    for s in os.listdir(SCRIPTS):
-        p = SCRIPTS / s / 'dwd/02_etl' / (table + '.sh')
-        if p.is_file():
-            return str(p)
-    return None
+def _script_index():
+    """一次扫描 SCRIPTS：表名 → DWD 脚本路径。
+
+    ★ 2026-11-09：原 `_script_of()` 每次调用都 `os.listdir(SCRIPTS)`，而它在
+      「每张目标表 × 每个上游表」的嵌套循环里被调用 ⇒ O(n×m) 次目录扫描。
+      改为调用方构建一次索引后传入，扫描次数降为 1。
+    """
+    idx = {}
+    for s in sorted(os.listdir(SCRIPTS)):
+        d = SCRIPTS / s / 'dwd/02_etl'
+        if not d.is_dir():
+            continue
+        for p in d.glob('*.sh'):
+            idx.setdefault(p.stem, str(p))
+    return idx
+
+
+def _script_of(table, index=None):
+    """返回某表的 DWD 脚本路径；不存在返回 None。
+
+    index: 可选，`_script_index()` 的结果。批量调用时应传入以免重复扫描。
+    """
+    if index is None:
+        index = _script_index()
+    return index.get(table)
 
 
 def _ods_chunks(sys_name):
@@ -1554,9 +1694,19 @@ def _ods_chunks(sys_name):
     return [(i // 20 + 1, files[i:i + 20]) for i in range(0, len(files), 20)]
 
 
-def _locate_ods(table):
+def _locate_ods(table, chunks_cache=None):
+    """把 ODS 表定位到所属抽取作业组（ods_<sys>_etl_NN）。
+
+    chunks_cache: 可选 dict，按系统名缓存 `_ods_chunks()` 结果。
+                  批量调用时传入，避免每个上游表都重新 listdir。
+    """
     sys_name = table.split('_')[1]
-    chunks = _ods_chunks(sys_name)
+    if chunks_cache is not None:
+        if sys_name not in chunks_cache:
+            chunks_cache[sys_name] = _ods_chunks(sys_name)
+        chunks = chunks_cache[sys_name]
+    else:
+        chunks = _ods_chunks(sys_name)
     for n, ts in chunks:
         if table in ts:
             return 'ods_%s_etl_%02d' % (sys_name.lower(), n)
@@ -1570,9 +1720,8 @@ def _locate_ods(table):
 
 
 # 归属口径：**唯一来源** tools/core/dwd_ownership.py（与
-# ds-deploy/ds-build-dependent-from-lineage.py 共用，不再各自复制一份字典）。
-_OWNERSHIP = _load_module('DWD_OWNERSHIP',
-                          str(REPO / 'tools/core/dwd_ownership.py'))
+# ds-deploy/ds-build-dependent-from-lineage.py 共用，不再各存一份字典）。
+_OWNERSHIP = _load_file(str(REPO / 'tools/core/dwd_ownership.py'), 'DWD_OWNERSHIP')
 WORKFLOW_OVERRIDE = _OWNERSHIP.WORKFLOW_OVERRIDE
 
 
@@ -1581,8 +1730,7 @@ def _own_workflow(table):
 
 
 def cmd_depcfg(args):
-    L = _load_module('LINEAGE_BUILDER',
-                     str(REPO / 'tools/ds-deploy/ds-build-dependent-from-lineage.py'))
+    L = _load_file(str(REPO / 'tools/ds-deploy/ds-build-dependent-from-lineage.py'), 'LINEAGE_BUILDER')
     xlsx = SCRIPTS / 'DWD_依赖关系.xlsx'
     if not xlsx.exists():
         sys.exit(f'缺 {xlsx} ⇒ 先跑 dwd-pipeline.py lineage --apply')
@@ -1637,7 +1785,10 @@ def cmd_depcfg(args):
             drop_by_target[t] += 1
         rows[t].append(u)
 
-    targets = [t for t in rows if _script_of(t)]
+    # ★ 2026-11-09：索引与 ODS 分组缓存各建一次，避免嵌套循环里的重复目录扫描。
+    script_idx = _script_index()
+    ods_cache = {}
+    targets = [t for t in rows if _script_of(t, script_idx)]
     cfgs = {}
     unresolved = []
     for t in sorted(targets):
@@ -1650,7 +1801,7 @@ def cmd_depcfg(args):
                 excluded[u] += 1
                 continue
             if u.startswith('ODS_'):
-                w = _locate_ods(u)
+                w = _locate_ods(u, ods_cache)
                 if not w:
                     unresolved.append((t, u, 'ODS 未定位'))
                     continue
@@ -1659,7 +1810,7 @@ def cmd_depcfg(args):
                 if w == '(未知)':
                     unresolved.append((t, u, '无法解析主题'))
                     continue
-                if not _script_of(u):
+                if not _script_of(u, script_idx):
                     no_script_up[u] += 1
                     continue
             if w == wf:

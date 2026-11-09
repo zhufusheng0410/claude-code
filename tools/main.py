@@ -195,6 +195,17 @@ def main():
     args = p.parse_args()
     layer = args.layer
 
+    # ★ 2026-11-09（评审 A2）：硬护栏 —— `--sys-name MASTER --layer DWD` 会用生成器
+    #   产物**覆盖** `scripts/MASTER/dwd/` 下的甲方脚本与手工血缘，那是最贵的资产。
+    #   此前只有文档禁止、没有代码拦截，误敲一次就没了。生成器只该产出 8 个业务系统；
+    #   主数据走 `tools/dw-pipeline.py`（甲方脚本直接搬移）、血缘走
+    #   `tools/dwd-pipeline.py lineage`（手工梳理，禁止用生成器重跑）。
+    if layer in ("DWD", "ALL") and (args.sys_name or "").strip().upper() == "MASTER":
+        sys.exit(
+            "拒绝生成 MASTER：生成器会覆盖 scripts/MASTER/dwd/ 下的甲方脚本与手工血缘。\n"
+            "  主数据脚本/DDL 请走: python3 tools/dw-pipeline.py scripts --layers DWD --apply\n"
+            "  主数据血缘请走:     python3 tools/dwd-pipeline.py lineage --apply")
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
@@ -224,7 +235,9 @@ def main():
         return
 
     # ★ 2026-10-29：输入路径不可用时给出可操作报错，而不是让下游读到空 Excel。
-    problems = missing_inputs()
+    #   ★ 2026-11-09（评审 A2）：按 `--layer` 只查该层真正需要的目录 —— 否则
+    #     `--layer ODS` 会被无关的 MAPPING 目录拦住（见 config.missing_inputs）。
+    problems = missing_inputs(layer)
     if problems:
         logger.error("输入路径不可用，无法生成：")
         for msg in problems:

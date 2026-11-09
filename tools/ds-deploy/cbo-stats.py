@@ -36,6 +36,7 @@ CBO 拿不到基数就只能按默认值猜，join 顺序 / map join 判定 / re
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import re
@@ -70,17 +71,49 @@ _REF_RE = re.compile(
 # --------------------------------------------------------------------------
 # 1. 从 ETL 脚本抽取被引用的表
 # --------------------------------------------------------------------------
+def _etl_files() -> list:
+    """DWD + DWS 两层 ETL 脚本（含 MASTER/dwd；`*` 通配即覆盖）。"""
+    return sorted(SCRIPTS_DIR.glob("*/dwd/02_etl/*.sh")) + sorted(
+        SCRIPTS_DIR.glob("*/dws/02_etl/*.sh")
+    )
+
+
+def _refs_fingerprint(files: list) -> str:
+    """ETL 脚本清单的内容指纹：脚本数 + 各文件 (mtime_ns, size)。
+
+    ★ 2026-11-09（评审 A3）：原缓存**只在 `--rebuild` 时才失效**。改完 ETL 脚本
+      再跑 `gen`/`run`，命中的是**旧表清单**（无任何提示）—— 这与
+      `parser/mapping.py` 的约定「缓存只提速、绝不参与正确性」相反。
+    """
+    h = hashlib.sha1()
+    for f in files:
+        st = f.stat()
+        h.update(f"{f.name}:{st.st_mtime_ns}:{st.st_size}\n".encode("utf-8"))
+    return h.hexdigest()[:16]
+
+
 def scan_refs(rebuild: bool = False) -> list[dict]:
     """返回 [{"tbl": "DB.TBL", "refs": n}]，按引用次数降序。"""
+    files = _etl_files()
+    fp = _refs_fingerprint(files)
     if CACHE.exists() and not rebuild:
-        return json.loads(CACHE.read_text(encoding="utf-8"))
+        try:
+            doc = json.loads(CACHE.read_text(encoding="utf-8"))
+            if not isinstance(doc, dict):
+                # ★ A3：旧版缓存是**裸 list**（没有 fingerprint 包裹）。
+                #   直接 doc.get 会 AttributeError（不在下面的异常清单里）
+                #   ⇒ 工具崩掉。这里显式判类型并走重建。
+                raise TypeError("cache format is not dict")
+            if doc.get("fingerprint") == fp:
+                return doc["refs"]
+            print("· cbo 引用缓存已过期（ETL 脚本有改动），重新扫描")
+        except (json.JSONDecodeError, OSError, KeyError, TypeError) as e:
+            # ★ A3：缓存损坏/结构不对时**静默重建**，绝不让缓存问题中断工具
+            print("· cbo 引用缓存不可用（%s），重新扫描" % type(e).__name__)
 
     from collections import Counter
 
     counter: Counter[str] = Counter()
-    files = sorted(SCRIPTS_DIR.glob("*/dwd/02_etl/*.sh")) + sorted(
-        SCRIPTS_DIR.glob("*/dws/02_etl/*.sh")
-    )
     for f in files:
         text = f.read_text(encoding="utf-8", errors="ignore")
         text = re.sub(r"--[^\n]*", "", text)  # 去掉 SQL 行注释，避免注释里的表名被算进去
@@ -88,8 +121,13 @@ def scan_refs(rebuild: bool = False) -> list[dict]:
             counter[f"{db.upper()}.{tbl.upper()}"] += 1
 
     out = [{"tbl": k, "refs": v} for k, v in counter.most_common()]
-    CACHE.parent.mkdir(parents=True, exist_ok=True)
-    CACHE.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE.write_text(json.dumps({"fingerprint": fp, "refs": out},
+                                    ensure_ascii=False, indent=1),
+                         encoding="utf-8")
+    except OSError as e:
+        print("· cbo 引用缓存写入失败（%s），本次仅用内存结果" % e)
     return out
 
 
@@ -176,7 +214,8 @@ def cmd_probe(args) -> int:
     """
     refs = scan_refs(args.rebuild)
     meta = load_meta()
-    top = refs[: args.top]
+    # ★ A5：0 = 不限（与 gen/run 一致）；见 _build_stmts 同款说明
+    top = refs[: args.top] if args.top else refs
 
     print(f"{'表':<50}{'引用':>5}{'分区':>6}{'已有numRows':>12}")
     print("-" * 76)
@@ -213,14 +252,40 @@ def cmd_probe(args) -> int:
     return 0
 
 
+def _parse_partition_spec(text: str) -> dict:
+    """把 `--partition` 值解析成 {分区键: 值}。
+
+    两种形态都认（后者是多分区键表的唯一正确用法）：
+      · `20261029`             → {'': '20261029'}（空键占位；单键表由调用方补键名）
+      · `p_dt=20261029,hour=0` → {'p_dt': '20261029', 'hour': '0'}
+    ★ 2026-11-09（评审 A4）。单键表仍可用「只给值」的简写；
+      多键表若不写键名，无法知道值该给谁 ⇒ 调用方要求显式 k=v。
+    """
+    out = {}
+    for part in (text or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        k, _, v = part.partition("=")
+        if _:
+            out[k.strip()] = v.strip().strip("'\"")
+        else:
+            out[""] = part
+    return out
+
+
 def _build_stmts(args) -> list[tuple[str, str]]:
     """返回 [(目标描述, SQL)]。"""
     refs = scan_refs(args.rebuild)
     meta = load_meta()
 
+    # ★ A5（2026-11-09 评审）：`--top 0` 语义统一为「不限量」。
+    #   原先 `probe` 用 `refs[:0]`（空列表，静默什么都不做），而 gen/run 里 0 = 不限
+    #   ⇒ 同一个小篆在不同子命令下含义相反。
+    top = args.top if getattr(args, "top", 0) else None
     picked = [r for r in refs if r["refs"] >= args.min_refs]
-    if args.top:
-        picked = picked[: args.top]
+    if top:
+        picked = picked[:top]
 
     stmts: list[tuple[str, str]] = []
     skipped: list[str] = []
@@ -233,25 +298,56 @@ def _build_stmts(args) -> list[tuple[str, str]]:
 
         col = " FOR COLUMNS" if args.with_columns else ""
 
-        if not m["part_keys"]:
+        # ★ A4（2026-11-09 评审）：**多分区键表不能把同一个值赋给每个键**。
+        #   原实现 `spec = ", ".join(f"{k}='{partition}'" for k in part_keys)`，
+        #   对 `PARTITIONED BY (p_dt, region)` 会生成
+        #     PARTITION(p_dt='20261029', region='20261029')
+        #   ⇒ 要么 partition not found（白跑一次失败）、要么命中一个语义错误的分区。
+        #   本仓库当前都是单键 p_dt，这是**潜伏**问题：一旦上游加二级分区就会静默出错。
+        #   ⇒ 多键表要求显式给 `--partition k=v,k2=v2`，否则跳过并说明。
+        keys = m["part_keys"]
+
+        if not keys:
             stmts.append((r["tbl"], f"ANALYZE TABLE {tbl} COMPUTE STATISTICS{col}"))
             continue
 
         if not args.partition:
             skipped.append(
-                f"{r['tbl']}（分区表，需 --partition，分区键={','.join(m['part_keys'])}）"
+                f"{r['tbl']}（分区表，需 --partition，分区键={','.join(keys)}）"
             )
             continue
+
+        specs = _parse_partition_spec(args.partition)
+        if "" in specs:                       # 简写「只给值」⇒ 只对单键表合法
+            if len(keys) != 1 or len(specs) != 1:
+                skipped.append(
+                    f"{r['tbl']}（分区键 {keys} 需显式写成 "
+                    f"{','.join(k + '=<值>' for k in keys)}，跳过）")
+                continue
+            specs = {keys[0]: specs[""]}
+        unknown = [k for k in specs if k not in keys]
+        if unknown:
+            skipped.append(
+                f"{r['tbl']}（--partition 里的键 {unknown} 不在分区键 {keys} 里，跳过）")
+            continue
+        if len(keys) > 1:
+            miss = [k for k in keys if k not in specs]
+            if miss:
+                skipped.append(
+                    f"{r['tbl']}（分区键 {keys} 有 {len(keys)} 个，需逐个赋值："
+                    f"--partition {','.join(k + '=<值>' for k in keys)}；"
+                    f"缺 {miss}，跳过）")
+                continue
 
         if m["parts"] == 0:
             # 声明了分区键但一个分区都没创建（常见于只建表没灌数的维表）。
             # 此时 PARTITION(...) 会报 partition not found，直接跳过。
             skipped.append(
-                f"{r['tbl']}（分区键={','.join(m['part_keys'])} 但无任何分区，跳过）"
+                f"{r['tbl']}（分区键={','.join(keys)} 但无任何分区，跳过）"
             )
             continue
 
-        spec = ", ".join(f"{k}='{args.partition}'" for k in m["part_keys"])
+        spec = ", ".join(f"{k}='{v}'" for k, v in specs.items())
         stmts.append(
             (r["tbl"], f"ANALYZE TABLE {tbl} PARTITION({spec}) COMPUTE STATISTICS{col}")
         )

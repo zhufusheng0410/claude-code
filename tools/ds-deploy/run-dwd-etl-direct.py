@@ -108,7 +108,17 @@ def wait_mem(floor: float, log) -> None:
 
 
 def load_dep_edges(depcfg: str, targets: set) -> list:
-    """从 dep json 推导 [上游源表, 目标表] 边（只保留两端都在 targets 里的）。"""
+    """从 dep json 推导 [上游源表, 目标表] 边（只保留两端都在 targets 里的）。
+
+    ★★ 2026-11-09（评审 C2，实测数据正确性问题）：**必须同时读两类边**。
+       1) `cross_workflow.sources` —— 跨主题工作流的依赖；
+       2) `same_workflow_predecessors` —— **同主题工作流内**的上下游依赖。
+       原实现只读第 1 类。实测现役 `dep-config-proscript`：cross 161 条、
+       same **47 条被整类丢弃**。而本工具的 `rebuild_ddl` 会先把表
+       DROP+CREATE 清空 ⇒ 这 47 条缺失的约束让 **28 对上下游反序执行**
+      （例：`DWD_PTY_CUST_INFO_PFD` 先于其上游 `DWD_PTY_CUST_NUM_MAPP_PFD`
+       跑完，读到的是刚被清空的 0 行上游）⇒ 全量重刷产出空表/残缺表。
+    """
     edges = []
     for jf in sorted(glob.glob(os.path.join(depcfg, "*.dep.json"))):
         try:
@@ -119,11 +129,16 @@ def load_dep_edges(depcfg: str, targets: set) -> list:
         tgt = str(d.get("target", "")).split(".")[-1].upper()
         if tgt not in targets:
             continue
-        for cw in d.get("cross_workflow", []):
-            for s in cw.get("sources", []):
-                src = str(s.get("source", "")).split(".")[-1].upper()
-                if src in targets:
-                    edges.append((src, tgt))
+        for group in ("cross_workflow", "same_workflow_predecessors"):
+            for cw in (d.get(group) or []) if group == "cross_workflow" else [None]:
+                if cw is None:                      # same_... 本身就是 [{source,...}]
+                    items = d.get("same_workflow_predecessors") or []
+                else:
+                    items = cw.get("sources") or []
+                for s in items:
+                    src = str(s.get("source", "")).split(".")[-1].upper()
+                    if src in targets:
+                        edges.append((src, tgt))
     return edges
 
 

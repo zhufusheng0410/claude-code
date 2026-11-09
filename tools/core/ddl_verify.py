@@ -10,7 +10,8 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
-__all__ = ["DDLStruct", "parse_ddl", "diff_ddl", "DDLDiff"]
+__all__ = ["DDLStruct", "parse_ddl", "diff_ddl", "DDLDiff",
+           "split_statements", "lint_statements"]
 
 
 @dataclass
@@ -276,6 +277,131 @@ def diff_ddl(left_text: str, right_text: str,
         diff.table_comment_mismatch = (left.table_comment, right.table_comment)
 
     return diff
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 语句边界检查（2026-11-09 新增，评审 A1）
+# ──────────────────────────────────────────────────────────────────────────────
+
+def strip_line_comments(text: str) -> str:
+    """去掉 `--` 行注释（跳过单引号字面量内的 `--`）。"""
+    out, i, n, q = [], 0, len(text), False
+    while i < n:
+        c = text[i]
+        if q:
+            out.append(c)
+            if c == "'":
+                if i + 1 < n and text[i + 1] == "'":     # '' 是转义的单引号
+                    out.append("'")
+                    i += 2
+                    continue
+                q = False
+            i += 1
+            continue
+        if c == "'":
+            q = True
+            out.append(c)
+            i += 1
+            continue
+        if c == "-" and i + 1 < n and text[i + 1] == "-":
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            out.append(" ")                              # 保留行边界，避免粘连
+            i = j
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def split_statements(text: str) -> List[str]:
+    """按顶层 `;` 切分 SQL 语句（跳过单引号字面量与行注释里的分号）。
+
+    beeline / `-f` 就是按 `;` 切分执行的 ⇒ **语句边界错了一条都跑不了**。
+    尾部没有分号的残余文本也会返回（文件末尾允许省略），由调用方判定。
+    """
+    out, buf, i, n, q = [], [], 0, len(text), False
+    while i < n:
+        c = text[i]
+        if q:
+            buf.append(c)
+            if c == "'":
+                if i + 1 < n and text[i + 1] == "'":
+                    buf.append("'")
+                    i += 2
+                    continue
+                q = False
+            i += 1
+            continue
+        if c == "'":
+            q = True
+            buf.append(c)
+            i += 1
+            continue
+        if c == "-" and i + 1 < n and text[i + 1] == "-":
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            buf.append(text[i:j])
+            i = j
+            continue
+        if c == ";":
+            out.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(c)
+        i += 1
+    if buf:
+        out.append("".join(buf))
+    return [s for s in (x.strip() for x in out) if s]
+
+
+_RE_CREATE_TBL = re.compile(r"\bCREATE\s+(?:EXTERNAL\s+)?TABLE\b", re.IGNORECASE)
+_RE_DROP_TBL = re.compile(r"\bDROP\s+TABLE\b", re.IGNORECASE)
+
+
+def lint_statements(text: str) -> List[str]:
+    """检查一份 DDL 文本能否被 beeline 按 `;` 正确切分执行。返回问题列表（空 = 通过）。
+
+    ★★ 为什么需要它（评审 A1 的实证）
+       甲方 `02-DWS建表脚本.sql` 里有一处 `DROP TABLE IF EXISTS ...` **没写分号**，
+       紧跟下一行就是 `CREATE TABLE ...`：
+
+           DROP TABLE IF EXISTS DWSXDAY.DWS_TRAN_FUTR_TRAN_DETAIL_PTD
+           CREATE TABLE  DWSXDAY.DWS_TRAN_FUTR_TRAN_DETAIL_PTD (
+
+       生成流程的「剥 DROP」正则只认「DROP 行以 `;` 结尾」⇒ 这条漏剥，
+       落盘成 `scripts/O32/dws/ddl/DWS_TRAN_FUTR_TRAN_DETAIL_PTD.sql` 与
+       `O32/dws/01_ddl.sql`。而 `diff_ddl` 只看列/分区/注释，**不校验语句边界**
+       ⇒ 37/37「与甲方一致」全绿，一上 beeline 就
+       `ParseException`（DROP 与 CREATE 被合成一条语句）。
+
+       三类问题：
+       ① 一条语句里同时出现 DROP 与 CREATE ⇒ 分号缺失导致的粘连；
+       ② 一条语句里出现多个 CREATE TABLE ⇒ 同样是粘连（上下两张表）；
+       ③ 逐表 DDL 文件里残留独立 DROP 语句 ⇒ 违反「逐表文件只留 CREATE」口径
+          （DROP 应由重建步骤自己拼），会掩盖 ① 的真实修法。
+    """
+    problems: List[str] = []
+    for st in split_statements(text):
+        s = strip_line_comments(st)
+        n_create = len(_RE_CREATE_TBL.findall(s))
+        n_drop = len(_RE_DROP_TBL.findall(s))
+        if n_drop and n_create:
+            problems.append(
+                "DROP 与 CREATE 同处一条语句（缺分号粘连）：beeline 按 `;` 切分会 "
+                "ParseException。头部片段：%s" % " ".join(s.split())[:80])
+        elif n_create > 1:
+            problems.append(
+                "一条语句里有 %d 个 CREATE TABLE（缺分号粘连），片段：%s"
+                % (n_create, " ".join(s.split())[:80]))
+        elif n_drop and not n_create:
+            problems.append(
+                "残留独立 DROP 语句（逐表 DDL 只应留 CREATE，DROP 由重建步骤拼接）：%s"
+                % " ".join(s.split())[:80])
+    return problems
 
 
 # ──────────────────────────────────────────────────────────────────────────────

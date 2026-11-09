@@ -11,45 +11,50 @@ import os
 _PROJECT_REL = os.path.join("项目", "信达澳亚数仓", "信达澳亚投研数据集市交付文档")
 
 
-def _d_base_candidates():
-    """候选 D 盘根，按优先级排序。
+def _detect_d_base():
+    """探测 D 盘根：显式环境变量优先，否则取首个能命中交付文档目录的候选。
 
-    显式 `DW_D_BASE` 一经设置就不再猜测（用户说了算）。
-    Windows 原生 Python 不能用 `/mnt/d` / `/d`（会被当成本地盘相对路径），必须盘符。
+    全都不命中时返回首选候选，由 missing_inputs() 给出可读报错。
     """
     env = os.environ.get("DW_D_BASE")
     if env:
-        return [env]
-    if os.name == "nt":
-        return ["D:/", "E:/"]
-    return ["/mnt/d", "/d", "/data"]
-
-
-def _detect_d_base():
-    cands = _d_base_candidates()
+        return env          # 用户显式指定，不再猜测
+    cands = ["D:/", "E:/"] if os.name == "nt" else ["/mnt/d", "/d", "/data"]
     for c in cands:
-        try:
-            if os.path.isdir(os.path.join(c, _PROJECT_REL)):
-                return c
-        except OSError:
-            pass
-    return cands[0]   # 都没命中：返回首选，交给 missing_inputs() 给出清晰报错
+        if os.path.isdir(os.path.join(c, _PROJECT_REL)):
+            return c
+    return cands[0]
 
 
 D_BASE = _detect_d_base()
 PROJECT_BASE = os.path.normpath(
     os.environ.get("DW_PROJECT_BASE") or os.path.join(D_BASE, _PROJECT_REL))
+
 SURVEY_DIR = os.path.join(PROJECT_BASE, "01-系统调研文档")
 DWD_MAPPING_BASE = os.path.join(PROJECT_BASE, "04-源与目标映射MAPPING/01-DWD")
 DWS_MAPPING_BASE = os.path.join(PROJECT_BASE, "04-源与目标映射MAPPING/02-DWS")
 
 
-def missing_inputs():
+def missing_inputs(layers=None):
     """返回「输入目录缺失」的可读说明列表（空列表 = 输入齐全）。
 
     生成器启动时调用。区别于让下游 `os.listdir` 抛异常或读到空 Excel：
     这里直接告诉用户**该设哪个环境变量、指向哪里**。
+
+    ★ 2026-11-09（评审 A2）：新增 `layers` 过滤。原先**无条件**检查 3 个目录，
+      于是 `--layer ODS`（只需要调研文档）在「只交付了一半目录」的机器上
+      被无关的 DWD/DWS MAPPING 目录拦住（实测返回 2 条无关问题并 exit 1）。
+      按需检查：ODS 只查调研目录，DWD 另查 DWD MAPPING，DWS 另查 DWS MAPPING。
+    layers: None/'ALL' = 全部检查；'ODS'/'DWD'/'DWS'（或它们的集合）= 按层查。
     """
+    if layers is None:
+        want = {"ODS", "DWD", "DWS"}
+    elif isinstance(layers, str):
+        want = {"ALL": {"ODS", "DWD", "DWS"}}.get(layers.upper(), {layers.upper()})
+    else:
+        want = {str(x).upper() for x in layers} - {""}
+        if "ALL" in want:
+            want |= {"ODS", "DWD", "DWS"}
     problems = []
     if not os.path.isdir(PROJECT_BASE):
         problems.append(
@@ -58,9 +63,12 @@ def missing_inputs():
             "    或设置 DW_PROJECT_BASE 直接指向交付文档目录"
             % PROJECT_BASE)
         return problems          # 根都没有，再谈子目录没意义
-    for label, p in (("调研文档目录", SURVEY_DIR),
-                     ("DWD MAPPING 目录", DWD_MAPPING_BASE),
-                     ("DWS MAPPING 目录", DWS_MAPPING_BASE)):
+    checks = [("调研文档目录", SURVEY_DIR, "ODS")]
+    if "DWD" in want:
+        checks.append(("DWD MAPPING 目录", DWD_MAPPING_BASE, "DWD"))
+    if "DWS" in want:
+        checks.append(("DWS MAPPING 目录", DWS_MAPPING_BASE, "DWS"))
+    for label, p, _need in checks:
         if not os.path.isdir(p):
             problems.append("%s 不存在: %s" % (label, p))
     return problems

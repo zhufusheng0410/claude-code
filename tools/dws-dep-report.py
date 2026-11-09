@@ -88,7 +88,10 @@ def scan():
             continue
         for p in sorted(d.glob('*.sh')):
             script = p.read_text(encoding='utf-8', errors='replace')
-            real, srcs = P._parse_script(p)
+            # ★ 2026-11-09（评审 C1）：传**已读到的文本**，不再传 Path。
+            #   上游 `dwd-pipeline._parse_script` 改为只收文本后，这里若继续传 p
+            #   会直接 TypeError（该命令 100% 崩溃）。顺带省一次重复读盘。
+            real, srcs = P._parse_script(script)
             rel = str(p.relative_to(REPO)).replace('\\', '/')
             meta[p.stem] = {'sys': s, 'ds_wf': SYS2DS[s], 'file': rel,
                             'targets': real, 'srcs': srcs,

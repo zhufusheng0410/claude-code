@@ -214,5 +214,58 @@ class TestDwdDdlCmd(unittest.TestCase):
         self.assertEqual(WP._dwd_ddl_cmd(args)[-1], '--apply')
 
 
+class TestDdlStatementBoundary(unittest.TestCase):
+    """语句边界（A1 回归）：`diff_ddl` 只看列/分区，看不出「DROP 缺分号」。
+
+    ★ 实证缺陷文件：`scripts/O32/dws/ddl/DWS_TRAN_FUTR_TRAN_DETAIL_PTD.sql`
+      （甲方 `02-DWS建表脚本.sql` 里 DROP 行没写分号，紧跟 CREATE）。
+      beeline 按 `;` 切分 ⇒ DROP 与 CREATE 被合成一条语句 ⇒ ParseException，
+      而 37/37 的 diff 全绿。故 DDL 校验必须并列一道语句边界检查。
+    """
+
+    def setUp(self):
+        self.dv = WP._load_ddl_verify()
+
+    def test_split_ignores_semicolon_in_string_and_comment(self):
+        sql = ("CREATE TABLE T (A STRING COMMENT 'x; --y') -- 行注释 ;\n"
+               ";\nCREATE TABLE U (B STRING);\n")
+        st = self.dv.split_statements(sql)
+        self.assertEqual(len(st), 2, st)
+        self.assertIn("'x; --y'", st[0])
+
+    def test_lint_flags_drop_create_glued(self):
+        bad = ("DROP TABLE IF EXISTS DWSXDAY.T \n"
+               "CREATE TABLE DWSXDAY.T (A STRING);\n")
+        probs = self.dv.lint_statements(bad)
+        self.assertEqual(len(probs), 1, probs)
+        self.assertIn('DROP 与 CREATE', probs[0])
+
+    def test_lint_flags_two_creates_glued(self):
+        bad = "CREATE TABLE T (A STRING)\nCREATE TABLE U (B STRING);\n"
+        probs = self.dv.lint_statements(bad)
+        self.assertTrue(any('2 个 CREATE' in p for p in probs), probs)
+
+    def test_lint_flags_standalone_drop(self):
+        bad = "DROP TABLE IF EXISTS DWSXDAY.T;\n"
+        probs = self.dv.lint_statements(bad)
+        self.assertTrue(any('残留独立 DROP' in p for p in probs), probs)
+
+    def test_lint_clean_ddl_passes(self):
+        good = ("-- 来源: 甲方\nCREATE TABLE T (A STRING COMMENT 'x; --y')\n"
+                "PARTITIONED BY ( P_DT STRING)\n;\n")
+        self.assertEqual(self.dv.lint_statements(good), [])
+
+    def test_parse_jf_ddl_strips_semicolonless_drop(self):
+        src = ("DROP TABLE IF EXISTS DWSXDAY.T \n"
+               "CREATE TABLE DWSXDAY.T (A STRING);\n")
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / 'jf.sql'
+            p.write_text(src, encoding='utf-8')
+            stmts = WP.parse_jf_ddl(p)
+        self.assertIn('T', stmts)
+        self.assertNotIn('DROP', stmts['T'].upper())
+        self.assertEqual(self.dv.lint_statements(stmts['T']), [])
+
+
 if __name__ == '__main__':
     unittest.main()

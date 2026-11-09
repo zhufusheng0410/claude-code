@@ -364,6 +364,11 @@ def _sh_repair():
     return _core_module(SH_REPAIR)
 
 
+def _dwd_sanitize_mod():
+    """`tools/core/ddl_sanitize.py` **模块对象**（需要 sanitize_ddl 之外的函数时用）。"""
+    return _core_module(REPO / "tools/core/ddl_sanitize.py")
+
+
 def _dwd_sanitize():
     """`tools/core/ddl_sanitize.py::sanitize_ddl`（单一来源，避免两处正则漂移）。
 
@@ -371,7 +376,7 @@ def _dwd_sanitize():
       这一个函数 ⇒ 缺 openpyxl 时 `ddl --layers DWS` 直接 ModuleNotFoundError。
       指向独立小模块（只依赖 re）。
     """
-    return _core_module(REPO / "tools/core/ddl_sanitize.py").sanitize_ddl
+    return _dwd_sanitize_mod().sanitize_ddl
 
 
 def dws_table_sys_map():
@@ -394,6 +399,13 @@ def dws_table_sys_map():
     return m
 
 
+# 甲方 DDL 里 `DROP TABLE IF EXISTS` 与 `CREATE TABLE` 之间**可能没有分号**
+# （实测 `02-DWS建表脚本.sql:1212` 的 `DWS_TRAN_FUTR_TRAN_DETAIL_PTD`）。
+# 按 `;` + 换行切块后，该表所在 chunk 就成了
+#   `DROP TABLE IF EXISTS X \nCREATE TABLE X (...);`
+# 只认「DROP 行以 `;` 结尾」的剥法（`ddl_sanitize.strip_drop_stmts` 之前的版本）
+# 会整条漏剥 ⇒ DROP 留在 CREATE 前面，落盘的 `ddl/*.sql` 与 `01_ddl.sql`
+# 一上 beeline 就 ParseException，而 `diff_ddl` 只看列/分区/注释、**看不出来**。
 def parse_jf_ddl(path):
     """解析甲方建表 sql → {表名大写: 已清洗的 CREATE 语句}（含 DROP 已剥离）。
 
@@ -401,6 +413,8 @@ def parse_jf_ddl(path):
       同样的「按 `;` 切分 → 抓 CREATE TABLE 表名 → 去单行 DROP → sanitize」。
       两份副本必然漂移（改一处忘另一处 ⇒ 落盘与校验用不同规则，校验就此失去意义）。
       抽成单一实现，两边共用。
+    ★ 2026-11-09（评审 A1）：剥 DROP 改用 `strip_drop_stmts`，**不再要求 DROP 行
+      自带分号**。甲方偶发的不规范写法（见上方注释）此前会被漏剥。
     """
     sanitize = _dwd_sanitize()
     raw = path.read_text(encoding="utf-8", errors="replace")
@@ -410,8 +424,8 @@ def parse_jf_ddl(path):
                       r"([A-Za-z0-9_]+)", chunk, re.I)
         if not m:
             continue
-        # 只移除单行的 DROP TABLE IF EXISTS ...;（不跨行吃掉 CREATE TABLE）
-        body = re.sub(r"(?im)^\s*DROP\s+TABLE\s+IF\s+EXISTS\s+[^;\n]+;\s*$", "", chunk).strip()
+        # 只移除 DROP TABLE IF EXISTS（分号可有可无），中间留 CREATE TABLE
+        body = _dwd_sanitize_mod().strip_drop_stmts(chunk)
         stmts.setdefault(m.group(1).upper(), sanitize(body))
     return stmts
 
@@ -515,10 +529,17 @@ def _print_ddl_diff(diff, indent="    ", limit=5):
 
 
 def verify_ddl_after_write(layer: str, have: dict, stmts: dict, jf_source: Path):
-    """落盘后把本地 DDL 与甲方原文逐表对比，打印差异并返回非零退出码（如有差异）。"""
+    """落盘后把本地 DDL 与甲方原文逐表对比，打印差异并返回非零退出码（如有差异）。
+
+    ★ 2026-11-09（评审 A1）：并列做**语句边界 lint**（`core/ddl_verify.lint_statements`）。
+      `diff_ddl` 只比列/分区/注释，甲方「DROP 缺分号 + 紧跟 CREATE」这类写法会被
+      它判成「一致」而假绿；beeline 按 `;` 切分执行时却必然 ParseException。
+      语句边界是**执行层**属性，必须单独一道。
+    """
     verify = _load_ddl_verify()
     all_ok = True
     drift_items = []
+    lint_hits = []
     for table, sysname in have.items():
         local_path = SCRIPTS / sysname / f"{layer.lower()}/ddl/{table}.sql"
         if not local_path.is_file():
@@ -529,12 +550,17 @@ def verify_ddl_after_write(layer: str, have: dict, stmts: dict, jf_source: Path)
         jf_text = stmts[table] + ";"
         local_text = local_path.read_text(encoding="utf-8", errors="replace")
         diff = verify.diff_ddl(jf_text, local_text, "甲方", "本地")
+        probs = verify.lint_statements(local_text)
+        if probs:
+            all_ok = False
+            lint_hits.append((table, sysname, probs))
+            print(f"  ✗ {table} ({sysname}) 语句边界: {probs[0]}")
         if not diff.empty():
             all_ok = False
             drift_items.append((table, sysname, diff))
             print(f"  ✗ {table} ({sysname}) 差异: {diff.summary()}")
             _print_ddl_diff(diff)
-        else:
+        elif not probs:
             print(f"  ✓ {table} ({sysname}) 与甲方一致")
 
     if not all_ok:
@@ -562,6 +588,13 @@ def verify_ddl_after_write(layer: str, have: dict, stmts: dict, jf_source: Path)
                 lines.append("### 表注释不一致")
                 lines.append(f"- 甲方: `{diff.table_comment_mismatch[0]}`")
                 lines.append(f"- 本地: `{diff.table_comment_mismatch[1]}`")
+            lines.append("")
+        if lint_hits:
+            lines.append("## 语句边界问题（beeline 按 `;` 切分会 ParseException）")
+            lines.append("")
+            for table, sysname, probs in lint_hits:
+                for p in probs:
+                    lines.append(f"- **{table}** ({sysname}): {p}")
             lines.append("")
         report.write_text("\n".join(lines), encoding="utf-8")
         print(f"  差异报告: {report}")
@@ -645,23 +678,28 @@ def verify_ddl_vs_jf(layer, jf_source, limit=3):
         print(f"  ✗ 本地无 {layer} ddl/*.sql")
         return 0, -1
     verify = _load_ddl_verify()
-    checked, drift, extra = 0, 0, []
+    checked, drift, extra, lint_hits = 0, 0, [], 0
     for table, p in sorted(local.items()):
         if table not in stmts:
             extra.append(table)
             continue
         checked += 1
-        diff = verify.diff_ddl(stmts[table] + ";",
-                               p.read_text(encoding="utf-8", errors="replace"),
-                               "甲方", "本地")
-        if diff.empty():
-            continue
-        drift += 1
-        print(f"  ✗ {table} 差异: {diff.summary()}")
-        _print_ddl_diff(diff, limit=limit)
+        local_text = p.read_text(encoding="utf-8", errors="replace")
+        diff = verify.diff_ddl(stmts[table] + ";", local_text, "甲方", "本地")
+        probs = verify.lint_statements(local_text)
+        if probs:
+            lint_hits += 1
+            drift += 1
+            print(f"  ✗ {table} 语句边界: {probs[0]}")
+        if not diff.empty():
+            drift += 1
+            print(f"  ✗ {table} 差异: {diff.summary()}")
+            _print_ddl_diff(diff, limit=limit)
     if extra:
         shown = ", ".join(extra[:6]) + (" …" if len(extra) > 6 else "")
         print(f"  ⚠ 本地独有 {len(extra)} 张（甲方建表脚本无此表，跳过比对）: {shown}")
+    if lint_hits:
+        print(f"  ✗ 语句边界问题 {lint_hits} 张（beeline 按 `;` 切分会 ParseException）")
     return checked, drift
 
 
@@ -689,13 +727,17 @@ def cmd_verify_ddl(args):
             jf_text = stmts[table] + ";"
             local_text = local_path.read_text(encoding="utf-8", errors="replace")
             diff = verify.diff_ddl(jf_text, local_text, "甲方", "本地")
+            probs = verify.lint_statements(local_text)
+            if probs:
+                drift_count += 1
+                print(f"  ✗ {table} ({sysname}) 语句边界: {probs[0]}")
             if not diff.empty():
                 drift_count += 1
                 print(f"  ✗ {table} ({sysname}) 差异: {diff.summary()}")
                 _print_ddl_diff(diff, limit=3)
-            else:
+            elif not probs:
                 print(f"  ✓ {table} ({sysname}) 一致")
-        print(f"  校验完成：{len(have)} 张表，{drift_count} 张有差异")
+        print(f"  校验完成：{len(have)} 张表，{drift_count} 张有差异（含语句边界）")
         if drift_count and strict:
             rc = 1
     if "DWD" in layers:

@@ -329,5 +329,59 @@ class TestBreakCycles(unittest.TestCase):
         self.assertFalse(self._has_cycle(kept))
 
 
+class TestRunDwdEtlDepEdges(unittest.TestCase):
+    """`run-dwd-etl-direct.load_dep_edges` 必须同时读两类边（评审 C2 回归）。
+
+    ★ 实证：现役 `dep-config-proscript` 的 `cross_workflow` 有 161 条边、
+      `same_workflow_predecessors` 有 **47 条**。原实现只读第 1 类 ⇒ 47 条同流
+      上下游被整类丢弃。而该工具会先 DROP+CREATE 清空表，缺这 47 条约束会让
+      **28 对上下游反序**执行（下游先跑，读到的上游是刚清空的 0 行）。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # run-dwd-etl-direct 模块级加载 validate-dwd-syntax.py，后者 import 期就取
+        # Hive 口令（C5，后续单独修）⇒ 这里用临时假口令只为完成导入。
+        os.environ.setdefault("DS_HIVE_PASSWORD", "test-only-not-a-real-secret")
+        cls.mod = _load_module("run-dwd-etl-direct")
+
+    def _write_cfg(self, root, name, **doc):
+        p = pathlib.Path(root) / f"{name}.dep.json"
+        p.write_text(__import__("json").dumps(doc), encoding="utf-8")
+
+    def test_reads_both_edge_kinds(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._write_cfg(
+                td, "A",
+                target="DWDXDAY.DWD_T_A_PFD",
+                cross_workflow=[{"sources": [{"source": "DWDXDAY.DWD_T_B_PFD"}]}],
+                same_workflow_predecessors=[{"source": "DWDXDAY.DWD_T_C_PFD"}],
+            )
+            edges = self.mod.load_dep_edges(td, {"DWD_T_A_PFD", "DWD_T_B_PFD", "DWD_T_C_PFD"})
+        self.assertEqual(sorted(edges), [("DWD_T_B_PFD", "DWD_T_A_PFD"),
+                                         ("DWD_T_C_PFD", "DWD_T_A_PFD")])
+
+    def test_filters_outside_targets(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._write_cfg(
+                td, "A",
+                target="DWDXDAY.DWD_T_A_PFD",
+                cross_workflow=[{"sources": [{"source": "DWDXDAY.DWD_T_X_PFD"}]}],
+                same_workflow_predecessors=[{"source": "DWDXDAY.DWD_T_X_PFD"}],
+            )
+            self.assertEqual(self.mod.load_dep_edges(td, {"DWD_T_A_PFD"}), [])
+
+    def test_broken_json_is_skipped(self):
+        with tempfile.TemporaryDirectory() as td:
+            (pathlib.Path(td) / "bad.dep.json").write_text("{not json", encoding="utf-8")
+            self._write_cfg(
+                td, "A",
+                target="DWDXDAY.DWD_T_A_PFD",
+                same_workflow_predecessors=[{"source": "DWDXDAY.DWD_T_B_PFD"}],
+            )
+            self.assertEqual(self.mod.load_dep_edges(td, {"DWD_T_A_PFD", "DWD_T_B_PFD"}),
+                             [("DWD_T_B_PFD", "DWD_T_A_PFD")])
+
+
 if __name__ == "__main__":
     unittest.main()

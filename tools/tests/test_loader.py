@@ -62,8 +62,13 @@ class TestLoader(unittest.TestCase):
 
 
 class TestConfigPaths(unittest.TestCase):
-    def test_candidates_non_empty(self):
-        self.assertTrue(config._d_base_candidates(), "至少应有一个候选根目录")
+    def test_detect_d_base_returns_path_string(self):
+        # 行为级断言（不耦合内部候选列表实现）：
+        # 探测结果必须是可直接参与 os.path.join 的字符串。
+        base = config._detect_d_base()
+        self.assertIsInstance(base, str)
+        self.assertTrue(base)
+        self.assertTrue(os.path.join(base, "x"))
 
     def test_missing_inputs_returns_list(self):
         # 无论本机有没有 D 盘/交付文档，都必须返回 list（不能抛异常）。
@@ -71,6 +76,53 @@ class TestConfigPaths(unittest.TestCase):
 
     def test_project_base_is_absolute(self):
         self.assertTrue(os.path.isabs(config.PROJECT_BASE))
+
+
+class TestMissingInputsLayering(unittest.TestCase):
+    """`missing_inputs(layers)` 按层只查该层需要的目录（评审 A2 回归）。
+
+    ★ 原实现**无条件**检查 3 个目录 ⇒ `--layer ODS`（只需调研文档）在
+      「只交付了一半目录」的机器上被无关的 DWD/DWS MAPPING 目录拦住并 exit 1。
+    """
+
+    _ATTRS = ("PROJECT_BASE", "SURVEY_DIR", "DWD_MAPPING_BASE", "DWS_MAPPING_BASE")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        (root / "01-系统调研文档" / "O32").mkdir(parents=True)
+        self._saved = {a: getattr(config, a) for a in self._ATTRS}
+        config.PROJECT_BASE = str(root)
+        config.SURVEY_DIR = str(root / "01-系统调研文档")
+        config.DWD_MAPPING_BASE = str(root / "04-源与目标映射MAPPING/01-DWD")
+        config.DWS_MAPPING_BASE = str(root / "04-源与目标映射MAPPING/02-DWS")
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        for a, v in self._saved.items():
+            setattr(config, a, v)
+
+    def test_ods_ignores_mapping_dirs(self):
+        self.assertEqual(config.missing_inputs("ODS"), [])
+
+    def test_dwd_only_reports_dwd_mapping(self):
+        probs = config.missing_inputs("DWD")
+        self.assertEqual(len(probs), 1)
+        self.assertIn("DWD MAPPING", probs[0])
+
+    def test_dws_only_reports_dws_mapping(self):
+        probs = config.missing_inputs("DWS")
+        self.assertEqual(len(probs), 1)
+        self.assertIn("DWS MAPPING", probs[0])
+
+    def test_none_and_all_mean_everything(self):
+        self.assertEqual(len(config.missing_inputs()), 2)
+        self.assertEqual(len(config.missing_inputs("ALL")), 2)
+
+    def test_collection_form(self):
+        self.assertEqual(config.missing_inputs(["ODS", "DWS"]),
+                         config.missing_inputs("DWS"))
 
 
 if __name__ == "__main__":
