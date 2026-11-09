@@ -471,5 +471,30 @@ class TestValidateSyntaxLazyCreds(unittest.TestCase):
         self.assertIn("IMPORT-OK", r.stdout)
 
 
+class TestExternalDdlSupport(unittest.TestCase):
+    """2026-11-10 regression: `CREATE EXTERNAL TABLE` must be recognized."""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("DS_HIVE_PASSWORD", "test-only-not-a-real-secret")
+        cls.mod = _load_module("validate-dwd-syntax")
+
+    def test_re_create_matches_external(self):
+        m = self.mod.RE_CREATE.search(
+            "CREATE EXTERNAL TABLE  DWDXDAY.DWD_PROD_SFAC_NUM_MAPP_PFD (")
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group(1).upper(), "DWD_PROD_SFAC_NUM_MAPP_PFD")
+
+    def test_re_create_still_matches_plain_create(self):
+        m = self.mod.RE_CREATE.search("CREATE TABLE DWDXDAY.DWD_X_PFD (")
+        self.assertEqual(m.group(1).upper(), "DWD_X_PFD")
+
+    def test_re_external_flags_external_only(self):
+        ext = "CREATE EXTERNAL TABLE DWDXDAY.A (X STRING)"
+        plain = "CREATE TABLE DWDXDAY.B (X STRING)"
+        self.assertTrue(self.mod.RE_EXTERNAL.search(ext))
+        self.assertFalse(self.mod.RE_EXTERNAL.search(plain))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -76,7 +76,12 @@ def _hive_credentials():
     return hive_user(), hive_password()
 
 RE_CREATE = re.compile(
-    r"\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?DWDXDAY\s*\.\s*([A-Za-z0-9_]+)", re.I)
+    r"\bCREATE\s+(?:EXTERNAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"
+    r"DWDXDAY\s*\.\s*([A-Za-z0-9_]+)", re.I)
+# ★ 2026-11-10：主数据（scripts/MASTER）67 张 DDL 全是 `CREATE EXTERNAL TABLE`
+#   （甲方交付形态）。原 RE_CREATE 不认 EXTERNAL ⇒ load_ddls 整类漏收，
+#   沙箱缺这 11 张被引用的主数据表，ETL EXPLAIN 报 Table not found 假失败。
+RE_EXTERNAL = re.compile(r"\bCREATE\s+EXTERNAL\s+TABLE\b", re.I)
 RE_DWD_REF = re.compile(r"\bDWDXDAY\s*\.", re.I)
 RE_MARK = re.compile(r"__P__([A-Za-z0-9_]+)__")
 RE_ERR = re.compile(r"Error:\s*(.+)", re.I)
@@ -163,6 +168,10 @@ def load_ddls() -> list:
     ★ 2026-10-15：合并文件之外再兜底扫一轮 `*/dwd/ddl/*.sql` 单表文件——
       有的表没有 MAPPING 源、regen 不会进 01_ddl.sql（实测 `DWD_CMM_STD_DICT_CDVAL_MAP`
       这类映射表靠手工/集群落档），单表文件在就能被校验建进沙箱。按表名去重。
+    ★ 2026-11-10：顺带收 `CREATE EXTERNAL TABLE`（主数据 67 张的交付形态），
+      否则沙箱缺主数据表会让引用它们的 ETL 假报 Table not found。
+      ⚠ 真实重建（`--real` / `run-dwd-etl-direct`）**不**重建 EXTERNAL 表：
+      甲方 DDL 里没有 LOCATION，按默认路径重建有指向错误目录、读不到原数据的风险。
     """
     items, seen = [], set()
 

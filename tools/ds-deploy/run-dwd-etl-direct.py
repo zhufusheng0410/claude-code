@@ -350,6 +350,12 @@ def main():
     V.DATE_PREV = args.date
     ddls_all = V.load_ddls()
     ddls, n_tmp, partitioned = select_ddls(ddls_all)
+    # ★ 2026-11-10：**EXTERNAL 表不预建**。甲方交付的主数据 DDL 是
+    #   `CREATE EXTERNAL TABLE` 且不带 LOCATION；按 Hive 默认路径重建会把表
+    #   指向错误目录、读不到原数据。校验沙箱（validate-dwd-syntax）会建它们
+    #   （沙箱跑完即 DROP，无副作用），真实重建一律排除。
+    n_ext = sum(1 for _t, s in ddls if V.RE_EXTERNAL.search(s))
+    ddls = [(t, s) for t, s in ddls if not V.RE_EXTERNAL.search(s)]
     etls = V.load_etls(sandbox=None)          # 保持真实 DWDXDAY 目标
     sqls = {t: s for t, s in etls}
     etls = [(t, s) for t, s in etls if t not in EXCLUDE]
@@ -367,8 +373,9 @@ def main():
     for t in order:
         groups.setdefault(lvl[t], []).append(t)
 
-    log("DWD ETL %d 脚本（排除 %d 张指定表）/ DDL %d 张（另有 %d 张 TMP 不预建）/ date=%s"
-        % (len(etls), len(EXCLUDE), len(ddls), n_tmp, args.date))
+    log("DWD ETL %d 脚本（排除 %d 张指定表）/ DDL %d 张"
+        "（另 %d 张 TMP、%d 张 EXTERNAL 不预建）/ date=%s"
+        % (len(etls), len(EXCLUDE), len(ddls), n_tmp, n_ext, args.date))
     for lv in sorted(groups):
         log("  L%d: %s" % (lv, ", ".join(groups[lv])))
     if args.dry_run:

@@ -150,5 +150,154 @@ class TestBuildStmts(unittest.TestCase):
         self.assertEqual(len(CS._build_stmts(_Args(top=2))), 2)
 
 
+class TestPartitionWhere(unittest.TestCase):
+    """A7 回归：体检抽样的 count(*) 必须能带分区过滤。"""
+
+    META = {"part_keys": ["p_dt"], "parts": 3, "numrows": 1}
+
+    def test_no_partition_key_means_full_table(self):
+        self.assertEqual(CS._partition_where({"part_keys": [], "parts": 1}, "20261029"),
+                         ("", ""))
+        self.assertEqual(CS._partition_where(None, "20261029"), ("", ""))
+
+    def test_single_key_shorthand(self):
+        self.assertEqual(
+            CS._partition_where(self.META, "20261029"),
+            ("WHERE p_dt = '20261029'", ""))
+
+    def test_no_spec_reports_reason(self):
+        where, why = CS._partition_where(self.META, "")
+        self.assertEqual(where, "")
+        self.assertIn("扫全部分区", why)
+
+    def test_multi_key_accepts_explicit_and_filters_subset(self):
+        m = {"part_keys": ["p_dt", "region"], "parts": 3}
+        where, why = CS._partition_where(m, "p_dt=20261029,region=cn")
+        self.assertEqual(why, "")
+        self.assertIn("p_dt = '20261029'", where)
+        self.assertIn("region = 'cn'", where)
+
+    def test_multi_key_bare_value_is_refused(self):
+        m = {"part_keys": ["p_dt", "region"], "parts": 3}
+        where, why = CS._partition_where(m, "20261029")
+        self.assertEqual(where, "")
+        self.assertIn("需显式写成", why)
+
+    def test_unknown_key_is_refused(self):
+        where, why = CS._partition_where(self.META, "hour=1")
+        self.assertEqual(where, "")
+        self.assertIn("不在分区键", why)
+
+
+class TestProbePartitionFilter(unittest.TestCase):
+    """A7 回归：probe 抽样发出的 SQL 要带上分区过滤。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self._saved = (CS.scan_refs, CS.load_meta, CS._beeline,
+                       CS.dw_paths.REPORT_DIR)
+        CS.scan_refs = lambda rebuild=False: [{"tbl": "DWDXDAY.DWD_A", "refs": 9},
+                                              {"tbl": "DWDXDAY.DWD_B", "refs": 1}]
+        CS.load_meta = lambda: {
+            "dwdxday.dwd_a": {"part_keys": ["p_dt"], "parts": 2, "numrows": 0},
+            "dwdxday.dwd_b": {"part_keys": [], "parts": 0, "numrows": 0}}
+        CS.dw_paths.REPORT_DIR = self.tmp.name
+        self.sql = []
+
+        def fake(sql, timeout=300):
+            self.sql.append(sql)
+            return True, "12\n"
+
+        CS._beeline = fake
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        (CS.scan_refs, CS.load_meta, CS._beeline,
+         CS.dw_paths.REPORT_DIR) = self._saved
+
+    def _probe(self, partition):
+        return CS.cmd_probe(_Args(top=0, sample=2, partition=partition,
+                                  verbose=False, rebuild=False))
+
+    def test_partition_predicate_is_applied(self):
+        self.assertEqual(self._probe("20261029"), 0)
+        blob = "\n".join(self.sql)
+        self.assertIn("from dwdxday.dwd_a where p_dt = '20261029'", blob.lower())
+        self.assertIn("from dwdxday.dwd_b", blob.lower())
+        self.assertNotIn("dwd_a where p_dt", blob.lower().replace(
+            "from dwdxday.dwd_a where p_dt = '20261029'", ""))
+
+    def test_without_partition_counts_whole_table(self):
+        self.assertEqual(self._probe(""), 0)
+        self.assertIn("select count(*) from dwdxday.dwd_a",
+                      "\n".join(self.sql).lower())
+
+
+class TestRunResume(unittest.TestCase):
+    """A6 回归：run 断点续跑 + 逐条落盘。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self._saved = CS.dw_paths.REPORT_DIR
+        CS.dw_paths.REPORT_DIR = self.tmp.name
+        self.addCleanup(self._restore)
+        self._saved_beeline = CS._beeline
+        self.addCleanup(setattr, CS, "_beeline", self._saved_beeline)
+
+    def _restore(self):
+        CS.dw_paths.REPORT_DIR = self._saved
+
+    def _stmt(self, name):
+        return (name, f"ANALYZE TABLE dwdxday.{name.lower()} COMPUTE STATISTICS")
+
+    def test_previous_ok_runs_are_skipped(self):
+        stmts = [self._stmt("DWD_A"), self._stmt("DWD_B")]
+        import json as _json
+        (pathlib.Path(self.tmp.name) / "cbo_run_20261109-000000.json").write_text(
+            _json.dumps([{"tbl": "DWD_A", "sql": stmts[0][1], "ok": True}]),
+            encoding="utf-8")
+        self.assertEqual(CS._load_done(stmts), {"DWD_A"})
+
+    def test_failed_rows_are_not_remembered(self):
+        stmts = [self._stmt("DWD_A")]
+        import json as _json
+        (pathlib.Path(self.tmp.name) / "cbo_run_20261109-000000.json").write_text(
+            _json.dumps([{"tbl": "DWD_A", "sql": stmts[0][1], "ok": False}]),
+            encoding="utf-8")
+        self.assertEqual(CS._load_done(stmts), set())
+
+    def test_broken_log_is_ignored(self):
+        stmts = [self._stmt("DWD_A")]
+        (pathlib.Path(self.tmp.name) / "cbo_run_20261109-000000.json").write_text(
+            "{broken", encoding="utf-8")
+        self.assertEqual(CS._load_done(stmts), set())
+
+    def test_run_writes_valid_json_incrementally(self):
+        """Ctrl-C 场景：已完成的行必须已落盘，且文件仍是合法 JSON。"""
+        import json as _json
+        seen = []
+
+        def fake(sql, timeout=1800):
+            seen.append(sql)
+            if len(seen) == 2:
+                raise KeyboardInterrupt
+            return True, ""
+
+        CS._beeline = fake
+        args = _Args(partition="", with_columns=False, min_refs=1, top=0,
+                     dry_run=False, keep_going=True, timeout=1800,
+                     rebuild=False, verbose=False)
+        CS._build_stmts = lambda _a: [self._stmt("DWD_A"), self._stmt("DWD_B"),
+                                      self._stmt("DWD_C")]
+        with self.assertRaises(KeyboardInterrupt):
+            CS.cmd_run(args)
+        logs = list(pathlib.Path(self.tmp.name).glob("cbo_run_*.json"))
+        self.assertEqual(len(logs), 1)
+        rows = _json.loads(logs[0].read_text(encoding="utf-8"))
+        self.assertEqual([r["tbl"] for r in rows], ["DWD_A"])
+
+
 if __name__ == "__main__":
     unittest.main()
