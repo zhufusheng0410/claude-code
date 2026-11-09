@@ -634,6 +634,79 @@ sanitize_ddl = _load_shared_sanitize()
 strip_drop_stmts = _load_shared_strip_drop()
 
 
+def _load_ddl_verify():
+    """`tools/core/ddl_verify.py`（DDL 结构比对 + 语句边界 lint，与 DWS 共用）。"""
+    return _load_file(Path(__file__).resolve().parent / 'core' / 'ddl_verify.py',
+                      '_ddl_verify')
+
+
+def verify_ddl_after_write(have: dict, stmts: dict) -> list:
+    """DWD DDL 落盘后自检：逐表与甲方原文比对 + 语句边界 lint。
+
+    ★ 2026-11-09（评审 A8）：DWD 侧原先**没有落盘自检**——DWS 有、DWD 没有，
+      同一个仓库两套标准。`ddl --apply` 写坏文件（剥 DROP 漏掉、清洗改错列、
+      旧文件没被覆盖）只能靠事后 `verify-ddl` 或上 beeline 才发现。
+      这里改为与 DWS 同一套 `diff_ddl` + `lint_statements`。
+
+    返回问题列表（空 = 全部一致）；每项为 `{table, sysname, diff, probs}`。
+    """
+    verify = _load_ddl_verify()
+    out = []
+    for table, (sysname, _s) in have.items():
+        local = ddl_dir(sysname) / f'{table}.sql'
+        if not local.is_file():
+            out.append({'table': table, 'sysname': sysname, 'diff': None,
+                        'probs': ['本地文件不存在']})
+            continue
+        text = local.read_text(encoding='utf-8', errors='replace')
+        diff = verify.diff_ddl(stmts[table] + ';', text, '甲方', '本地')
+        probs = verify.lint_statements(text)
+        if probs or not diff.empty():
+            out.append({'table': table, 'sysname': sysname, 'diff': diff,
+                        'probs': probs})
+    return out
+
+
+def _report_dwd_ddl_drift(bad: list):
+    """把 DWD 落盘自检的问题写成 Markdown（与 DWS 的 ddl-drift 报告同目录）。"""
+    ts = time.strftime('%Y%m%d-%H%M%S')
+    report = REPO / 'tools/.dx-tmp' / f'ddl-drift-dwd-{ts}.md'
+    report.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f'# DWD DDL 落盘自检报告 ({ts})', '', f'来源: {JF_DDL}', '']
+    for item in bad:
+        t, s, diff, probs = item['table'], item['sysname'], item['diff'], item['probs']
+        lines.append(f'## {t} ({s})')
+        if diff is not None:
+            lines.append(f'- 摘要: {diff.summary()}')
+            if diff.type_mismatch:
+                lines.append('### 类型不一致')
+                for col, lt, rt in diff.type_mismatch:
+                    lines.append(f'- {col}: 甲方 `{lt}` / 本地 `{rt}`')
+            if diff.comment_mismatch:
+                lines.append('### 注释不一致')
+                for col, lc, rc in diff.comment_mismatch:
+                    lines.append(f'- {col}: 甲方 `{lc}` / 本地 `{rc}`')
+            if diff.partition_mismatch:
+                lines.append('### 分区不一致')
+                lines.append(f'- 甲方: {[(c.name, c.type) for c in diff.left_partitions]}')
+                lines.append(f'- 本地: {[(c.name, c.type) for c in diff.right_partitions]}')
+            if diff.table_comment_mismatch:
+                lines.append('### 表注释不一致')
+                lines.append(f'- 甲方: `{diff.table_comment_mismatch[0]}`')
+                lines.append(f'- 本地: `{diff.table_comment_mismatch[1]}`')
+            if diff.only_in_left:
+                lines.append(f'- 仅甲方有列: {", ".join(diff.only_in_left)}')
+            if diff.only_in_right:
+                lines.append(f'- 仅本地有列: {", ".join(diff.only_in_right)}')
+        if probs:
+            lines.append('### 语句边界')
+            for p in probs:
+                lines.append(f'- {p}')
+        lines.append('')
+    report.write_text('\n'.join(lines), encoding='utf-8')
+    print(f'  差异报告: {report}')
+
+
 def parse_jf_ddl():
     """甲方 01-DWD建表脚本.sql → {表名大写: 该表 CREATE 语句原文}。
 
@@ -654,7 +727,9 @@ def parse_jf_ddl():
 
 
 def cmd_ddl(args):
-    if not any(etl_dir(s).is_dir() for s in SYS):
+    # ★ 2026-11-09（评审 C3）：主数据也有 DWD 脚本（scripts/MASTER/dwd/02_etl），
+    #   只查 SYS 会让「只有主数据」的环境被误判成没有脚本。
+    if not any(etl_dir(s).is_dir() for s in GROUPS):
         sys.exit('缺 scripts/{系统}/dwd/02_etl ⇒ 先跑 dwd-pipeline.py convert --apply')
     data = load_owner(write=args.apply)
     assign = resolved_assign(data, args.force_sys)
@@ -717,6 +792,22 @@ def cmd_ddl(args):
             shutil.copy2(main_sql, top / f'DWD_{s}_建表语句.sql')
     print(f'  DDL 已落地 {SCRIPTS}/{{系统}}/dwd/ddl、01_ddl.sql 和 {top}')
     print('备份:', bak)
+
+    # ★ A8（2026-11-09 评审）：落盘后与甲方逐表自检（结构 + 语句边界）。
+    san = {t: sanitize_ddl(jf[t]) for t in have}
+    bad = verify_ddl_after_write(have, san)
+    if bad:
+        for item in bad:
+            msg = (item['probs'][0] if item['probs']
+                   else item['diff'].summary())
+            print(f"  ✗ {item['table']} ({item['sysname']}): {msg}")
+        _report_dwd_ddl_drift(bad)
+        if not getattr(args, 'no_strict', False):
+            print('  ✗ DWD DDL 落盘自检发现差异（已阻断）。加 --no-strict 可忽略继续。')
+            return 1
+        print('  ⚠ DWD DDL 落盘自检发现差异（--no-strict：仅告警，不阻断）')
+    else:
+        print(f'  ✓ 落盘自检：{len(have)} 张与甲方一致（含语句边界）')
     return 0
 
 
@@ -2050,6 +2141,9 @@ def main():
         p = sub.add_parser(name, help=help_txt)
         if name != 'verify':
             p.add_argument('--apply', action='store_true', help='真正落盘（默认 dry-run）')
+        if name in ('ddl', 'all'):
+            p.add_argument('--no-strict', action='store_true',
+                           help='DDL 落盘自检发现差异时不阻断（默认阻断）')
         if name in ('owner', 'convert', 'distribute', 'ddl', 'lineage', 'all'):
             p.add_argument('--force-sys', default='', help='归属歧义时强制归到该系统')
         if name in ('depcfg', 'all'):

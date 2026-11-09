@@ -74,13 +74,15 @@ MEM_FLOOR_GIB = 1.6          # Tez AM 1.5G + 余量
 MEM_WAIT_MAX_MIN = 90        # 内存闸门最长等待
 EXEC_DATE_DEFAULT = "20261010"
 
-# 2 张指定排除表（编译即失败/含临时过程，真实执行无意义）。
-# ★ 2026-10-27（J-36）：SALE_FEER / WARN_HIS / TAIL 三张已通过逐条 EXPLAIN 并同步 DS 转正，
-#   从本排除表移除；占位白名单（DEFAULT_EMPTY）同步清空。
-EXCLUDE = {
-    "DWD_AST_BAL_INFO_PTM",
-    "DWD_AST_VOU_INFO_PTD",
-}
+# 指定排除表。
+# ★ 2026-11-09（评审 C4）：原集合 {DWD_AST_BAL_INFO_PTM, DWD_AST_VOU_INFO_PTD}
+#   已过期：
+#     · `DWD_AST_BAL_INFO_PTM` 根本不是 ETL 目标（只出现在注释里，排除是 no-op）；
+#     · `DWD_AST_VOU_INFO_PTD` 早已是现役作业（dep-config-proscript 有它、
+#       DS 上照常跑），本地重刷却把它排除 ⇒ 下游 DWS_PROD_SCR_PL_DETAIL_PTD
+#       读到空表。继续排除会让「本地重刷」与「DS 跑批」口径不一致。
+#   现在 109/109 全部真实脚本都参与；确实要跳过某张表请用 `--only` 显式指定。
+EXCLUDE = set()
 
 # ODS 前置抽样：防空转 ⇒ INSERT 0 行 的「假成功」
 ODS_PROBE = ("SELECT 'probe', COUNT(1) FROM ODS_XDAY_HSFA.ODS_HSFA_TACCOUNT_PFD "
@@ -260,11 +262,26 @@ def run_etls(order: list, groups: dict, sqls: dict, date: str, timeout: int,
     return [results[t] for t in order]
 
 
-def collect_counts(order: list, date: str, log, chunk: int = 20) -> dict:
-    """执行后批量回采每张表 P_DT=date 行数（0 行单独标注）。"""
-    log("── 行数回采（P_DT=%s） ──" % date)
-    stmts = ["SELECT '%s', COUNT(1) FROM DWDXDAY.%s WHERE P_DT = '%s';"
-             % (t, t, date) for t in order]
+def collect_counts(order: list, date: str, log, chunk: int = 20,
+                   partitioned: set = None) -> dict:
+    """执行后批量回采每张表行数（0 行单独标注）。
+
+    ★ 2026-11-09（评审 C4）：不能再对**所有**表都套 `WHERE P_DT = date`。
+      J-37 起有 6 张正式表按甲方 DDL **无 P_DT 分区**（CMM_PTCD_AREA_RELA /
+      PTY_CNTP_INFO / PTY_CUST_INFO / PTY_DELR_INFO / PTY_ORG_BASIC_INFO /
+      PTY_ORG_NUM_MAPP）。对它们执行 `WHERE P_DT=...` 会报
+      「Invalid table alias or column reference 'P_DT'」⇒ 这 6 张的行数永远
+      回采成 `?`，0 行告警也就永远不触发。
+      `partitioned` = 有 P_DT 的表名集合；None 表示沿用旧行为（全部按分区查）。
+    """
+    log("── 行数回采（分区表 P_DT=%s；无分区表全表计数） ──" % date)
+    stmts = []
+    for t in order:
+        if partitioned is None or t in partitioned:
+            stmts.append("SELECT '%s', COUNT(1) FROM DWDXDAY.%s WHERE P_DT = '%s';"
+                         % (t, t, date))
+        else:
+            stmts.append("SELECT '%s', COUNT(1) FROM DWDXDAY.%s;" % (t, t))
     counts = {}
     for i in range(0, len(stmts), chunk):
         sql = "\n".join(stmts[i:i + chunk])
@@ -281,6 +298,27 @@ def collect_counts(order: list, date: str, log, chunk: int = 20) -> dict:
             if m:
                 counts[m.group(1)] = int(m.group(2))
     return counts
+
+
+_PARTITIONED_RE = re.compile(r"\bPARTITIONED\s+BY\b", re.I)
+
+
+def select_ddls(ddls_all: list) -> tuple:
+    """把 `load_ddls()` 的结果拆成「可预建的正式表 DDL」与统计信息。
+
+    ★ 2026-11-09（评审 C4）：`*_TMP*` 一律不预建 —— 口径见 AGENTS.md：
+      tmp 表由主脚本内部 CREATE/DROP 自建自删，预建会与脚本内结构冲突。
+      `load_ddls()` 会把 ddl/ 下的 TMP 单表文件一起收进来（实测 30 张），
+      原实现直接全部 DROP+CREATE，等于把这条口径破掉了。
+
+    返回 `(ddls, n_tmp, partitioned)`：
+      · ddls        —— 非 TMP 的 [(表名, CREATE 语句)]
+      · n_tmp       —— 被滤掉的 TMP 张数
+      · partitioned —— 有 `PARTITIONED BY` 的表名集合（行数回采用）
+    """
+    ddls = [(t, s) for t, s in ddls_all if "_TMP" not in t.upper()]
+    partitioned = {t for t, s in ddls if _PARTITIONED_RE.search(s)}
+    return ddls, len(ddls_all) - len(ddls), partitioned
 
 
 def main():
@@ -310,7 +348,8 @@ def main():
     #   （validate 默认值是编译用的 20261011，在 ODS 无分区 ⇒ 会 INSERT 0 行假成功）。
     V.DATE = args.date
     V.DATE_PREV = args.date
-    ddls = V.load_ddls()
+    ddls_all = V.load_ddls()
+    ddls, n_tmp, partitioned = select_ddls(ddls_all)
     etls = V.load_etls(sandbox=None)          # 保持真实 DWDXDAY 目标
     sqls = {t: s for t, s in etls}
     etls = [(t, s) for t, s in etls if t not in EXCLUDE]
@@ -328,8 +367,8 @@ def main():
     for t in order:
         groups.setdefault(lvl[t], []).append(t)
 
-    log("DWD ETL %d 脚本（排除 %d 张指定表）/ DDL %d 张 / date=%s"
-        % (len(etls), len(EXCLUDE), len(ddls), args.date))
+    log("DWD ETL %d 脚本（排除 %d 张指定表）/ DDL %d 张（另有 %d 张 TMP 不预建）/ date=%s"
+        % (len(etls), len(EXCLUDE), len(ddls), n_tmp, args.date))
     for lv in sorted(groups):
         log("  L%d: %s" % (lv, ", ".join(groups[lv])))
     if args.dry_run:
@@ -358,7 +397,8 @@ def main():
     results = run_etls(order, groups, sqls, args.date, args.timeout,
                        args.exec_par, args.mem_floor, log)
 
-    counts = {} if args.no_count else collect_counts(order, args.date, log)
+    counts = ({} if args.no_count
+              else collect_counts(order, args.date, log, partitioned=partitioned))
 
     okc = sum(1 for r in results if r["ok"])
     fail = [r for r in results if not r["ok"]]

@@ -74,7 +74,10 @@ def scan():
     #   例：HSZTA 的 DWS_PROD_HOLD_DETAIL_PTD 读 HSFA 的 DWD_CMM_CALENDAR_INFO_PFD，
     #   这是跨系统边，但该表没有 DWS 脚本 ⇒ 只看 all_stems 会判成"不是跨组"。
     dwd_stems = {}
-    for s in SYS:
+    # ★ 2026-11-09（评审 C3）：必须用 GROUPS（含「主数据」）。DWS 有 47 条边指向
+    #   scripts/MASTER/dwd 下的主数据表；只扫 SYS 会让这些边 up_sys='-'、cross=False，
+    #   「跨组依赖」整页漏报它们。
+    for s in P.GROUPS:
         d = P.etl_dir(s)
         if d.is_dir():
             for p in d.glob('*.sh'):
@@ -316,8 +319,8 @@ def build(edges, selfrefs, conds, meta, defect_rows, old):
                f'（读自己昨天的分区做累积，配依赖即自环 ⇒ 只能靠 DS 业务日期推进）'])
     ws.append([f'· 含前一日但同表也有当天读（依赖必须保留）{len(mixed)} 条'])
     ws.append([f'· P_BATCH_DT 变体（与 p_end_dt 同值但不在本口径内，只报不删）{len(alike)} 条'])
-    ws.append([f'· 缺陷 {len(defect_rows)} 项（见「问题清单」页）——DWS 尚未启用过，'
-               f'所以都是潜在缺陷而非线上故障；'
+    ws.append([f'· 缺陷 {len(defect_rows)} 项（见「问题清单」页，登记式：'
+               f'status 按当前脚本扫描动态判定）；'
                f'其中已修复 {sum(1 for d in defect_rows if str(d.get("status","")).startswith("已修复"))} 项、'
                f'未修复 {sum(1 for d in defect_rows if d.get("status","") == "未修复")} 项'])
     ws.append([])
@@ -513,17 +516,15 @@ def build(edges, selfrefs, conds, meta, defect_rows, old):
         ['前一日惯用式', P.PREV_IDIOM_DOC],
         ['分区口径依据', 'DS 全局参数 p_start_dt = p_end_dt = ${system.biz.date}'
                          '（批次日 = 运行日-1）'],
-        ['DWS 检索结论', f'{len(edges)} 条边中 0 条满足「只读前一日 ⇒ 不配依赖」；'
+        ['DWS 检索结论', f'{len(edges)} 条边中 {len(drop)} 条满足「只读前一日 ⇒ 不配依赖」；'
                          f'自引用前一日读 {len(selfprev)} 个脚本；'
                          f'含前一日也有当天读 {len(mixed)} 条（依赖必须保留）'],
         ['与 DWD 的差别', 'DWS 存在跨系统边（HSZTA 读 HSFA），DS 上必须跨工作流配依赖'],
         ['配置表口径', '配置类上游表无作业，不计入无同名作业缺口'],
         ['历史页说明', '字段级血缘 / 执行顺序 / 临时表 / 血缘对照 / 排除脚本 / 语法校验 / '
                        '运行结果 为 2026-10-21 版原样保留，本脚本不重算'],
-        ['注意', 'DWS 三个工作流在 DS 上**从未运行过**（实例数 0），'
-                 '故「问题清单」的缺陷均为潜在缺陷而非线上故障；'
-                 '2026-10-24 已按用户要求修复 ①②③（见「问题清单」页的修复状态列），'
-                 '修复后 DWS 仍待首次实跑验证'],
+        ['注意', '「问题清单」是登记式的：缺陷记录始终保留，status 按当前脚本扫描动态判定，'
+                 '已修复项也保留以便追溯；缺陷均来自静态检索，是否已实跑验证以「运行结果」页为准'],
     ]:
         ws11.append(kv)
     _style_header(ws11, (20, 116), wrap_from=2)

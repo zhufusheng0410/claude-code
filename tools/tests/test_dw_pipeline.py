@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """tools/dw-pipeline.py 纯函数回归测试（不触碰 /mnt/d 与 DS）。"""
 import argparse
+import contextlib
 import importlib.util
+import io
 import shutil
 import tempfile
 import unittest
@@ -196,22 +198,29 @@ class TestDwsTableSysMap(unittest.TestCase):
 
 
 class TestDwdDdlCmd(unittest.TestCase):
-    """DWD DDL 子命令参数：`--no-strict` 绝不能转发。
+    """DWD DDL 子命令参数透传。
 
-    ★ 回归点（2026-11-08）：`dwd-pipeline.py ddl` 没有 `--no-strict` 开关，
-      早先 `dw-pipeline.py ddl/all --layers DWD --no-strict` 会把它转发过去，
-      子进程 argparse 报 `unrecognized arguments`，整条管线在 DDL 步中断。
+    ★ 历史：2026-11-08 `dwd-pipeline.py ddl` 没有 `--no-strict` 开关，
+      早先无条件转发 ⇒ 子进程 argparse 报 `unrecognized arguments`。
+    ★ 2026-11-09（A8）：DWD 侧也加了落盘自检，开关成为合法参数，
+      但仍只在**显式传入**时转发，避免无谓参数污染。
     """
 
-    def test_no_strict_not_forwarded(self):
+    def test_no_strict_forwarded_when_set(self):
         args = argparse.Namespace(apply=False, no_strict=True)
         cmd = WP._dwd_ddl_cmd(args)
-        self.assertNotIn('--no-strict', cmd)
-        self.assertEqual([str(x) for x in cmd], [str(WP.PY), str(WP.DWD_PIPE), 'ddl'])
+        self.assertIn('--no-strict', cmd)
+        self.assertEqual([str(x) for x in cmd],
+                         [str(WP.PY), str(WP.DWD_PIPE), 'ddl', '--no-strict'])
+
+    def test_no_strict_absent_when_not_set(self):
+        args = argparse.Namespace(apply=False, no_strict=False)
+        self.assertNotIn('--no-strict', WP._dwd_ddl_cmd(args))
 
     def test_apply_still_forwarded(self):
         args = argparse.Namespace(apply=True, no_strict=True)
-        self.assertEqual(WP._dwd_ddl_cmd(args)[-1], '--apply')
+        self.assertEqual(WP._dwd_ddl_cmd(args)[-1], '--no-strict')
+        self.assertIn('--apply', WP._dwd_ddl_cmd(args))
 
 
 class TestDdlStatementBoundary(unittest.TestCase):
@@ -265,6 +274,83 @@ class TestDdlStatementBoundary(unittest.TestCase):
         self.assertIn('T', stmts)
         self.assertNotIn('DROP', stmts['T'].upper())
         self.assertEqual(self.dv.lint_statements(stmts['T']), [])
+
+
+class TestDwdGroupDirs(unittest.TestCase):
+    """C3 回归：主数据必须映射到 scripts/MASTER，且 repair 要扫到它。
+
+    ★ 背景：C3 只把循环变量从 SYS 换成 GROUPS 还不够——路径仍按
+      `scripts/<组>/dwd/02_etl` 拼，`主数据` 目录根本不存在，扫不到就静默跳过。
+    """
+
+    def test_master_maps_to_master_dir(self):
+        self.assertEqual(WP.dwd_etl_dir('主数据'),
+                         WP.SCRIPTS / 'MASTER/dwd/02_etl')
+        self.assertEqual(WP.ddl_main('主数据'),
+                         WP.SCRIPTS / 'MASTER/dwd/01_ddl.sql')
+
+    def test_regular_system_path(self):
+        self.assertEqual(WP.dwd_etl_dir('O32'), WP.SCRIPTS / 'O32/dwd/02_etl')
+        self.assertEqual(WP.ddl_main('O32'), WP.SCRIPTS / 'O32/dwd/01_ddl.sql')
+
+    def test_repair_scans_master_scripts(self):
+        with tempfile.TemporaryDirectory() as td:
+            scripts = Path(td) / 'scripts'
+            master = scripts / 'MASTER' / 'dwd' / '02_etl'
+            master.mkdir(parents=True)
+            (master / 'X.sh').write_text(
+                '#!/bin/sh\n'
+                'inceptor_beeline "SELECT 1"\n'
+                'done\n'
+                'inceptor_beeline "SELECT 1"\n', encoding='utf-8')
+            saved = WP.SCRIPTS
+            WP.SCRIPTS = scripts
+            self.addCleanup(setattr, WP, 'SCRIPTS', saved)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = WP.cmd_repair(argparse.Namespace(layers='DWD', apply=False))
+            self.assertEqual(rc, 0)
+            self.assertIn('主数据/X.sh', out.getvalue())
+
+
+class TestCmdAllSteps(unittest.TestCase):
+    """A8 回归：`all` 的步骤编排。
+
+    ★ gen 模式的 DDL 来自生成器（与甲方不保证逐字节一致，如 6 张去分区表），
+      不能拿它去跑「与甲方比对」的 verify-ddl ⇒ 该步只在 jf 模式出现。
+    """
+
+    _NAMES = ("cmd_scripts", "cmd_ddl", "cmd_verify_ddl",
+              "cmd_lineage", "cmd_config", "cmd_verify")
+
+    def _run(self, source):
+        calls = []
+        saved = {n: getattr(WP, n) for n in self._NAMES}
+
+        def _restore():
+            for n, v in saved.items():
+                setattr(WP, n, v)
+
+        self.addCleanup(_restore)
+        for n in self._NAMES:
+            label = n[len("cmd_"):]
+            setattr(WP, n, (lambda lab: lambda args: calls.append(lab) or 0)(label))
+        args = argparse.Namespace(source=source, deploy=False, ds=False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = WP.cmd_all(args)
+        return rc, calls
+
+    def test_jf_mode_includes_verify_ddl(self):
+        rc, calls = self._run("jf")
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls,
+                         ["scripts", "ddl", "verify_ddl", "lineage", "config", "verify"])
+
+    def test_gen_mode_skips_verify_ddl(self):
+        rc, calls = self._run("gen")
+        self.assertEqual(rc, 0)
+        self.assertNotIn("verify_ddl", calls)
+        self.assertEqual(calls, ["scripts", "ddl", "lineage", "config", "verify"])
 
 
 if __name__ == '__main__':

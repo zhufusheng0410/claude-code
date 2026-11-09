@@ -67,8 +67,13 @@ JDBC = "jdbc:hive2://localhost:10000/default"
 #   ⚠ 已知残留风险：beeline 的 `-p` 会把口令放进 docker exec 的 argv，
 #   同机其他用户可用 `ps` 读到。彻底消除需改用 stdin 提示方式，
 #   但本脚本的 stdin 已被 SQL 占满（`docker exec -i`），二者无法共存。
-DS_USER = hive_user()
-DS_PWD = hive_password()
+# ★ 2026-11-09（评审 C5）：**不要**在 import 期调用 hive_user()/hive_password()。
+#   原先两条模块级赋值让 `--help` / `--dry-run` 都必须先配好 Hive 口令，
+#   否则直接抛 SecretMissingError —— 一个纯本地、不会连集群的入口被凭据拦住。
+#   改为在真正调 beeline 时才读。
+def _hive_credentials():
+    """beeline 凭据（调用时读取；未配置则抛 SecretMissingError）。"""
+    return hive_user(), hive_password()
 
 RE_CREATE = re.compile(
     r"\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?DWDXDAY\s*\.\s*([A-Za-z0-9_]+)", re.I)
@@ -245,8 +250,9 @@ def beeline(sql: str, timeout: int = 900, force: bool = False) -> tuple:
     （2026-10-11 教训：stdin 模式下 beeline 默认遇错继续，--force 与否都继续，
     所以「不加 force 就会停」不成立，只能靠输出段解析。）
     """
+    user, pwd = _hive_credentials()
     cmd = ["docker", "exec", "-i", "-e", "TERM=dumb", CONTAINER,
-           "beeline", "-u", JDBC, "-n", DS_USER, "-p", DS_PWD,
+           "beeline", "-u", JDBC, "-n", user, "-p", pwd,
            "--silent=true", "--outputformat=tsv2", "--showHeader=false",
            "--autoCommit=true"]
     if force:

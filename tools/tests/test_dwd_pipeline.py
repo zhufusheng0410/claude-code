@@ -136,5 +136,68 @@ class TestParseScriptInput(unittest.TestCase):
             self.assertEqual(DP._parse_script(str(p)), ([], []))
 
 
+class TestDwdDdlSelfCheck(unittest.TestCase):
+    """A8 回归：DWD DDL 落盘自检（结构比对 + 语句边界 + 差异报告）。
+
+    ★ 背景：DWS 侧早有 `verify_ddl_after_write` + `ddl-drift-*.md`，DWD 侧
+      原先没有 ⇒ `ddl --apply` 写坏文件只能等上 beeline 才发现。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self._saved = (DP.REPO, DP.SCRIPTS)
+        DP.REPO = self.root
+        DP.SCRIPTS = self.root / 'scripts'
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        DP.REPO, DP.SCRIPTS = self._saved
+
+    def _local(self, sysname, table, body):
+        d = DP.SCRIPTS / sysname / 'dwd' / 'ddl'
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f'{table}.sql').write_text(body, encoding='utf-8')
+
+    def test_column_drift_detected(self):
+        self._local('O32', 'DWD_T_PFD',
+                    "CREATE TABLE DWDXDAY.DWD_T_PFD (A STRING, C STRING)\n")
+        bad = DP.verify_ddl_after_write(
+            {'DWD_T_PFD': ('O32', 'x')},
+            {'DWD_T_PFD': "CREATE TABLE DWDXDAY.DWD_T_PFD (A STRING, B STRING)"})
+        self.assertEqual(len(bad), 1)
+        self.assertEqual(bad[0]['diff'].only_in_left, ['B'])
+        self.assertEqual(bad[0]['diff'].only_in_right, ['C'])
+
+    def test_clean_ddl_passes(self):
+        body = ("CREATE TABLE DWDXDAY.DWD_T_PFD (A STRING)\n"
+                "PARTITIONED BY ( P_DT STRING)\n;\n")
+        self._local('O32', 'DWD_T_PFD', body)
+        self.assertEqual(
+            DP.verify_ddl_after_write({'DWD_T_PFD': ('O32', 'x')},
+                                      {'DWD_T_PFD': body.rstrip(';\n')}),
+            [])
+
+    def test_missing_local_file_reported(self):
+        bad = DP.verify_ddl_after_write(
+            {'DWD_NOPE_PFD': ('O32', 'x')},
+            {'DWD_NOPE_PFD': 'CREATE TABLE DWDXDAY.DWD_NOPE_PFD (A STRING)'})
+        self.assertEqual(bad[0]['probs'], ['本地文件不存在'])
+
+    def test_report_writes_only_in_columns(self):
+        dv = DP._load_ddl_verify()
+        diff = dv.diff_ddl("CREATE TABLE DWDXDAY.T (A STRING, B STRING)",
+                           "CREATE TABLE DWDXDAY.T (A STRING, C STRING)",
+                           '甲方', '本地')
+        DP._report_dwd_ddl_drift([{'table': 'T', 'sysname': 'O32',
+                                   'diff': diff, 'probs': []}])
+        reports = list((self.root / 'tools/.dx-tmp').glob('ddl-drift-dwd-*.md'))
+        self.assertEqual(len(reports), 1)
+        text = reports[0].read_text(encoding='utf-8')
+        self.assertIn('仅甲方有列: B', text)
+        self.assertIn('仅本地有列: C', text)
+
+
 if __name__ == '__main__':
     unittest.main()

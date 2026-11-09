@@ -18,6 +18,7 @@ import importlib
 import importlib.util
 import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -381,6 +382,93 @@ class TestRunDwdEtlDepEdges(unittest.TestCase):
             )
             self.assertEqual(self.mod.load_dep_edges(td, {"DWD_T_A_PFD", "DWD_T_B_PFD"}),
                              [("DWD_T_B_PFD", "DWD_T_A_PFD")])
+
+
+class TestRunDwdEtlSelectDdls(unittest.TestCase):
+    """C4 回归：TMP 不预建 + 识别无分区表。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_module("run-dwd-etl-direct")
+
+    def test_tmp_is_filtered_out(self):
+        ddls = [
+            ("DWD_X_PFD", "CREATE TABLE X (A STRING) PARTITIONED BY (P_DT STRING)"),
+            ("DWD_X_PFD_TMP", "CREATE TABLE T (A STRING)"),
+            ("DWD_Y_PFD_TMP1", "CREATE TABLE T1 (A STRING)"),
+        ]
+        kept, n_tmp, partitioned = self.mod.select_ddls(ddls)
+        self.assertEqual([t for t, _ in kept], ["DWD_X_PFD"])
+        self.assertEqual(n_tmp, 2)
+        self.assertEqual(partitioned, {"DWD_X_PFD"})
+
+    def test_non_partitioned_detected(self):
+        ddls = [("A", "CREATE TABLE A (X STRING)"),
+                ("B", "CREATE TABLE B (X STRING)\nPARTITIONED BY ( P_DT STRING)")]
+        _kept, _n, partitioned = self.mod.select_ddls(ddls)
+        self.assertEqual(partitioned, {"B"})
+
+
+class TestCollectCounts(unittest.TestCase):
+    """C4 回归：无分区表不能套 `WHERE P_DT = ...`（J-37 后 6 张正式表无分区）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_module("run-dwd-etl-direct")
+
+    def setUp(self):
+        self._saved = self.mod.V.beeline
+        self.sql = []
+
+        def fake(sql, timeout=900):
+            self.sql.append(sql)
+            return 0, "", ""
+
+        self.mod.V.beeline = fake
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        self.mod.V.beeline = self._saved
+
+    def test_partitioned_and_plain_counts(self):
+        counts = self.mod.collect_counts(["DWD_P", "DWD_N"], "20261026",
+                                         lambda _s: None,
+                                         partitioned={"DWD_P"})
+        blob = "\n".join(self.sql)
+        self.assertIn("DWD_P WHERE P_DT = '20261026'", blob)
+        self.assertNotIn("DWD_N WHERE P_DT", blob)
+        self.assertIn("FROM DWDXDAY.DWD_N;", blob)
+        self.assertEqual(counts, {})
+
+    def test_default_keeps_old_behavior(self):
+        self.mod.collect_counts(["DWD_P"], "20261026", lambda _s: None)
+        self.assertIn("DWD_P WHERE P_DT = '20261026'", "\n".join(self.sql))
+
+
+class TestValidateSyntaxLazyCreds(unittest.TestCase):
+    """C5 回归：import 期不得读取 Hive 口令。
+
+    ★ 原实现 `DS_USER = hive_user()` / `DS_PWD = hive_password()` 在模块级执行
+      ⇒ 未配 `DS_HIVE_PASSWORD` 时连 `--help` 都抛 SecretMissingError。
+    """
+
+    def test_import_does_not_read_secrets(self):
+        code = (
+            "import sys, importlib.util\n"
+            f"sys.path.insert(0, {str(_DEPLOY)!r})\n"
+            "import ds_config\n"
+            "def boom(key): raise AssertionError('import-time secret read: ' + key)\n"
+            "ds_config.hive_user = boom\n"
+            "ds_config.hive_password = boom\n"
+            f"spec = importlib.util.spec_from_file_location('vld', {str(_DEPLOY / 'validate-dwd-syntax.py')!r})\n"
+            "m = importlib.util.module_from_spec(spec)\n"
+            "spec.loader.exec_module(m)\n"
+            "print('IMPORT-OK')\n"
+        )
+        r = subprocess.run([sys.executable, "-c", code],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("IMPORT-OK", r.stdout)
 
 
 if __name__ == "__main__":

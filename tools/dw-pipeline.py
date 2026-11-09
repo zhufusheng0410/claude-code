@@ -47,6 +47,10 @@ def _load_ddl_verify():
 
 SCRIPTS = REPO / "scripts"
 SYS = ("HSFA", "HSZTA", "O32")
+# ★ 2026-11-09（评审 C3）：DWD 侧还有主数据分组（脚本/DDL 落在 scripts/MASTER）。
+#   与 tools/dwd-pipeline.py 的 GROUPS 保持一致；gen 模式仍不写 MASTER，
+#   但「存在性检查 / 拼接副本修复」必须能看到它。
+GROUPS = SYS + ("主数据",)
 DWD_PIPE = REPO / "tools/dwd-pipeline.py"
 GEN_MAIN = REPO / "tools/main.py"
 DEPLOY_ALL = REPO / "tools/ds-deploy/ds-deploy-all-dwd.py"
@@ -122,18 +126,34 @@ def _ap(args):
 
 
 def _dwd_ddl_cmd(args):
-    """DWD DDL 子命令参数：只透传 `--apply`。
+    """DWD DDL 子命令参数：透传 `--apply` 与 `--no-strict`。
 
-    ★ 2026-11-08：`--no-strict` 只对 DWS 落盘自检有意义，`dwd-pipeline.py ddl`
-      并未声明该开关；早先无条件转发 ⇒ `ddl/all --layers DWD --no-strict`
-      在子进程 argparse 处直接失败（`all` 整条中断）。DWD 侧没有自检门，不转发。
+    ★ 2026-11-08：`dwd-pipeline.py ddl` 当时没有 `--no-strict` 开关，
+      无条件转发会在子进程 argparse 处失败（`all` 整条中断）。
+    ★ 2026-11-09（评审 A8）：DWD 现在也有落盘自检，`--no-strict` 成为合法参数，
+      因此改为**按需转发**（仅 args.no_strict 为真时）。
     """
-    return [PY, DWD_PIPE, "ddl"] + _ap(args)
+    cmd = [PY, DWD_PIPE, "ddl"] + _ap(args)
+    if getattr(args, "no_strict", False):
+        cmd.append("--no-strict")
+    return cmd
 
 
 def _dry(args):
     """`--dry-run` 透传：目标脚本默认会真跑，只有本层未加 --apply 时才拦。"""
     return [] if getattr(args, "apply", False) else ["--dry-run"]
+
+
+def dwd_etl_dir(sysname):
+    """DWD 脚本目录（主数据归 scripts/MASTER，不是 scripts/主数据）。"""
+    return (SCRIPTS / "MASTER/dwd/02_etl") if sysname == "主数据" \
+        else (SCRIPTS / sysname / "dwd/02_etl")
+
+
+def ddl_main(sysname):
+    """DWD 合并 DDL 路径（主数据归 scripts/MASTER/dwd/01_ddl.sql）。"""
+    return (SCRIPTS / "MASTER/dwd/01_ddl.sql") if sysname == "主数据" \
+        else (SCRIPTS / sysname / "dwd/01_ddl.sql")
 
 
 def run(cmd, capture=False, timeout=None):
@@ -588,6 +608,10 @@ def verify_ddl_after_write(layer: str, have: dict, stmts: dict, jf_source: Path)
                 lines.append("### 表注释不一致")
                 lines.append(f"- 甲方: `{diff.table_comment_mismatch[0]}`")
                 lines.append(f"- 本地: `{diff.table_comment_mismatch[1]}`")
+            if diff.only_in_left:
+                lines.append(f"- 仅甲方有列: {', '.join(diff.only_in_left)}")
+            if diff.only_in_right:
+                lines.append(f"- 仅本地有列: {', '.join(diff.only_in_right)}")
             lines.append("")
         if lint_hits:
             lines.append("## 语句边界问题（beeline 按 `;` 切分会 ParseException）")
@@ -623,8 +647,10 @@ def cmd_ddl(args):
         if args.source == "jf":
             rc |= run(_dwd_ddl_cmd(args))[0]
         else:
-            for s in SYS:
-                p = SCRIPTS / s / "dwd/01_ddl.sql"
+            # ★ 2026-11-09（评审 C3）：主数据 DDL（scripts/MASTER/dwd/01_ddl.sql）
+            #   也是交付物，gen 模式的存在性检查不能只看 SYS。
+            for s in GROUPS:
+                p = ddl_main(s)
                 print(f"  {s}: {'OK' if p.is_file() else '缺失'} {p}")
                 rc |= 0 if p.is_file() else 1
     if "DWS" in layers:
@@ -964,8 +990,12 @@ def cmd_repair(args):
         if layer not in layers:
             continue
         print(f"== 修复 {layer} 脚本（拼接副本） ==")
-        for s in SYS:
-            d = SCRIPTS / s / layer.lower() / "02_etl"
+        # ★ 2026-11-09（评审 C3）：DWD 主数据脚本也在 scripts/MASTER/dwd/02_etl，
+        #   只扫 SYS 会漏掉它们（DWS 只有三系统，保持 SYS）。
+        #   ★ 路径必须走 dwd-pipeline 的 etl_dir()：主数据目录是 scripts/MASTER，
+        #     不是 scripts/主数据。
+        for s in (GROUPS if layer == "DWD" else SYS):
+            d = dwd_etl_dir(s) if layer == "DWD" else SCRIPTS / s / "dws" / "02_etl"
             if not d.is_dir():
                 continue
             for p in sorted(d.glob("*.sh")):
@@ -1158,8 +1188,14 @@ def cmd_verify(args):
 
 def cmd_all(args):
     rc = 0
-    for name, fn in (("scripts", cmd_scripts), ("ddl", cmd_ddl),
-                     ("lineage", cmd_lineage), ("config", cmd_config)):
+    steps = [("scripts", cmd_scripts), ("ddl", cmd_ddl)]
+    # ★ 2026-11-09（评审 A8）：jf 模式落盘后立即与甲方逐表自检（结构+语句边界）。
+    #   gen 模式的 DDL 来自生成器，与甲方本就不保证逐字节一致（如 6 张去分区表），
+    #   拿它去比甲方只会误报 ⇒ 只在 jf 模式串这一步。
+    if args.source == "jf":
+        steps.append(("verify-ddl", cmd_verify_ddl))
+    steps += [("lineage", cmd_lineage), ("config", cmd_config)]
+    for name, fn in steps:
         print(f"\n===== {name} =====")
         r = fn(args)
         if r:
@@ -1224,7 +1260,7 @@ SUBCOMMANDS = {
                "拼接副本修复：只保留第 1 个 beeline 的完整 SQL"),
     "verify": (cmd_verify, ("layers", "ds", "strict"), "校验脚本/DDL/依赖配置"),
     "all": (cmd_all, ("layers", "source", "apply", "ds", "deploy", "gen_err", "raw", "no_strict", "strict"),
-            "串跑 scripts→ddl→lineage→config→(deploy)→verify"),
+            "串跑 scripts→ddl→verify-ddl→lineage→config→(deploy)→verify"),
 }
 
 
