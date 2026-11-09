@@ -79,10 +79,16 @@ def _build_table_cn_lookup(sheet_mappings) -> dict:
     return lookup
 
 
-def _resolve_upstream_tables(mr, sheet_mappings, sys_name: str = "") -> list[tuple[str, str]]:
+def _resolve_upstream_tables(mr, sheet_mappings, sys_name: str = "",
+                             table_cn_lookup: dict = None) -> list[tuple[str, str]]:
     """
     解析上游表名：优先用 src_table_name，若为子查询则从中提取所有真实表名。
     返回 [(表英文名, 表中文名), ...] 列表，支持子查询展开多个表。
+
+    ★ 2026-11-09（评审 C6）：`table_cn_lookup` 可由调用方按表预构建后传入。
+      原实现在**每个子查询字段**上重建一次整张 `sheet.mappings` 的索引
+      （一张表几百个字段就是几百次全表扫描）；不传时仍按旧行为自行构建，
+      保持对既有直接调用方的兼容。
     """
     src_table = mr.src_table_name or ""
     src_table_cn = mr.src_table_cn or ""
@@ -98,8 +104,9 @@ def _resolve_upstream_tables(mr, sheet_mappings, sys_name: str = "") -> list[tup
         src_table_cn = _global_cn(src_table) or src_table_cn
 
     if _is_subquery(src_table):
-        # 预构建真实表的中文名查找表
-        table_cn_lookup = _build_table_cn_lookup(sheet_mappings)
+        # 预构建真实表的中文名查找表（调用方已按表构建时直接复用）
+        if table_cn_lookup is None:
+            table_cn_lookup = _build_table_cn_lookup(sheet_mappings)
         # 从子查询提取所有真实表及行尾注释
         extracted = _extract_tables_from_subquery(src_table)
         if extracted:
@@ -115,13 +122,10 @@ def _resolve_upstream_tables(mr, sheet_mappings, sys_name: str = "") -> list[tup
                 results.append((table, table_cn))
             return results
 
-    # 非子查询，处理别名/真实表名反向
-    if _looks_like_alias(src_table) and _looks_like_real_table(src_table_cn):
-        src_table, src_table_cn = src_table_cn, src_table
-        # 使用全局映射获取中文名
-        src_table_cn = _global_cn(src_table) or src_table_cn
-
     # 非子查询，直接返回（若中文名为空则用全局映射补充）
+    # ★ 2026-11-09（评审 C6）：这里原有一段与第 101 行**完全相同**的
+    #   「别名/真实表名反向」交换，但第 101 行已交换过 ⇒ 条件恒为 False，
+    #   属死代码，删掉。
     if src_table:
         if not src_table_cn:
             src_table_cn = _global_cn(src_table)
@@ -146,12 +150,16 @@ def extract_lineage(sheets: list, layer: str, sys_name: str) -> list:
             continue
 
         # 收集上游表（去重），处理子查询
+        # ★ 2026-11-09（评审 C6）：中文名索引按**表**构建一次，供本表所有字段复用
+        #   （原实现每个子查询字段都重建一次整张 mappings 的索引）。
+        table_cn_lookup = _build_table_cn_lookup(sheet.mappings)
         upstream_tables = []
         seen_tables = set()
         for mr in sheet.mappings:
             if not mr.src_table_name:
                 continue
-            tables = _resolve_upstream_tables(mr, sheet.mappings, sys_name)
+            tables = _resolve_upstream_tables(mr, sheet.mappings, sys_name,
+                                              table_cn_lookup)
             for table_name, table_cn in tables:
                 if table_name and table_name not in seen_tables:
                     seen_tables.add(table_name)
@@ -161,7 +169,8 @@ def extract_lineage(sheets: list, layer: str, sys_name: str) -> list:
         for mr in sheet.mappings:
             if not mr.tgt_name or not mr.src_field_alias:
                 continue
-            tables = _resolve_upstream_tables(mr, sheet.mappings, sys_name)
+            tables = _resolve_upstream_tables(mr, sheet.mappings, sys_name,
+                                              table_cn_lookup)
             # 字段级血缘取第一个表（兼容性），或者可以展开
             src_table, src_table_cn = tables[0] if tables else ("", "")
             mappings.append({

@@ -36,13 +36,9 @@ if str(REPO) not in sys.path:
 from tools.core.loader import load as _load_file  # noqa: E402
 
 
-def _core_module(path):
-    return _load_file(path)
-
-
 def _load_ddl_verify():
     """`tools/core/ddl_verify.py`（DDL 结构对比）。"""
-    return _core_module(DDL_VERIFY)
+    return _load_file(DDL_VERIFY)
 
 
 SCRIPTS = REPO / "scripts"
@@ -381,12 +377,12 @@ def cmd_scripts(args):
 
 def _sh_repair():
     """`tools/core/sh_repair.py`（拼接副本修复）。"""
-    return _core_module(SH_REPAIR)
+    return _load_file(SH_REPAIR)
 
 
 def _dwd_sanitize_mod():
     """`tools/core/ddl_sanitize.py` **模块对象**（需要 sanitize_ddl 之外的函数时用）。"""
-    return _core_module(REPO / "tools/core/ddl_sanitize.py")
+    return _load_file(REPO / "tools/core/ddl_sanitize.py")
 
 
 def _dwd_sanitize():

@@ -46,11 +46,15 @@ def load(path, name=None):
 
     同一路径重复调用返回同一模块对象，**不会重复执行**。
     """
-    ap = os.path.abspath(str(path))
-    cached = _CACHE.get(ap)
+    # ★ 2026-11-09（评审 B3）：缓存键用 normcase(realpath)。
+    #   只用 abspath 时，Windows 下 `D:\a\X.py` 与 `d:\a\x.py`（大小写/短路径）
+    #   会被当成两个模块，各执行一次、模块级副作用翻倍。
+    key = os.path.normcase(os.path.realpath(str(path)))
+    cached = _CACHE.get(key)
     if cached is not None:
         return cached
 
+    ap = os.path.abspath(str(path))
     if not os.path.isfile(ap):
         raise ImportError("要加载的模块不存在: %s" % ap)
 
@@ -60,7 +64,18 @@ def load(path, name=None):
         raise ImportError("无法按路径加载模块: %s" % ap)
     mod = importlib.util.module_from_spec(spec)
     # 先注册再执行：允许模块内部出现循环引用（部分脚本会互相 import 同一批工具）。
-    sys.modules.setdefault(modname, mod)
-    spec.loader.exec_module(mod)
-    _CACHE[ap] = mod
+    # ★ 但**执行失败必须回滚**：原实现把半初始化对象永久留在 sys.modules 里，
+    #   调用方重试成功拿到的是另一个对象，`sys.modules[name] is mod` 为 False
+    #   ⇒ dataclasses / get_type_hints / pickle 会拿错模块（评审 B3 实测）。
+    prev = sys.modules.get(modname)
+    sys.modules[modname] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        if prev is not None:
+            sys.modules[modname] = prev
+        else:
+            sys.modules.pop(modname, None)
+        raise
+    _CACHE[key] = mod
     return mod

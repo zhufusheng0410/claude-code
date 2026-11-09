@@ -246,7 +246,7 @@ dw/
 │   │   └── ds-build-dws-dependent-from-lineage.py  # DWS 血缘→依赖配置
 │   ├── .dx-tmp/             # 运行报告等临时产物（gitignored）
 │   ├── .archive/            # 归档：退役脚本/历史调试/一次性排查产物（gitignored）
-│   └── tests/               # 单元测试（347 个用例）
+│   └── tests/               # 单元测试（`unittest discover` 自动发现）
 ├── demo/templates/          # ODS ETL Shell 模板
 │   └── etl_ods_template.sh
 ├── scripts/                 # 生成的脚本输出（gitignored）
@@ -435,18 +435,18 @@ python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
 |--------|------|
 | `scripts` | jf：DWD 调 `dwd-pipeline.py convert/distribute`；DWS 比对甲方 `02-DWS执行脚本` 与 `scripts/*/dws/02_etl`（现二者逐字节一致，比对仅防漂移；`--force-dws-raw` 等价空操作）。gen：`tools/main.py --layer DWD\|DWS` 生成到 `scripts/.dw-gen-*`，扫 `[ERROR` 失败即停；DWD 不碰 `scripts/MASTER` |
 | `ddl` | jf：DWD 调 `dwd-pipeline.py ddl`；DWS **从甲方 `01-建表语句/02-DWS建表脚本.sql` 搬移**（清洗 `DEFAULT NULL`/`VARCHAR2`，逐表落 `ddl/*.sql` 并重建 `01_ddl.sql`）。gen：只校验既有产物 |
-| `lineage` | DWD 调 `dwd-pipeline.py lineage`；DWS 校验 3 份 `DWS_lineage.xlsx`（表级 160 行） |
-| `config` | DWD → `dep-config-proscript`（112 表/10 工作流）；DWS → `dep-config-dws`（24 表/3 工作流），并刷新 `scripts/DWS_表中文名.json` |
+| `lineage` | DWD 调 `dwd-pipeline.py lineage`；DWS 校验 3 份 `DWS_lineage.xlsx`（表级血缘） |
+| `config` | DWD → `dep-config-proscript`（逐表 `.dep.json`，按主题分组）；DWS → `dep-config-dws`（24 表/3 工作流），并刷新 `scripts/DWS_表中文名.json` |
 | `delete` | 先删 `DWS_*` 再删 `DWD_*`；只删 DWD 时若 DWS 仍存在会拒绝 |
 | `deploy` | 预删 DWS → 删/建 DWD → 建 DWS（拓扑 `HSFA→O32→ZTA`）→ relayout |
 | `layout` | `ds-relayout.py dwd\|dws` |
 | `verify` | DWD 本地/`--ds` 来源审计；DWS 24 脚本、24 依赖配置、3 工作流 ONLINE、脚本逐字节一致 |
 | `all` | `scripts→ddl→lineage→config→verify`；加 `--deploy` 再串 `deploy` |
 
-- gen 模式：DWD 生成 87 个（当前 89 个非主数据脚本，差集为 `_INIT`/无 MAPPING 表，不自动删旧脚本）；
+- gen 模式：DWD 生成数量以生成器输出为准（`_INIT`/无 MAPPING 表不生成，不自动删旧脚本）；
   DWS 生成 24 个但 3 张表 MAPPING 有缺口，默认直接失败，需 `--allow-gen-errors` 才复制。
 - 部署基线（2026-10-20）：`DWS_HSFA/DWS_O32/DWS_ZTA` ONLINE，24 SHELL + 24 dep，
-  跨流依赖 26/78/28 条，布局交叉 0；DWD 10 工作流/112 表保持 ONLINE。
+  跨流依赖 26/78/28 条，布局交叉 0；DWD 各主题工作流保持 ONLINE（表数以 `dep-config-proscript` 为准）。
 
 ## 调研文档要求
 

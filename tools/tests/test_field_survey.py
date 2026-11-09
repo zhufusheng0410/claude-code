@@ -77,5 +77,45 @@ class TestFieldSurveyCalamineParity(TestParseFieldSurvey):
         self.assertTrue(pd.isna(f2.ordinal))
 
 
+class TestFieldSurveyTempFile(unittest.TestCase):
+    """C6 回归：autoFilter 修复产物必须落在临时目录，不污染甲方交付目录。"""
+
+    def setUp(self):
+        import tools.parser.field_survey as fs
+        self.fs = fs
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.path = os.path.join(self.tmp, "f.xlsx")
+        cols = ["源系统英文名", "表英文名", "表中文名", "字段英文名",
+                "字段中文名", "字段类型", "是否入ODS"]
+        rows = [["O32", "T1", "表1", "C1", "日期", "DATE", "是"]]
+        _write(self.path, cols, rows)
+
+        os.environ["DW_NO_CALAMINE"] = "1"
+        self.addCleanup(os.environ.pop, "DW_NO_CALAMINE", None)
+
+        real = pd.ExcelFile
+        self.seen = []
+
+        def fake(path, engine=None):
+            self.seen.append(path)
+            if os.path.abspath(path) == os.path.abspath(self.path):
+                raise ValueError("simulated autoFilter error")
+            return real(path, engine=engine)
+
+        self.addCleanup(setattr, fs.pd, "ExcelFile", real)
+        fs.pd.ExcelFile = fake
+
+    def test_no_dirty_file_next_to_source(self):
+        res = self.fs.parse_field_survey(self.path)
+        self.assertIn("T1", res)
+        self.assertEqual(len(self.seen), 2, self.seen)
+        # 第二次读取的是修复后的副本，必须位于临时目录而非源目录
+        self.assertNotEqual(os.path.dirname(os.path.abspath(self.seen[1])),
+                            os.path.abspath(self.tmp))
+        self.assertFalse(os.path.exists(self.path + ".fixed.xlsx"),
+                         "修复产物不得留在甲方交付目录")
+
+
 if __name__ == "__main__":
     unittest.main()

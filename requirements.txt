@@ -1,5 +1,5 @@
 # 数仓代码自动生成工具 — Python 依赖
-# Python >= 3.8
+# Python >= 3.9（pandas 2.2.x 的下限；pyproject.toml 的 requires-python 同口径）
 #
 # 版本锁定在 constraints.txt。下面这一行让 `pip install -r requirements.txt`
 # 与 CI 装出同一套依赖，不必再额外记 `-c`。

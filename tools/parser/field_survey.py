@@ -83,7 +83,10 @@ def _read_excel_safely(filepath: str) -> pd.DataFrame:
                                 f.write(content)
 
         # 重新打包为临时 Excel 文件
-        fixed_zip = filepath + '.fixed.xlsx'
+        # ★ 2026-11-09（评审 C6）：必须写进 tmp_dir，不能写源 Excel 同目录。
+        #   交付盘可能只读/无写权限；异常中断还会在甲方交付目录留下
+        #   `<原文件>.fixed.xlsx` 脏文件（tmp_dir 已在第 63 行现成建好）。
+        fixed_zip = os.path.join(tmp_dir, 'fixed.xlsx')
         with zipfile.ZipFile(fixed_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
             for root, dirs, files in os.walk(tmp_dir):
                 for file in files:

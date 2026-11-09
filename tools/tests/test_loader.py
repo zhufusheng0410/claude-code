@@ -16,6 +16,7 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from tools.core.loader import load  # noqa: E402
+import tools.core.loader as loader_mod  # noqa: E402
 import tools.config as config  # noqa: E402
 
 
@@ -23,6 +24,22 @@ class TestLoader(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        # ★ 2026-11-09（评审 B6）：测试必须还原全局状态。
+        #   原先 load() 会把 mod_a / a_b 永久塞进 sys.modules，`test_ds_load_...`
+        #   还会往 sys.path 插 ds-deploy 不还原 ⇒ 将来出现同名测试文件会互相污染。
+        self._saved_modules = set(sys.modules)
+        self._saved_path = list(sys.path)
+        self.addCleanup(self._restore_globals)
+
+    def _restore_globals(self):
+        for name in set(sys.modules) - self._saved_modules:
+            sys.modules.pop(name, None)
+        sys.path[:] = self._saved_path
+        # 缓存里指向本临时目录的条目也清掉（目录即将被删，留着只会让
+        # 「sys.modules 里没有但 load() 命中缓存」的不变量失效）。
+        tmp = os.path.normcase(os.path.realpath(self.tmp.name))
+        for key in [k for k in loader_mod._CACHE if k.startswith(tmp)]:
+            loader_mod._CACHE.pop(key, None)
 
     def _write(self, name, body):
         p = os.path.join(self.tmp.name, name)
@@ -59,6 +76,25 @@ class TestLoader(unittest.TestCase):
     def test_missing_file_raises(self):
         with self.assertRaises(ImportError):
             load(os.path.join(self.tmp.name, "nope.py"))
+
+    def test_failed_load_does_not_pollute_sys_modules(self):
+        """B3 回归：导入期抛异常后，sys.modules 不得残留半初始化对象。
+
+        ★ 原实现先 `setdefault` 再 exec ⇒ 失败后 `sys.modules['boom_mod']`
+          仍是那个半成品；修复后重试成功拿到的是另一个对象，
+          `sys.modules[name] is mod` 为 False（dataclasses/get_type_hints 会拿错）。
+        """
+        p = self._write("boom_mod.py", "raise RuntimeError('boom')\n")
+        with self.assertRaises(RuntimeError):
+            load(p)
+        self.assertNotIn("boom_mod", sys.modules,
+                         "失败的模块不能留在 sys.modules")
+
+        self._write("boom_mod.py", "OK = 1\n")
+        mod = load(p)
+        self.assertEqual(mod.OK, 1)
+        self.assertIs(sys.modules["boom_mod"], mod,
+                      "重试成功后 sys.modules 必须指向同一个模块对象")
 
 
 class TestConfigPaths(unittest.TestCase):

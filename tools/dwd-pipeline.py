@@ -141,8 +141,6 @@ EVT_CAST_FIX = {
         (r",'0'(\s+AS\s+EQUI_RATE)", r",CAST('0' AS DECIMAL(12,6))\1"),
     ],
 }
-STAT_KEYS = ('dedupe_head', 'safety', 'date_format3', 'sysdate', 'as_date',
-             'sets_dropped', 'scr_cast', 'partition', 'subt1', 'evt_cast')
 
 
 def _split_top(s):
@@ -243,8 +241,11 @@ def add_subquery_alias(sql):
 
 
 # --------------------------------------------------------------------------- #
-# 脚本转换：每个修复都是独立纯函数 (sql, table) -> (new_sql, count)
-# _TRANSFORMS 的顺序即语义，不可随意调整。
+# 脚本转换：_TRANSFORMS 里的每个函数都是 (sql, table) -> (new_sql, count)，
+# 顺序即语义，不可随意调整。
+# ★ 2026-11-09（评审 B2）：注释原先说「每个修复都是独立纯函数 (sql, table)」，
+#   与实际不符：_dedupe_shebang 只收 sql；_normalize_env / _normalize_beeline
+#   收 table 但不用，且返回的 count 被调用方丢弃（它们是格式归一，不计统计）。
 # --------------------------------------------------------------------------- #
 def _dedupe_shebang(sql):
     """甲方偶把两份脚本粘连；保留最后一个 shebang 起的正文。"""
@@ -350,6 +351,11 @@ _TRANSFORMS = (
     ('evt_cast', _evt_cast),
     ('subt1', _add_subquery_alias),
 )
+
+#: 统计键：`dedupe_head` 由 convert() 单独累加，其余全部由 _TRANSFORMS 派生。
+# ★ 2026-11-09（评审 B1）：原先两处手写清单，新增变换忘加 key 时
+#   `stats[key] += n` 会 KeyError（且 stats 只在 --apply 路径非 None，测试未必覆盖）。
+STAT_KEYS = ('dedupe_head',) + tuple(k for k, _ in _TRANSFORMS)
 
 
 def convert(raw, stats=None, table=''):
@@ -560,7 +566,8 @@ def cmd_convert(args):
     print(f'校准(空白归一化) 与 MASTER {len(master_shs)} 个: 一致 {ok} / 不一致 {len(bad)}')
     if bad:
         print('  不一致:', bad)
-        print('  注：MASTER 为主数据手工稿，历史漂移不影响 DWD 批次（DS 侧为占位）')
+        print('  注：MASTER 为主数据手工稿；2026-10-23 起 DS 侧跑真实脚本，'
+              '历史漂移需按 J-33 口径处置（--master-placeholder 可回滚占位）')
     if not args.apply:
         print('(dry-run，未落盘)')
     return 0
@@ -1580,6 +1587,9 @@ def cmd_lineage(args):
     ddl_counts = {g: len(list(ddl_dir(g).glob('*.sql'))) for g in GROUPS}
     n_sh = sum(sh_counts.values())
     n_ddl = sum(ddl_counts.values())
+    n_master = sh_counts.get('主数据', 0)
+    # 甲方 _INIT 脚本数（按交付目录实盘算，不写死快照）
+    n_init = sum(1 for p in JF.glob('*.txt') if '_INIT' in p.stem.upper())
     sh_breakdown = ' / '.join('%s %d' % (g, sh_counts[g]) for g in GROUPS)
     info_rows = [
         ['生成时间', time.strftime('%Y-%m-%d %H:%M:%S')],
@@ -1588,9 +1598,9 @@ def cmd_lineage(args):
         ['建表语句', 'scripts/{系统}/dwd/ddl 下 %d 张表 + 各系统 01_ddl.sql；汇总在 scripts/建表语句/' % n_ddl],
         ['依赖口径', '从脚本 INSERT 目标与 FROM/JOIN 源表解析；_TMP 不计入主依赖'],
         ['上游层级', '上游是 ODS 或 DWD 同层表；DWD 不依赖 DWS 层（实测 0 条）'],
-        ['主数据口径', 'scripts/MASTER/dwd/02_etl 的 23 个为主数据手工稿；2026-10-23 起随 DWD 批次跑真实脚本'],
+        ['主数据口径', 'scripts/MASTER/dwd/02_etl 的 %d 个为主数据手工稿；2026-10-23 起随 DWD 批次跑真实脚本' % n_master],
         ['甲方来源', '甲方 05-脚本/02-脚本/01-DWD执行脚本/*.txt 经 dwd-pipeline.py convert 转换（J-28 方言修复）'],
-        ['排除脚本', '甲方 3 个 _INIT 脚本按设计排除；DS 上重建 DWD 后 INIT 作业自动消失'],
+        ['排除脚本', '甲方 %d 个 _INIT 脚本按设计排除；DS 上重建 DWD 后 INIT 作业自动消失' % n_init],
         ['空脚本占位', '无（SALE_FEER / TAIL / WARN_HIS 三张已于 2026-10-27 通过逐条 EXPLAIN 转正，DS 配真实脚本）'],
         ['注意', 'DWD_CMM_CALENDAR_INFO_PFD 实际存在，不是 PUB 表；不要按旧结论替换'],
     ]
@@ -1610,7 +1620,8 @@ def cmd_lineage(args):
         [
             '本工作簿 = scripts/{系统}/dwd/02_etl 下 DWD 脚本的逻辑梳理结果（甲方 01-DWD执行脚本 转换而来）。',
             '「语法校验」= Shell bash -n + Hive DDL 沙箱建表 + Hive EXPLAIN 编译（不执行、不落数据）。',
-            '主数据（MASTER）组为主数据手工稿，与甲方 txt 存在历史漂移；DS 侧为占位，不参与 DWD 批次。',
+            '主数据（MASTER）组为主数据手工稿；2026-10-23 起随 DWD 批次执行真实脚本'
+            '（--master-placeholder 可回滚为占位）。',
             '上游表无同名脚本 = 该表由 ODS 层或中间层提供，不是缺脚本；详见「无同名脚本上游」页。',
             '★ 依赖口径（2026-10-23 用户指定）：脚本按【前一日分区】读取上游时，'
             '等的是上游**昨天**的实例，当日实例永远满足不了 ⇒ 不配置调度依赖，'
@@ -1621,7 +1632,7 @@ def cmd_lineage(args):
             '只有上式 DATE_SUB(...,1) 才是真正的前一日。'
             'P_BATCH_DT 变体与 p_end_dt 同值，但不在本口径内 ⇒ 只报不删，见 tools/_prev_day_deps.json '
             '的 prev_alike_pending。',
-            '甲方 3 个 _INIT 脚本按设计排除（重建 DWD 后 DS 上的 INIT 作业自动消失）。',
+            '甲方 %d 个 _INIT 脚本按设计排除（重建 DWD 后 DS 上的 INIT 作业自动消失）。' % n_init,
             '本工作簿只做 DWD 层分析；DWD 不依赖 DWS 层。',
         ])
 
