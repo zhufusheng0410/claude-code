@@ -1,0 +1,339 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""cbo-stats.py —— Hive CBO 统计信息补全工具
+
+背景
+----
+``hive.stats.autogather=false`` + ``hive.stats.column.autogather=false``，
+加上从未跑过 ANALYZE，导致 metastore 里几乎没有 numRows：
+  - 表级 numRows：1 条
+  - 分区级 numRows：0 条
+CBO 拿不到基数就只能按默认值猜，join 顺序 / map join 判定 / reducer 估算全部失真。
+
+本工具做三件事：
+  1. 从 ETL 脚本里抽取「实际被引用的表」，按引用频次排序（高频 = 先补）；
+  2. 区分分区表 / 非分区表，分区表按指定分区补（分区级统计才是查询真正用到的）；
+  3. 生成 SQL 或直接经 beeline 执行，支持 dry-run、断点续跑、结果落盘。
+
+★ 关键前提：ANALYZE 要扫描真实数据。**空表补统计毫无意义**（0 行本来就准），
+   执行前先用 ``--probe`` 看一遍数据量，确认仓库里真有数据再跑。
+
+用法
+----
+    # 1) 先体检：看看被引用的表里到底有没有数据
+    python cbo-stats.py probe --top 20
+
+    # 2) 只看要生成什么 SQL（不执行）
+    python cbo-stats.py gen --min-refs 10 --partition 20261029
+
+    # 3) 真正执行（分区表按 p_dt='20261029' 补分区级统计）
+    python cbo-stats.py run --min-refs 10 --partition 20261029
+
+    # 4) 带列统计（更准，但每个表多一次扫描，先小范围试）
+    python cbo-stats.py run --top 20 --with-columns --partition 20261029
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import pathlib
+import re
+import subprocess
+import sys
+import time
+
+HERE = pathlib.Path(__file__).resolve().parent
+REPO_ROOT = HERE.parent.parent
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+CACHE = pathlib.Path("D:/datax/.dx-tmp/cbo-refs.json")
+
+WORKER = "dolphinscheduler-worker"
+META_DB = "hive-metastore-db"
+META_USER = "hiveuser"
+META_NAME = "hivemetastore"
+
+JDBC = "jdbc:hive2://hiveserver2:10000/;principal=hive/hiveserver2@DATAX.COM"
+KEYTAB = "/etc/krb5-keytab/xdaydw.keytab"
+PRINCIPAL = "xdaydw@DATAX.COM"
+
+# 抽取 ETL 脚本里对库表的引用（去注释后匹配 db.table）
+_REF_RE = re.compile(
+    r"\b(ODS_XDAY_[A-Z0-9]+|DWDXDAY|DWSXDAY)\.([A-Z0-9_]+)", re.IGNORECASE
+)
+
+
+# --------------------------------------------------------------------------
+# 1. 从 ETL 脚本抽取被引用的表
+# --------------------------------------------------------------------------
+def scan_refs(rebuild: bool = False) -> list[dict]:
+    """返回 [{"tbl": "DB.TBL", "refs": n}]，按引用次数降序。"""
+    if CACHE.exists() and not rebuild:
+        return json.loads(CACHE.read_text(encoding="utf-8"))
+
+    from collections import Counter
+
+    counter: Counter[str] = Counter()
+    files = sorted(SCRIPTS_DIR.glob("*/dwd/02_etl/*.sh")) + sorted(
+        SCRIPTS_DIR.glob("*/dws/02_etl/*.sh")
+    )
+    for f in files:
+        text = f.read_text(encoding="utf-8", errors="ignore")
+        text = re.sub(r"--[^\n]*", "", text)  # 去掉 SQL 行注释，避免注释里的表名被算进去
+        for db, tbl in _REF_RE.findall(text):
+            counter[f"{db.upper()}.{tbl.upper()}"] += 1
+
+    out = [{"tbl": k, "refs": v} for k, v in counter.most_common()]
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    CACHE.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    return out
+
+
+# --------------------------------------------------------------------------
+# 2. 从 metastore 拿分区信息
+# --------------------------------------------------------------------------
+def _psql(sql: str) -> list[str]:
+    """在 metastore 容器里跑一条 psql，返回非空行。
+
+    注意：SQL 必须压成单行。多行 SQL 里换行会经 sh -c 传给 psql，
+    psql 会把行首的 ``\\n`` 当成元命令报 ``invalid command \\n``。
+    """
+    flat = re.sub(r"\s+", " ", sql).strip()
+    cmd = [
+        "docker", "exec", META_DB, "sh", "-c",
+        f'psql -U {META_USER} -d {META_NAME} -tAc {json.dumps(flat)}',
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        raise RuntimeError(f"psql 失败: {r.stderr.strip()[:300]}")
+    return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+
+
+def load_meta() -> dict[str, dict]:
+    """返回 {小写 db.tbl: {"parts": n, "part_keys": [..], "numrows": str|None}}"""
+    sql = """
+    select d."NAME" || '.' || t."TBL_NAME"
+         , t."TBL_ID"
+         , coalesce((select count(*) from "PARTITIONS" p where p."TBL_ID" = t."TBL_ID"), 0)
+         , coalesce((select "PARAM_VALUE" from "TABLE_PARAMS" tp
+                     where tp."TBL_ID" = t."TBL_ID" and tp."PARAM_KEY" = 'numRows'), '')
+         , coalesce((select string_agg(distinct pk."PKEY_NAME", ',')
+                     from "PARTITION_KEYS" pk where pk."TBL_ID" = t."TBL_ID"), '')
+    from "TBLS" t join "DBS" d on t."DB_ID" = d."DB_ID"
+    """
+    meta: dict[str, dict] = {}
+    for line in _psql(sql):
+        parts = line.split("|")
+        if len(parts) < 5:
+            continue
+        name, _tid, npart, numrows, pkeys = parts[0], parts[1], parts[2], parts[3], parts[4]
+        meta[name.lower()] = {
+            "parts": int(npart or 0),
+            "numrows": numrows or None,
+            "part_keys": [k for k in pkeys.split(",") if k],
+        }
+    return meta
+
+
+# --------------------------------------------------------------------------
+# 3. beeline 执行
+# --------------------------------------------------------------------------
+def _beeline(sql: str, timeout: int = 1800) -> tuple[bool, str]:
+    """在 worker 容器里取票后执行一条 SQL，返回 (成功, 输出尾部)。"""
+    inner = (
+        f'kinit -kt {KEYTAB} {PRINCIPAL} >/dev/null 2>&1\n'
+        f"""beeline -u "{JDBC}" --silent=true --outputformat=tsv2 -e {json.dumps(sql)} 2>&1"""
+    )
+    try:
+        r = subprocess.run(
+            ["docker", "exec", "-e", "TERM=dumb", WORKER, "sh", "-c", inner],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"超时 {timeout}s"
+    out = "\n".join(
+        ln for ln in (r.stdout or "").splitlines()
+        if not any(k in ln for k in ("SLF4J", "log4j", "WARN ", "WARNING"))
+    )
+    ok = r.returncode == 0 and "Error" not in out and "FAILED" not in out
+    return ok, out.strip()[-500:]
+
+
+# --------------------------------------------------------------------------
+# 子命令
+# --------------------------------------------------------------------------
+def cmd_probe(args) -> int:
+    """体检：被引用最多的表到底有多少行、有没有分区。
+
+    只在空表/无数据时给出「不该现在补统计」的明确结论，
+    避免花几小时扫描空目录。
+    """
+    refs = scan_refs(args.rebuild)
+    meta = load_meta()
+    top = refs[: args.top]
+
+    print(f"{'表':<50}{'引用':>5}{'分区':>6}{'已有numRows':>12}")
+    print("-" * 76)
+    for r in top:
+        key = r["tbl"].lower()
+        m = meta.get(key)
+        if not m:
+            print(f"{r['tbl']:<50}{r['refs']:>5}{'?':>6}{'表不存在':>12}")
+            continue
+        print(
+            f"{r['tbl']:<50}{r['refs']:>5}{m['parts']:>6}"
+            f"{(m['numrows'] or '无'):>12}"
+        )
+
+    print("\n--- 实际数据量抽样（count(*)）---")
+    empty = 0
+    for r in top[: args.sample]:
+        ok, out = _beeline(f"select count(*) from {r['tbl'].lower()}", timeout=300)
+        cnt = "?"
+        if ok:
+            nums = [ln.strip() for ln in out.splitlines() if ln.strip().isdigit()]
+            cnt = nums[-1] if nums else "?"
+        if cnt == "0":
+            empty += 1
+        print(f"  {r['tbl']:<48} rows={cnt}")
+
+    sampled = min(args.sample, len(top))
+    if sampled and empty == sampled:
+        print(
+            f"\n⚠ 抽样的 {sampled} 张表全部 0 行。此时补统计没有收益——"
+            "0 行本身就是准确值，CBO 已经「知道」它是空的。\n"
+            "  先解决数据落地问题，再回来跑本工具。"
+        )
+    return 0
+
+
+def _build_stmts(args) -> list[tuple[str, str]]:
+    """返回 [(目标描述, SQL)]。"""
+    refs = scan_refs(args.rebuild)
+    meta = load_meta()
+
+    picked = [r for r in refs if r["refs"] >= args.min_refs]
+    if args.top:
+        picked = picked[: args.top]
+
+    stmts: list[tuple[str, str]] = []
+    skipped: list[str] = []
+    for r in picked:
+        tbl = r["tbl"].lower()
+        m = meta.get(tbl)
+        if not m:
+            skipped.append(f"{r['tbl']}（元数据里不存在）")
+            continue
+
+        col = " FOR COLUMNS" if args.with_columns else ""
+
+        if not m["part_keys"]:
+            stmts.append((r["tbl"], f"ANALYZE TABLE {tbl} COMPUTE STATISTICS{col}"))
+            continue
+
+        if not args.partition:
+            skipped.append(
+                f"{r['tbl']}（分区表，需 --partition，分区键={','.join(m['part_keys'])}）"
+            )
+            continue
+
+        if m["parts"] == 0:
+            # 声明了分区键但一个分区都没创建（常见于只建表没灌数的维表）。
+            # 此时 PARTITION(...) 会报 partition not found，直接跳过。
+            skipped.append(
+                f"{r['tbl']}（分区键={','.join(m['part_keys'])} 但无任何分区，跳过）"
+            )
+            continue
+
+        spec = ", ".join(f"{k}='{args.partition}'" for k in m["part_keys"])
+        stmts.append(
+            (r["tbl"], f"ANALYZE TABLE {tbl} PARTITION({spec}) COMPUTE STATISTICS{col}")
+        )
+
+    if skipped and args.verbose:
+        print(f"--- 跳过 {len(skipped)} 张 ---", file=sys.stderr)
+        for s in skipped:
+            print(f"  {s}", file=sys.stderr)
+    return stmts
+
+
+def cmd_gen(args) -> int:
+    stmts = _build_stmts(args)
+    if not stmts:
+        print("没有匹配的表。放宽 --min-refs 或补 --partition。")
+        return 1
+    out = HERE / "_cbo_analyze.sql"
+    body = "-- 由 cbo-stats.py 生成，分区={}，列统计={}\n".format(
+        args.partition or "-", "on" if args.with_columns else "off"
+    ) + "\n".join(s for _, s in stmts) + "\n"
+    out.write_text(body, encoding="utf-8")
+    print(body)
+    print(f"--- 共 {len(stmts)} 条，已写入 {out}")
+    return 0
+
+
+def cmd_run(args) -> int:
+    stmts = _build_stmts(args)
+    if not stmts:
+        print("没有匹配的表。")
+        return 1
+
+    print(f"准备执行 {len(stmts)} 条 ANALYZE（分区={args.partition or '-'}）")
+    if args.dry_run:
+        for tbl, s in stmts:
+            print(f"  [dry-run] {tbl}: {s}")
+        return 0
+
+    log_path = HERE / f"_cbo_run_{time.strftime('%Y%m%d-%H%M%S')}.json"
+    results = []
+    ok_n = fail_n = 0
+    t0 = time.time()
+    for i, (tbl, sql) in enumerate(stmts, 1):
+        st = time.time()
+        ok, tail = _beeline(sql, timeout=args.timeout)
+        dur = round(time.time() - st, 1)
+        ok_n += ok
+        fail_n += not ok
+        results.append({"tbl": tbl, "sql": sql, "ok": ok, "sec": dur, "tail": tail})
+        print(f"[{i}/{len(stmts)}] {'OK ' if ok else 'FAIL'} {tbl:<46} {dur:>6}s")
+        if not ok and not args.keep_going:
+            print(f"  中止。输出尾部：\n{tail}")
+            break
+
+    log_path.write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"\n完成：成功 {ok_n}，失败 {fail_n}，总耗时 {round((time.time()-t0)/60,1)} min")
+    print(f"明细：{log_path}")
+    return 0 if fail_n == 0 else 2
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Hive CBO 统计信息补全工具")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--rebuild", action="store_true", help="重新扫描 ETL 脚本，忽略缓存")
+    common.add_argument("--verbose", action="store_true")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("probe", parents=[common], help="体检：看被引用表有没有数据")
+    p.add_argument("--top", type=int, default=15)
+    p.add_argument("--sample", type=int, default=5, help="抽几张表跑 count(*)")
+    p.set_defaults(func=cmd_probe)
+
+    for name, func in (("gen", cmd_gen), ("run", cmd_run)):
+        q = sub.add_parser(name, parents=[common])
+        q.add_argument("--min-refs", type=int, default=1, help="只处理引用次数 >= N 的表")
+        q.add_argument("--top", type=int, default=0, help="只处理前 N 张（0=不限）")
+        q.add_argument("--partition", default="", help="分区值，如 20261029")
+        q.add_argument("--with-columns", action="store_true", help="含 FOR COLUMNS（更准更慢）")
+        q.set_defaults(func=func)
+
+    sub.choices["run"].add_argument("--dry-run", action="store_true")
+    sub.choices["run"].add_argument("--keep-going", action="store_true")
+    sub.choices["run"].add_argument("--timeout", type=int, default=1800)
+
+    args = ap.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
