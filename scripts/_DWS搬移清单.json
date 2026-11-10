@@ -20,8 +20,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_AST_INFO_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_AST_INFO_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "8cb8cab7be8e22ffaa3a380d1a8d9203906b184b2da4c52d5c4afa073dda3df6",
-   "bytes": 19034
+   "sha256": "a99b808c2329975d608eb49d079c3969611d0d3e31bc00bac6d79a86772a3207",
+   "bytes": 19241
   },
   {
    "group": "HSFA",
@@ -29,8 +29,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_EQUI_INFO_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_EQUI_INFO_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "b92ff1aa5b7cb6f72c7f3d6e5ee6e58c20aaa1297862dda9fc8c366fdc6d5b05",
-   "bytes": 2740
+   "sha256": "c776184f5105a8957cb5331014bc1a8266c6c2bfa00cf6c5c9c8dcc1eca35f12",
+   "bytes": 2773
   },
   {
    "group": "HSFA",
@@ -38,8 +38,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SALE_DATA_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SALE_DATA_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "14f3ad04614b8f50a2f1989cc26ef187c79e3d5cc5bf87aa766eac7f41daa14d",
-   "bytes": 4023,
+   "sha256": "b6f8fa0bb9ee14c201673bc171e53950cb9f4694b6d437d4ff1ea844b6245c4a",
+   "bytes": 3981,
    "deviation": "只保留第 1 个 beeline 的完整 SQL（甲方原文为两份脚本拼接，done 与 shebang 粘连导致 while 不闭合）"
   },
   {
@@ -48,8 +48,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_HLDP_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_HLDP_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "8ac04694fd0627f4c514afeb01bb4c59c38aec91010c031aea80b10ca0e52d2f",
-   "bytes": 13363
+   "sha256": "1ec71bd01ba6fa75b023ce159f45c10e5d52cd4d9ddebb4d4dffe4e0968b014d",
+   "bytes": 13481
   },
   {
    "group": "HSFA",
@@ -57,8 +57,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_PL_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_PL_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "7ce4e2b28d5fd1e135acb944cf053ddb179ca8c4cb38215d4bdfe6a142404370",
-   "bytes": 19247
+   "sha256": "1e288f03e2715eb29477bf2f99f6d3488bd4ee78f22be6193aa0f804af14aa27",
+   "bytes": 19474
   },
   {
    "group": "HSFA",
@@ -66,8 +66,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_TRAN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_TRAN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "6d6ff08a23bd2df2e4f64a17d8177b323599e7b85012e3f7879a5ca5f4b83843",
-   "bytes": 74701
+   "sha256": "1c19565648f5b1280558ef53b4ce268f4df437e18a069196bbeb2e629b9231c6",
+   "bytes": 75538
   },
   {
    "group": "HSFA",
@@ -75,8 +75,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SUM_INFO_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SUM_INFO_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "d6580e4b1f95c565ad58b8387501672ee8e3fdc8af0c3c892d45464198d70075",
-   "bytes": 22567
+   "sha256": "fd1d762a81884ff86519118b2757eaa8ed5723906cd45d21675991d466cf4380",
+   "bytes": 22960
   },
   {
    "group": "HSZTA",
@@ -84,8 +84,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_FST_TRAN_BTCH_PFD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_FST_TRAN_BTCH_PFD.sh",
    "baseline": "repaired-current",
-   "sha256": "5ba504ecbb891e8ddce1b76b20d0b95502a1b893e7f9841c0fa5671e2d4682d3",
-   "bytes": 5497
+   "sha256": "2a4a9aaca34e0c2a81ebe6ef9a496c58a29f847ac7795f14ee79498c146fa03b",
+   "bytes": 5434
   },
   {
    "group": "HSZTA",
@@ -93,8 +93,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_HOLD_AST_SUM_PFD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_HOLD_AST_SUM_PFD.sh",
    "baseline": "repaired-current",
-   "sha256": "f992af5993646fb645744c2743c89da334568d397d5899393793875f66548735",
-   "bytes": 4645
+   "sha256": "d128fc80621dcd212a28b4cddc3442bf494859ff4e01015ba9474fce8b78582c",
+   "bytes": 4725
   },
   {
    "group": "HSZTA",
@@ -102,8 +102,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_HOLD_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_HOLD_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "d246718d4cf469b536c1c64fb47c1556c7fdd60696df4c2bf2ce3510af0d84b0",
-   "bytes": 25357
+   "sha256": "bf89b36cd2e83bba3031643ff04234642d25ac15a0b219d58d944e1647be6b23",
+   "bytes": 25533
   },
   {
    "group": "HSZTA",
@@ -111,8 +111,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_PROD_HOLD_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_PROD_HOLD_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "83c59e89c0dcf33af553e4cac413488ec4acbe0db3a1081e9d6d711e7807a495",
-   "bytes": 7846
+   "sha256": "5fcadc3830fba6d89273e801d9be9d60962e5b853704d1095178ef1012ad5bd7",
+   "bytes": 7868
   },
   {
    "group": "HSZTA",
@@ -120,8 +120,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_PROD_INFO_PFD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_PROD_INFO_PFD.sh",
    "baseline": "repaired-current",
-   "sha256": "734611e944abdebc7a35d8c1edb63f8927e4642a076ababb619dbe22fcf2a65e",
-   "bytes": 23715
+   "sha256": "855fce391e06ad39557a3c12b797908d253fe5487b02bbd4af9ae58ad788e6fd",
+   "bytes": 23692
   },
   {
    "group": "HSZTA",
@@ -129,8 +129,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_ACCT_OPEN_BTCH_PFD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_ACCT_OPEN_BTCH_PFD.sh",
    "baseline": "repaired-current",
-   "sha256": "f4dc2bfe89ff27a169008ca51987dd086e37c5c697841695f697c2a21ad2996d",
-   "bytes": 66283
+   "sha256": "26a360effdd6e2469f0d632c1397be5783a537cdadb230f2c053e0819206551b",
+   "bytes": 63763
   },
   {
    "group": "HSZTA",
@@ -138,8 +138,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_AFFI_BTCH_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_AFFI_BTCH_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "f37fb7e06629861ea7dd7f2e960ab01c43df24014b08ec313195ffa8d10b7e40",
-   "bytes": 17639
+   "sha256": "bd36d1206cd63f2b5d34e6857b95c157aad1a0588ec710b8b3f2f5f8eff7dd7d",
+   "bytes": 17557
   },
   {
    "group": "HSZTA",
@@ -147,8 +147,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_MKT_TRAN_CNFM_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_MKT_TRAN_CNFM_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "9271a4e5353e340d687ca0c26360d0f7643e5f46d64269b388ff857beb4b9451",
-   "bytes": 15177
+   "sha256": "d6214639ee880427e82f1b009af0127391e00cfa814b024d255bdcb7e1451b27",
+   "bytes": 15343
   },
   {
    "group": "O32",
@@ -156,8 +156,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_BOND_TRAN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_BOND_TRAN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "cb8b59ace0fbdb5d019f88f4cc82e8d1903c9d4ddc8063b0f67043029858fdab",
-   "bytes": 38804
+   "sha256": "f2d6985f162a8fb0ef30c4c159e99f6557d6b6eeaff1e914b768a2fbf3596523",
+   "bytes": 38799
   },
   {
    "group": "O32",
@@ -165,8 +165,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_DPSI_TRAN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_DPSI_TRAN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "4af758f50ad665a8655613f8c0fb27bc3500e6c5b9fd4088cc3885bc5c776f44",
-   "bytes": 15091
+   "sha256": "a8f44bd7a3e5bfad19de230b12c3c4ac12d3ace2c27f0ddc843265e7de3802ca",
+   "bytes": 15108
   },
   {
    "group": "O32",
@@ -174,8 +174,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_EXCH_BOND_OUT_IN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_EXCH_BOND_OUT_IN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "111638d555dccaff468caeb866504cc4ec1974cc5d26cc28be099175a5c09cad",
-   "bytes": 12412
+   "sha256": "1d0b2437d6c60afcfde8f3933093b409ce746b8cc6a851dc6d74c5e0c8a3422b",
+   "bytes": 12416
   },
   {
    "group": "O32",
@@ -183,8 +183,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_EXCH_FUND_TRAN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_EXCH_FUND_TRAN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "b716a24c45e997c9a5c08d9bc5cbc08fb143c24dccc8cb071533b7010079e092",
-   "bytes": 12333
+   "sha256": "e2c7c3c4f90961d217717639598df5f9555c351e0bf6ccfbeda6b70b3ce01973",
+   "bytes": 12349
   },
   {
    "group": "O32",
@@ -192,8 +192,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_FUTR_TRAN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_FUTR_TRAN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "1b18856ddf09e36e4005a0510a52d9918e7757b778b7100fe02347b002dfb9a3",
-   "bytes": 12224
+   "sha256": "3c00dd9855707d4ff1bd689aa4d34987ea27bceff8402578a01f86d8007ff504",
+   "bytes": 12213
   },
   {
    "group": "O32",
@@ -201,8 +201,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_OTC_FUND_TRAN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_OTC_FUND_TRAN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "56fc98c241bb7f20243202f83d94d5987e891e9bd7804bceae443e289753235f",
-   "bytes": 11400
+   "sha256": "36da6c1fbcc30c59492f2ef059ae62af4a6e88a38fcb1986c89e08e5ea3973c1",
+   "bytes": 11409
   },
   {
    "group": "O32",
@@ -210,8 +210,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_REPO_TRAN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_REPO_TRAN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "0a4fe33e74b74e6404d89578e30843bbc2799b37decb550b5882e3e33516b2d5",
-   "bytes": 25451
+   "sha256": "f6433cec92585df3a56bf3a65a9b2e341066eaf10d3a806790a6fba3c0ccf4fa",
+   "bytes": 25473
   },
   {
    "group": "O32",
@@ -219,8 +219,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_SCR_CHANGE_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_SCR_CHANGE_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "cb0bfb28ec17dbc7123219d0c155bb52ec5b74964952095f8ad25f89753b7412",
-   "bytes": 33765
+   "sha256": "f4fb8870615a7532608e4c45970d701edd164e14b3dd56910ee6842de3d65b68",
+   "bytes": 33593
   },
   {
    "group": "O32",
@@ -228,8 +228,8 @@
    "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_STK_TRAN_DETAIL_PTD.sh",
    "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_STK_TRAN_DETAIL_PTD.sh",
    "baseline": "repaired-current",
-   "sha256": "521fa07a5c1c2fa96379d79ad9d26bd80e617eaf1a776878faf0f093e9d6a091",
-   "bytes": 31020
+   "sha256": "c75ba53b8d1ad1ce8bd63d5a24a3c2d3406158bb469b1f15e9e13bf89d8bd1db",
+   "bytes": 31083
   }
  ],
  "run": {
