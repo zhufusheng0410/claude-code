@@ -310,9 +310,8 @@ python3 tools/ds-deploy/ds_config.py   # 自检：只报在/缺，不打印值
 
 - `ds_script` 是**脚本专用账号**，与浏览器 UI 的 `admin` 分离 —— DS 3.4.2 的会话表
   同 user 只保留 1 行，脚本用 admin 登录会**踢掉 UI 会话**（`ds_client.py` 有护栏）。
-- ⚠ 已知残留：beeline 的 `-p` 会把 Hive 口令放进 `docker exec` 的 argv，
-  同机其他用户可用 `ps` 读到。彻底消除需改用 stdin 提示，但校验脚本的 stdin
-  已被 SQL 占满（`docker exec -i`），二者无法共存。
+- Hive 口令不走 `beeline -p`（会进 `docker exec` 的 argv，同机 `ps` 可读）。
+  `validate-dwd-syntax.py` 经 stdin 写入容器内 0600 临时文件，以 `beeline --password-file` 读取，用完即删。
 
 ## 使用方式
 

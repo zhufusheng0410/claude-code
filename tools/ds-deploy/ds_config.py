@@ -220,8 +220,10 @@ def hive_user() -> str:
 def hive_password() -> str:
     """Hive beeline 口令（**必需**，无缺省值）。
 
-    ⚠ 不走命令行 ``-p``（会进进程列表，被同机其他用户 ``ps`` 读到），
-    改用环境变量传递。
+    ⚠ 调用方不得把返回值放进 ``beeline -p`` 或 ``docker exec -e VAR=值``
+    的 argv（同机其他用户可用 ``ps`` 读到）。
+    ``validate-dwd-syntax.beeline`` 经 stdin 把口令写入容器内 0600 临时文件，
+    再以 ``beeline --password-file`` 读取，用完即删。
     """
     return require_secret("DS_HIVE_PASSWORD")
 

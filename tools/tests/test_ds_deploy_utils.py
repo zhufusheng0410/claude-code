@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 _REPO = pathlib.Path(__file__).resolve().parents[2]
 _DEPLOY = _REPO / "tools" / "ds-deploy"
@@ -494,6 +495,68 @@ class TestExternalDdlSupport(unittest.TestCase):
         plain = "CREATE TABLE DWDXDAY.B (X STRING)"
         self.assertTrue(self.mod.RE_EXTERNAL.search(ext))
         self.assertFalse(self.mod.RE_EXTERNAL.search(plain))
+
+
+class TestBeelinePasswordNotInArgv(unittest.TestCase):
+    """Hive 口令不得出现在 docker/beeline 的 argv（同机 ps 可读）。"""
+
+    def _load(self):
+        spec = importlib.util.spec_from_file_location(
+            "validate_dwd_syntax_pw", str(_DEPLOY / "validate-dwd-syntax.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_password_goes_to_stdin_not_argv(self):
+        mod = self._load()
+        secret = "hive-pw-must-not-appear-in-argv"
+        calls = []
+
+        def fake_run(cmd, input=None, **kwargs):
+            calls.append((list(cmd), input))
+
+            class R:
+                returncode = 0
+                stdout = b"ok"
+
+            return R()
+
+        with unittest.mock.patch.object(mod, "hive_password", return_value=secret), \
+             unittest.mock.patch.object(mod, "hive_user", return_value="hive"), \
+             unittest.mock.patch.object(mod.subprocess, "run", side_effect=fake_run):
+            rc, _out, _err = mod.beeline("SELECT 1", force=True)
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 3)
+        for cmd, _inp in calls:
+            self.assertNotIn(secret, "\n".join(cmd))
+            self.assertNotIn("-p", cmd)
+        self.assertEqual(calls[0][1], secret.encode("utf-8"))
+        self.assertIn("cat >", calls[0][0][-1])
+        script = calls[1][0][-1]
+        self.assertIn("--password-file", script)
+        self.assertIn("--force=true", script)
+        self.assertNotIn("-p ", script)
+        self.assertNotIn(secret, script)
+        self.assertEqual(calls[1][1], b"SELECT 1")
+        self.assertIn("rm", calls[2][0])
+
+    def test_plant_failure_does_not_echo_password(self):
+        mod = self._load()
+        secret = "hive-pw-must-not-appear-in-argv"
+
+        def fake_run(cmd, input=None, **kwargs):
+            class R:
+                returncode = 1
+                stdout = secret.encode("utf-8")
+
+            return R()
+
+        with unittest.mock.patch.object(mod, "hive_password", return_value=secret), \
+             unittest.mock.patch.object(mod, "hive_user", return_value="hive"), \
+             unittest.mock.patch.object(mod.subprocess, "run", side_effect=fake_run):
+            with self.assertRaises(RuntimeError) as ctx:
+                mod.beeline("SELECT 1")
+        self.assertNotIn(secret, str(ctx.exception))
 
 
 if __name__ == "__main__":

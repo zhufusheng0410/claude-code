@@ -47,6 +47,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -64,9 +65,9 @@ CONTAINER = "hiveserver2"
 JDBC = "jdbc:hive2://localhost:10000/default"
 # ★ 2026-10-22：口令不再有源码缺省值，从 ds_config 取
 #   （环境变量 DS_HIVE_PASSWORD / .env.local / ~/.dw-secrets.env），缺失即报错。
-#   ⚠ 已知残留风险：beeline 的 `-p` 会把口令放进 docker exec 的 argv，
-#   同机其他用户可用 `ps` 读到。彻底消除需改用 stdin 提示方式，
-#   但本脚本的 stdin 已被 SQL 占满（`docker exec -i`），二者无法共存。
+#   不走 beeline -p：口令经 stdin 写入容器内 0600 临时文件，
+#   beeline --password-file 读取，用完即删。SQL 仍占 beeline 的 stdin，
+#   与口令写入是两次 docker exec。
 # ★ 2026-11-09（评审 C5）：**不要**在 import 期调用 hive_user()/hive_password()。
 #   原先两条模块级赋值让 `--help` / `--dry-run` 都必须先配好 Hive 口令，
 #   否则直接抛 SecretMissingError —— 一个纯本地、不会连集群的入口被凭据拦住。
@@ -250,6 +251,11 @@ def _glob(rel: str, sys_filter: bool = True) -> list:
 
 
 # ---------------------------------------------------------------- beeline 执行
+def _sh_quote(s: str) -> str:
+    """POSIX 单引号。JDBC / 用户名 / 临时路径进 ``sh -c`` 时不被展开。"""
+    return "'" + str(s).replace("'", "'\\''") + "'"
+
+
 def beeline(sql: str, timeout: int = 900, force: bool = False) -> tuple:
     """在 hive 容器里跑一段 SQL，返回 (returncode, stdout, stderr)。
 
@@ -258,19 +264,49 @@ def beeline(sql: str, timeout: int = 900, force: bool = False) -> tuple:
     成败——分开捕获会丢失语句与错误的**交错顺序**，无法定位到具体语句。
     （2026-10-11 教训：stdin 模式下 beeline 默认遇错继续，--force 与否都继续，
     所以「不加 force 就会停」不成立，只能靠输出段解析。）
+
+    口令不进 argv（``ps`` 可读 ``docker exec`` / ``beeline -p``）。先用一次
+    ``docker exec`` 的 stdin 把口令写入容器内 0600 临时文件，再 ``beeline
+    --password-file`` 读取；SQL 走第二次 ``docker exec -i`` 的 stdin。用完删除。
     """
     user, pwd = _hive_credentials()
-    cmd = ["docker", "exec", "-i", "-e", "TERM=dumb", CONTAINER,
-           "beeline", "-u", JDBC, "-n", user, "-p", pwd,
-           "--silent=true", "--outputformat=tsv2", "--showHeader=false",
-           "--autoCommit=true"]
-    if force:
-        cmd.append("--force=true")
-    r = subprocess.run(cmd, input=sql.encode("utf-8"),
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                       timeout=timeout)
-    out = r.stdout.decode("utf-8", errors="replace")
-    return r.returncode, out, ""
+    pw_path = "/tmp/hivepw_%s" % uuid.uuid4().hex
+    try:
+        plant = subprocess.run(
+            ["docker", "exec", "-i", CONTAINER, "sh", "-c",
+             "umask 077; cat > %s" % _sh_quote(pw_path)],
+            input=pwd.encode("utf-8"),
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=60,
+        )
+        if plant.returncode != 0:
+            # cat 不回显 stdin；仍不把输出拼进异常，避免失败路径夹带口令。
+            raise RuntimeError(
+                "无法在容器内准备 Hive 口令文件（exit %s）" % plant.returncode)
+        flags = " --force=true" if force else ""
+        script = (
+            "exec beeline -u %s -n %s --password-file %s "
+            "--silent=true --outputformat=tsv2 --showHeader=false "
+            "--autoCommit=true%s"
+            % (_sh_quote(JDBC), _sh_quote(user), _sh_quote(pw_path), flags)
+        )
+        cmd = ["docker", "exec", "-i", "-e", "TERM=dumb", CONTAINER,
+               "sh", "-c", script]
+        r = subprocess.run(cmd, input=sql.encode("utf-8"),
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           timeout=timeout)
+        out = r.stdout.decode("utf-8", errors="replace")
+        return r.returncode, out, ""
+    finally:
+        try:
+            subprocess.run(
+                ["docker", "exec", CONTAINER, "rm", "-f", pw_path],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            print("警告：未能删除容器内 Hive 口令文件 %s：%s"
+                  % (pw_path, exc), file=sys.stderr)
 
 
 def run_batch(items: list, tag: str, batch: int, t0: float, par: int = 1) -> tuple:
