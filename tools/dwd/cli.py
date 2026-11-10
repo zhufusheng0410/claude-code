@@ -13,9 +13,6 @@ export_ns(_parsing, globals())
 export_ns(_generation, globals())
 export_ns(_ddl, globals())
 
-#: DS 项目名（`verify --ds` 查询项目 code 用）。环境变量可覆盖。
-DEFAULT_PROJECT = 'dw'
-
 # --------------------------------------------------------------------------- #
 # 校验
 # --------------------------------------------------------------------------- #
@@ -59,7 +56,6 @@ def cmd_verify(args):
         sys.path.insert(0, str(_ns.REPO / 'tools/ds-deploy'))
         try:
             import ds_client
-            from ds_config import prefer_env
             ds = ds_client.get_client()
         except (ImportError, OSError, ValueError, RuntimeError) as e:
             # ImportError：ds_client 缺失；OSError/URLError：连不上；
@@ -69,12 +65,10 @@ def cmd_verify(args):
             report['ds'] = {'error': f'{type(e).__name__}: {e}'}
             return 1
         # ★ 2026-11-10（评审 H3）：原先硬编码 `/projects/185582190746560`，
-        #   换集群/换项目即失效。改为按项目名查 code（ds_client.project_code
-        #   找不到会抛 DSClientError 并说明原因，不再是魔数静默 404）。
-        project = prefer_env('DS_PROJECT', 'DW_DS_PROJECT', DEFAULT_PROJECT)
-        projects = ds.call('GET', '/projects',
-                           params={'pageNo': 1, 'pageSize': 100})
-        P = '/projects/%s' % ds_client.project_code(projects, project)
+        #   换集群/换项目即失效。项目名取 DS_PROJECT（缺省 dw），
+        #   查询与缓存统一在 ds_client.project_code_of()；找不到抛
+        #   DSClientError 并说明原因，不再是魔数静默 404。
+        P = '/projects/%s' % ds_client.project_code_of(ds)
         lst = ds_client.lst_of(
             ds.call('GET', P + '/workflow-definition?pageNo=1&pageSize=500'))
         # ★ 2026-10-29：范围改为 GROUPS（含主数据）。原为 SYS（HSFA/HSZTA/O32），

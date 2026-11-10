@@ -30,6 +30,7 @@ _DEPLOY = _REPO / "tools" / "ds-deploy"
 sys.path.insert(0, str(_DEPLOY))
 sys.path.insert(0, str(_REPO))
 
+import ds_client  # noqa: E402
 import ds_config  # noqa: E402
 import ds_text  # noqa: E402
 from ds_client import (  # noqa: E402
@@ -643,6 +644,46 @@ class TestBeelinePasswordNotInArgv(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 mod.beeline("SELECT 1")
         self.assertNotIn(secret, str(ctx.exception))
+
+
+class TestResolveProjectCode(unittest.TestCase):
+    """★ 2026-11-10：项目 code 不再硬编码 `185582190746560`，改按名查并缓存。
+
+    `ds-run` / `ds-schedule` / `ds-sync-dwd-scripts` 原先都写死同一个 code，
+    换集群即静默 404 或写错项目。
+    """
+
+    class _Fake:
+        base = "http://ds.test"
+
+        def __init__(self, items):
+            self.items = items
+            self.calls = []
+
+        def call(self, method, path, params=None):
+            self.calls.append((method, path, params))
+            return {"data": {"totalList": self.items}}
+
+    def setUp(self):
+        ds_client._PROJECT_CODE_CACHE.clear()
+        self.addCleanup(ds_client._PROJECT_CODE_CACHE.clear)
+
+    def test_found_and_cached(self):
+        ds = self._Fake([{"name": "dw", "code": 42}])
+        self.assertEqual(ds_client.project_code_of(ds, "dw"), 42)
+        self.assertEqual(ds_client.project_code_of(ds, "dw"), 42)
+        self.assertEqual(len(ds.calls), 1, "第二次应命中缓存")
+        self.assertEqual(ds.calls[0][1], "/projects/list")
+
+    def test_missing_raises_readable_error(self):
+        ds = self._Fake([{"name": "other", "code": 1}])
+        with self.assertRaises(DSClientError):
+            ds_client.project_code_of(ds, "dw")
+
+    def test_default_name_comes_from_env(self):
+        ds = self._Fake([{"name": "proj_x", "code": 7}])
+        with unittest.mock.patch.dict(os.environ, {"DS_PROJECT": "proj_x"}):
+            self.assertEqual(ds_client.project_code_of(ds), 7)
 
 
 if __name__ == "__main__":

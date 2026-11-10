@@ -42,10 +42,11 @@ import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from ds_client import DSClient  # noqa: E402
+from ds_client import DSClient, project_code_of  # noqa: E402
 from ds_config import ds_service_user, ds_service_password, pg_conn  # noqa: E402
 
-PROJECT_CODE = 185582190746560
+# ★ 2026-11-10：项目 code 不再硬编码。改用 ds_client.project_code_of(ds)，
+#   按 DS_PROJECT（缺省 dw）查；换集群/换项目无需改源码。
 PG = pg_conn()   # ★ 2026-10-22：口令从环境/凭据文件读，源码不含字面量
 PROBE_CONTAINER = "dolphinscheduler-worker"
 # ★ 2026-10-26：依赖配置已从 `D:\datax\tools` 迁入本目录（仓库内自包含）。
@@ -116,13 +117,6 @@ def pg():
     c = psycopg2.connect(connect_timeout=8, **PG)
     c.autocommit = True
     return c
-
-
-def pcode_of(ds, project="dw"):
-    r = ds.call("GET", "/projects/list", params={"searchVal": project, "pageSize": 50, "pageNo": 1})
-    d = r.get("data")
-    items = d.get("totalList") if isinstance(d, dict) else (d or [])
-    return next((it["code"] for it in items if it.get("name") == project), None)
 
 
 def all_workflows(ds, pcode):
@@ -244,7 +238,7 @@ def _trigger_wf(ds, pcode, code, failure_strategy, start_node=None,
 def cmd_manual(args):
     c = pg()
     cur = c.cursor()
-    pcode = PROJECT_CODE
+    pcode = project_code_of(DSClient())
 
     if args.list:
         cur.execute("select name, code from t_ds_workflow_definition order by name")
@@ -356,7 +350,7 @@ def _locate_task(ds, pcode, task_name, wf_code=None):
 
 def cmd_task(args):
     ds = DSClient()
-    pcode = PROJECT_CODE
+    pcode = project_code_of(ds)
     wf_code, wf_name, task = _locate_task(ds, pcode, args.task, args.wf or None)
     if not task:
         print("未找到任务 %s" % args.task)
@@ -473,7 +467,7 @@ def _rerun_one(ds, pcode, task_name, args, cache):
 
 def cmd_rerun_failed(args):
     ds = DSClient()
-    pcode = PROJECT_CODE
+    pcode = project_code_of(ds)
     names = [x.strip() for x in args.tasks.split(",") if x.strip()]
     if args.from_db:
         c = pg()
@@ -555,7 +549,7 @@ def _serial(args, kind):
     report = os.path.join(ROOT, ".dx-tmp", "%s-run-report.json" % kind)
 
     ds = DSClient(user=ds_service_user(), password=ds_service_password())
-    pcode = PROJECT_CODE
+    pcode = project_code_of(ds)
     wfs = all_workflows(ds, pcode)
 
     if kind == "ods":

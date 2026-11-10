@@ -48,6 +48,8 @@ DS_ADMIN_PASSWORD / DS_SESSION_FILE；也可用 tools/ds-deploy/.env.local 或
     所以本模块默认**拒绝** user=admin 的登录，除非显式传 allow_admin=True。
     脚本请用 ds_script（已授权 ods_hsfa_etl 项目 + 全部 HIVE 数据源）。
 """
+from __future__ import annotations
+
 import http.cookiejar
 import json
 import os
@@ -60,7 +62,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_config import (  # noqa: E402
-    DS_BASE, DS_USER, ds_admin_password, ds_admin_user, ds_password,
+    DS_BASE, DS_USER, ds_admin_password, ds_admin_user, ds_password, ds_project,
 )
 
 BASE = DS_BASE
@@ -377,6 +379,33 @@ def project_code(res, name: str) -> int:
         f"在 DS 项目列表里找不到项目 {name!r}。"
         f"  返回前 {len(lst_of(res))} 条；可能是项目名写错、"
         f"当前账号无权访问，或 DS 返回结构异常。")
+
+
+#: 项目 code 缓存：键为 (base, 项目名)。
+_PROJECT_CODE_CACHE: dict = {}
+
+
+def project_code_of(ds, project: str | None = None) -> int:
+    """按项目名查项目 code（同进程内缓存；换集群/项目无需改源码）。
+
+    ★ 2026-11-10：`ds-run` / `ds-schedule` / `ds-sync-dwd-scripts` 等原先把
+      code 硬编码为 ``185582190746560`` —— 换集群即静默 404/写错项目。
+      项目名默认取 :func:`ds_config.ds_project`（``DS_PROJECT``，缺省 ``dw``）。
+    ★ 用 ``/projects/list?searchVal=`` 而非 ``/projects``：前者是既有脚本
+      （`ds-run.pcode_of`）在本集群验证过的入口。
+    """
+    name = project or ds_project()
+    base = getattr(ds, "base", "") or getattr(
+        getattr(ds, "client", None), "base", "")
+    key = (base, name)
+    cached = _PROJECT_CODE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    res = ds.call("GET", "/projects/list",
+                  params={"searchVal": name, "pageSize": 50, "pageNo": 1})
+    code = project_code(res, name)
+    _PROJECT_CODE_CACHE[key] = code
+    return code
 
 
 def _maybe_json(x):

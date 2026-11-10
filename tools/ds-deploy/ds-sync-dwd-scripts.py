@@ -45,9 +45,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dw_paths  # noqa: E402
 from ds_text import normalize_newlines  # noqa: E402
-from ds_client import DSClient, task_definitions  # noqa: E402
+from ds_client import DSClient, project_code_of, task_definitions  # noqa: E402
 
-PCODE = 185582190746560
+PCODE = None   # ★ 2026-11-10：运行时由 project_code_of(ds) 解析，不再硬编码
 DOCKER = r"C:\Program Files\Docker\Docker\resources\bin\docker.exe"
 
 
@@ -142,7 +142,7 @@ def set_schedule(sid, state):
 
 
 def main():
-    global PREFIX
+    global PREFIX, PCODE
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="真正提交（不加 = dry-run）")
     ap.add_argument("--only", help="只处理指定表，逗号分隔")
@@ -160,6 +160,7 @@ def main():
         print(f"只处理: {sorted(only)}")
 
     ds = DSClient()
+    PCODE = project_code_of(ds)
     tl = total_list(ds.call("GET", f"/projects/{PCODE}/workflow-definition",
                                params={"pageNo": 1, "pageSize": 500}))
     dwd = sorted([x for x in tl if x["name"].startswith(PREFIX)], key=lambda z: z["name"])

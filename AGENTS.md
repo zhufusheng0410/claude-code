@@ -310,6 +310,8 @@ python3 tools/ds-deploy/ds_config.py   # 自检：只报在/缺，不打印值
 
 - `ds_script` 是**脚本专用账号**，与浏览器 UI 的 `admin` 分离 —— DS 3.4.2 的会话表
   同 user 只保留 1 行，脚本用 admin 登录会**踢掉 UI 会话**（`ds_client.py` 有护栏）。
+- 项目 code **不硬编码**：`DS_PROJECT`（缺省 `dw`，旧名 `DW_DS_PROJECT`）经
+  `ds_client.project_code_of()` 按名查询并缓存；换集群/换项目只改这个变量。
 - Hive 口令不走 `beeline -p`（会进 `docker exec` 的 argv，同机 `ps` 可读）。
   `validate-dwd-syntax.py` 经 stdin 写入容器内 0600 临时文件，以 `beeline --password-file` 读取，用完即删。
 

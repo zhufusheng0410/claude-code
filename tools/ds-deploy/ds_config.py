@@ -39,6 +39,7 @@ __all__ = [
     "ds_service_user", "ds_service_password",
     "pg_conn", "pg_password", "hive_user", "hive_password", "require_secret",
     "prefer_env", "preflight", "SecretMissingError", "LOCAL_ENV_FILE", "HOME_ENV_FILE",
+    "ds_project",
 ]
 
 # ---------- 凭据文件位置 ----------
@@ -175,6 +176,16 @@ def require_secret(key: str) -> str:
 def ds_base() -> str:
     """DS 服务地址（非敏感，有默认）。"""
     return DS_BASE.rstrip("/")
+
+
+def ds_project() -> str:
+    """DS 项目名（非敏感，默认 ``dw``）。
+
+    ★ 2026-11-10：各脚本原先把项目 code 硬编码为 ``185582190746560``，
+      换集群/换项目即失效。改为按名查 code（``ds_client.resolve_project_code``），
+      项目名可用 ``DS_PROJECT``（旧名 ``DW_DS_PROJECT``）覆盖。
+    """
+    return prefer_env("DS_PROJECT", "DW_DS_PROJECT", "dw")
 
 
 def ds_user() -> str:

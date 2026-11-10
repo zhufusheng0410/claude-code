@@ -32,10 +32,10 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from ds_client import DSClient, task_definitions  # noqa: E402
+from ds_client import DSClient, project_code_of, task_definitions  # noqa: E402
 from ds_config import ds_admin_password, ds_admin_user, pg_conn  # noqa: E402
 
-PROJECT_CODE = 185582190746560
+PROJECT_CODE = None   # ★ 2026-11-10：运行时由 _resolve_project(ds) 解析，不再硬编码
 TENANT = "dolphinscheduler"
 EXEC = "SERIAL_WAIT"
 TZ = "Asia/Shanghai"
@@ -73,6 +73,14 @@ GLOBAL_PARAMS = [
 
 
 # ============================ 公共 ============================ #
+def _resolve_project(ds):
+    """解析项目 code 并写回模块级常量（幂等；换集群/项目无需改源码）。"""
+    global PROJECT_CODE
+    if PROJECT_CODE is None:
+        PROJECT_CODE = project_code_of(ds)
+    return PROJECT_CODE
+
+
 def pg_conn():
     import psycopg2
     # ★ PG 里已含 dbname（见 ds_config.pg_conn），此处不可再硬编码，否则
@@ -104,6 +112,7 @@ def _resolve_code(ds, w):
 
 def cmd_create(args):
     ds = DSClient()
+    _resolve_project(ds)
     if args.list:
         r = ds.call("GET", "/projects/%d/schedules" % PROJECT_CODE,
                     params={"pageNo": 1, "pageSize": 50})
@@ -331,6 +340,7 @@ def cmd_ensure(args):
           % (len(need_params), len(slots), "OFFLINE" if args.offline else "ONLINE"))
 
     ds = DSClient()
+    _resolve_project(ds)
     if not args.skip_params:
         _do_params(ds, need_params, args.apply)
     _do_schedules(ds, slots, args.apply, online=not args.offline)
@@ -411,6 +421,7 @@ def cmd_switch(args):
         return 0
 
     ds = DSClient()
+    _resolve_project(ds)
     ok = skip_n = fail = 0
     for sid, nm, st in targets:
         if st == want:
@@ -439,6 +450,7 @@ def cmd_release(args):
         print("不能同时 --online 和 --offline", file=sys.stderr)
         return 1
     ds = DSClient()
+    _resolve_project(ds)
     target = "ONLINE" if args.online else ("OFFLINE" if args.offline else None)
 
     if target and args.id:

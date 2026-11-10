@@ -60,7 +60,6 @@ def _load_core(name, f):
 
 REPO = _wsl_path(dw_paths.SCRIPTS)
 OUT = _wsl_path(os.path.join(HERE, "dep-config-lineage"))
-PCODE = 185582190746560
 CHUNK = 20
 
 # ★ 映射表判据：表名里有 MAPP / 以 _MAP 结尾，或中文名含「映射」
