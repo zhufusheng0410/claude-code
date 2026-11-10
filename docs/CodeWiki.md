@@ -228,7 +228,7 @@ python tools/main.py --layer ALL|ODS|DWD|DWS [--sys O32] [--output DIR]
 
 ```
 python3 tools/dw-pipeline.py <子命令> [--layers DWD,DWS] [--source jf|gen]
-                             [--apply] [--deploy] [--ds] [--allow-gen-errors] [--force-dws-raw]
+                             [--apply] [--deploy] [--ds] [--allow-gen-errors] [--allow-stale-dws-manifest]
 ```
 
 | 子命令 | 作用 |

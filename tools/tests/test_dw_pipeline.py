@@ -197,6 +197,74 @@ class TestDwsTableSysMap(unittest.TestCase):
                              'DWS_BOTH': 'HSFA'})  # ddl 落位优先于清单
 
 
+class TestDwsManifestSha(unittest.TestCase):
+    """清单 sha/bytes 与现盘不符时失败，且不得改写清单或覆盖脚本。"""
+
+    def test_mismatch_fails_unless_flag_and_does_not_rewrite(self):
+        import hashlib
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            script = root / 'HSFA' / 'dws' / '02_etl' / 'DWS_X.sh'
+            script.parent.mkdir(parents=True)
+            script.write_bytes(b'hello')
+            manifest_path = root / '_DWS搬移清单.json'
+            manifest = {'files': [{
+                'name': 'DWS_X.sh', 'group': 'HSFA',
+                'sha256': '0' * 64, 'bytes': 5,
+            }]}
+            manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+            before = manifest_path.read_bytes()
+            old = WP.SCRIPTS
+            WP.SCRIPTS = root
+            WP._STALE_MANIFEST_WARNED = False
+            try:
+                with self.assertRaises(WP.StaleDwsManifest):
+                    WP.dws_source_map()
+                self.assertEqual(manifest_path.read_bytes(), before)
+                got = WP.dws_source_map(allow_stale=True)
+                self.assertEqual(got['DWS_X'], 'HSFA')
+                self.assertEqual(manifest_path.read_bytes(), before)
+                manifest['files'][0]['sha256'] = hashlib.sha256(b'hello').hexdigest()
+                manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+                self.assertEqual(WP.dws_source_map()['DWS_X'], 'HSFA')
+            finally:
+                WP.SCRIPTS = old
+                WP._STALE_MANIFEST_WARNED = False
+
+    def test_stage_never_overwrites(self):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            jf = root / 'jf'
+            jf.mkdir()
+            (jf / 'DWS_X.txt').write_bytes(b'raw-jf')
+            scripts = root / 'scripts'
+            dst = scripts / 'HSFA' / 'dws' / '02_etl' / 'DWS_X.sh'
+            dst.parent.mkdir(parents=True)
+            dst.write_bytes(b'repo-fixed')
+            (scripts / '_DWS搬移清单.json').write_text(json.dumps({
+                'files': [{'name': 'DWS_X.sh', 'group': 'HSFA'}],
+            }), encoding='utf-8')
+            old_s, old_src = WP.SCRIPTS, WP.SRC_DWS_EXEC
+            WP.SCRIPTS, WP.SRC_DWS_EXEC = scripts, jf
+            try:
+                WP.stage_dws_from_jf(True, argparse.Namespace(
+                    allow_stale_dws_manifest=False))
+                self.assertEqual(dst.read_bytes(), b'repo-fixed')
+            finally:
+                WP.SCRIPTS, WP.SRC_DWS_EXEC = old_s, old_src
+
+    def test_overwrite_flag_removed(self):
+        self.assertNotIn('raw', WP.OPT)
+        blob = str(WP.OPT) + str({k: v[1] for k, v in WP.SUBCOMMANDS.items()})
+        self.assertNotIn('force-dws-raw', blob)
+        self.assertNotIn('force_dws_raw', blob)
+        for name, (_fn, opts, _text) in WP.SUBCOMMANDS.items():
+            self.assertNotIn('raw', opts, name)
+
+
+
 class TestDwdDdlCmd(unittest.TestCase):
     """DWD DDL 子命令参数透传。
 

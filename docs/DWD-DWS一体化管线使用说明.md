@@ -39,9 +39,9 @@ DWS 比对方向固定为：
 甲方 05-脚本/02-脚本/02-DWS执行脚本/*.txt  ->  scripts/{系统}/dws/02_etl/*.sh
 ```
 
-仓库内 DWS 脚本**就是甲方原文**：2026-10-26 复核 24/24 与甲方 `02-DWS执行脚本/*.txt` 逐字节一致
-（甲方交 25 个，少的 `DWS_TRAN_MKT_TRAN_PR_STAT_PTD` 因 3 份 MAPPING 都没有它而按「无 MAPPING 不纳管」排除）。
-管线仍保留「甲方 → 仓库」的比对步骤用于防漂移；`--force-dws-raw` 目前等价空操作。
+仓库内 DWS 脚本是甲方原文加上 Hive 4.2 方言修复，不是逐字节一致。
+管线仍保留「甲方 → 仓库」的比对，只报告差异、不覆盖。
+清单 sha256/bytes 与现盘不符时，读清单的步骤默认失败；`--allow-stale-dws-manifest` 才继续（不刷新清单）。
 （旧文档说的「已修复版 / `baseline=repaired-current`」已过期。）
 
 ### `--source gen`（自动生成）
@@ -73,7 +73,7 @@ python3 tools/dw-pipeline.py <子命令> [参数]
 | `--ds` | 否 | 连接 DolphinScheduler 回读校验 | `verify` `all` |
 | `--deploy` | 否 | 末尾追加 DS 删除/重建/排版 | `all` |
 | `--allow-gen-errors` | 否 | gen 模式忽略 `[ERROR` 并继续复制，不推荐 | `scripts` |
-| `--force-dws-raw` | 否 | 用甲方 DWS 原文覆盖仓库脚本（当前二者一致，等价空操作） | `scripts` |
+| `--allow-stale-dws-manifest` | 否 | 清单 sha 与现盘不符时仍继续（不刷新、不覆盖脚本） | `scripts` `ddl` `verify-ddl` `all` |
 
 > 默认 dry-run。确认输出无误后再加 `--apply`。
 > 参数必须写在子命令**之后**（`verify --layers DWS`）；写在前面（`--layers DWS verify`）会报错。

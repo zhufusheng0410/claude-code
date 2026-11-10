@@ -176,10 +176,9 @@
   按「无 MAPPING 不纳管」排除，其表建了但无作业、无分区。
   ⇒ **甲方原文本身在 Hive 4.2 上跑不了，仓库版才是可执行基线**；
   `scripts --source jf` 里「比对甲方 → 仓库」因此会报 23 个差异，这是**预期**而非漂移。
-  ⚠ `--force-dws-raw` 一旦执行会把 23 个文件的方言修复还原成甲方原文（`DW-DEVIATION`
-  标记的那 1 个仍受保护）⇒ **视为禁用**；别再沿用「目前等价空操作」，它现在不等价。
-  ⚠ `_DWS搬移清单.json` 的 `bytes` / `sha256` 与现盘 24/24 均不匹配 ⇒ 清单整体过期，
-  刷新需 `dwd-pipeline.py distribute --apply`，待确认后再做。
+  ⚠ 不用甲方原文覆盖仓库脚本：覆盖会把方言修复还原成跑不了的版本。比对只报告差异，不落盘。
+  ⚠ `_DWS搬移清单.json` 的 `bytes` / `sha256` 与现盘不一致时，读清单的步骤默认失败；
+  `--allow-stale-dws-manifest` 才继续用清单里的 group（不刷新清单、不覆盖脚本）。
   ⚠ 旧文档里「仓库为已修复版 / `baseline=repaired-current`」的说法已过期（清单无该字段），不要再据此判断。
 - DWS 依赖配置 `tools/ds-deploy/dep-config-dws` 24 份；工作流 `DWS_HSFA 7 / DWS_O32 9 /
   DWS_ZTA 8`，拓扑序 `DWS_HSFA → DWS_O32 → DWS_ZTA`。
@@ -438,11 +437,12 @@ python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
 ```
 
 > 参数按子命令裁剪：`verify` 只有 `--layers/--ds`，`deploy|delete|layout` 只有 `--layers/--apply`，
-> `--allow-gen-errors/--force-dws-raw` 只挂在 `scripts` 上；参数必须写在子命令**之后**（`verify --layers DWS`）。
+> `--allow-gen-errors` 只挂在 `scripts` 上；`--allow-stale-dws-manifest` 挂在会读
+> `_DWS搬移清单.json` 的 `scripts`/`ddl`/`verify-ddl`/`all` 上。参数必须写在子命令**之后**（`verify --layers DWS`）。
 
 | 子命令 | 作用 |
 |--------|------|
-| `scripts` | jf：DWD 调 `dwd-pipeline.py convert/distribute`；DWS 比对甲方 `02-DWS执行脚本` 与 `scripts/*/dws/02_etl`（必然报 23 个差异：仓库版是甲方原文 + Hive 4.2 方言修复；**`--force-dws-raw` 禁用**，执行会把方言修复还原成甲方原文）。gen：`tools/main.py --layer DWD\|DWS` 生成到 `scripts/.dw-gen-*`，扫 `[ERROR` 失败即停；DWD 不碰 `scripts/MASTER` |
+| `scripts` | jf：DWD 调 `dwd-pipeline.py convert/distribute`；DWS 比对甲方 `02-DWS执行脚本` 与 `scripts/*/dws/02_etl`（必然报 23 个差异：仓库版是甲方原文 + Hive 4.2 方言修复；只比对不覆盖）。gen：`tools/main.py --layer DWD\|DWS` 生成到 `scripts/.dw-gen-*`，扫 `[ERROR` 失败即停；DWD 不碰 `scripts/MASTER` |
 | `ddl` | jf：DWD 调 `dwd-pipeline.py ddl`；DWS **从甲方 `01-建表语句/02-DWS建表脚本.sql` 搬移**（清洗 `DEFAULT NULL`/`VARCHAR2`，逐表落 `ddl/*.sql` 并重建 `01_ddl.sql`）。gen：只校验既有产物 |
 | `lineage` | DWD 调 `dwd-pipeline.py lineage`；DWS 校验 3 份 `DWS_lineage.xlsx`（表级血缘） |
 | `config` | DWD → `dep-config-proscript`（逐表 `.dep.json`，按主题分组）；DWS → `dep-config-dws`（24 表/3 工作流），并刷新 `scripts/DWS_表中文名.json` |
@@ -520,8 +520,9 @@ python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
 - **`sanitize_ddl` 独立成模块** `tools/core/ddl_sanitize.py`（只依赖 `re`）：原先
   `dw-pipeline.py` 为复用它要 exec 整个 86KB `dwd-pipeline.py`（连带 openpyxl/pandas）
   ⇒ 缺 openpyxl 的环境里 DWS DDL 直接 `ModuleNotFoundError`。
-- **`all` 带逃生舱**：`--allow-gen-errors` / `--force-dws-raw` 与 `scripts` 同步声明
+- **`all` 带逃生舱**：`--allow-gen-errors` 与 `scripts` 同步声明
   （`all` 内部就调 `scripts`，否则无法在一条命令内绕过生成器 ERROR）。
+  `--allow-stale-dws-manifest` 与会读清单的子命令同步声明。
 - **子进程上限**：默认 1800s（`DW_RUN_TIMEOUT` 可调），超时按 rc=124 失败，不再无限等。
 - **DWS 口径常量化**：`DWS_EXPECT_SCRIPTS` / `DWS_EXPECT_DEPS` / `DWS_EXPECT_WORKFLOWS`
   / `DWS_WF2SYS` 集中在文件头，口径变更只改一处。
@@ -540,8 +541,8 @@ python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
   实现在 `tools/core/sh_repair.py`（只依赖 re），`dw-pipeline.py` 仅负责扫描/备份/落盘/标注。
 - **三道防回归门**：
   1. `verify` 对「SQL 调用 >1」单独报 `⚠ 拼接副本`（语法可能是通的，但会重复执行 SQL）；
-  2. 修复后的文件带 `# DW-DEVIATION: …` 标记 ⇒ `stage_dws_from_jf` **连 `--force-dws-raw`
-     也不覆盖**（否则会把修复连同甲方缺陷一起还原）；`scripts` 步骤会打印「已知偏离」清单；
+  2. 修复后的文件带 `# DW-DEVIATION: …` 标记 ⇒ `stage_dws_from_jf` **不覆盖**
+     （否则会把修复连同甲方缺陷一起还原）；`scripts` 步骤会打印「已知偏离」清单；
   3. 单测 `test_repo_scripts_have_single_sql_block` 对仓库全部 DWS 脚本做守门断言。
 - **已处置**：`scripts/HSFA/dws/02_etl/DWS_PROD_SALE_DATA_PTD.sh`
   （甲方 7678 字节 → 4023 字节；两份 SQL 各 3042 字符、逐字符相同，丢弃无内容损失；

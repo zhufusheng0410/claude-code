@@ -28,7 +28,7 @@ __all__ = [
     "DEVIATION_MARK",
 ]
 
-# 仓库里带这个标记的文件 = 有意偏离甲方原文，`--force-dws-raw` 不得覆盖
+# 仓库里带这个标记的文件 = 有意偏离甲方原文，不得用甲方原文覆盖
 DEVIATION_MARK = "DW-DEVIATION"
 
 _RE_SQL_CALL = re.compile(r'(?m)^[ \t]*inceptor_beeline\s+"')

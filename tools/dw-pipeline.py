@@ -14,12 +14,14 @@
 - `--source gen`：调用 `tools/main.py` 生成（DWD 不碰 scripts/MASTER）。
 - `deploy` 会先删 DWS 再删/建 DWD，最后建 DWS；跨层引用不会挡删。
 - 参数按子命令裁剪（见 `SUBCOMMANDS`）：`verify` 只有 `--layers/--ds`，
-  `deploy/delete/layout` 只有 `--layers/--apply`，逃生舱（`--allow-gen-errors`、
-  `--force-dws-raw`）挂在 `scripts` 与 `all` 上 —— `all` 内部就调 `scripts`，
-  不给它这两个开关就无法在一条命令内绕过生成器 ERROR。
+  `deploy/delete/layout` 只有 `--layers/--apply`，逃生舱（`--allow-gen-errors`）
+  挂在 `scripts` 与 `all` 上 —— `all` 内部就调 `scripts`，不给它这个开关就无法
+  在一条命令内绕过生成器 ERROR。`--allow-stale-dws-manifest` 挂在会读
+  `_DWS搬移清单.json` 的子命令上：sha 不符默认失败，且不刷新清单。
 - 任一子步骤失败即中止（`deploy` 不再「带着失败继续往下建」），避免 DS 留半成品。
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -225,7 +227,85 @@ def gen_temp(prefix):
     return p
 
 
-def dws_source_map():
+class StaleDwsManifest(RuntimeError):
+    """`_DWS搬移清单.json` 的 sha256/bytes 与现盘不一致。不改清单本身。"""
+
+    def __init__(self, mismatches):
+        self.mismatches = list(mismatches)
+        super().__init__(
+            f"_DWS搬移清单.json 与现盘不一致 {len(self.mismatches)} 条")
+
+
+def dws_manifest_mismatches():
+    """核对清单里已登记的 sha256/bytes。没有校验字段的条目不查。
+
+    只读。不刷新、不重写 `_DWS搬移清单.json`。
+    """
+    manifest = SCRIPTS / "_DWS搬移清单.json"
+    if not manifest.is_file():
+        return []
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [f"清单不是合法 JSON（{type(exc).__name__}: {exc}）"]
+    bad = []
+    for entry in data.get("files") or []:
+        if "sha256" not in entry and "bytes" not in entry:
+            continue
+        name = entry.get("name") or "?"
+        group = entry.get("group")
+        if not name.endswith(".sh") or not group:
+            bad.append(f"{name}: 有校验值但缺 group/文件名，无法核对")
+            continue
+        path = SCRIPTS / group / "dws" / "02_etl" / name
+        if not path.is_file():
+            bad.append(f"{name}: 清单有校验值但现盘无此脚本")
+            continue
+        blob = path.read_bytes()
+        if "bytes" in entry and entry["bytes"] != len(blob):
+            bad.append(f"{name}: bytes 不符（清单 {entry['bytes']} / 现盘 {len(blob)}）")
+            continue
+        if "sha256" in entry:
+            digest = hashlib.sha256(blob).hexdigest()
+            if str(entry["sha256"]).lower() != digest:
+                bad.append(f"{name}: sha256 不符")
+    return bad
+
+
+_STALE_MANIFEST_WARNED = False
+
+
+def _guard_dws_manifest(allow_stale=False):
+    """sha/bytes 不符则抛 StaleDwsManifest；显式放行只告警，仍不改清单。"""
+    global _STALE_MANIFEST_WARNED
+    bad = dws_manifest_mismatches()
+    if not bad:
+        return
+    if allow_stale:
+        if not _STALE_MANIFEST_WARNED:
+            _STALE_MANIFEST_WARNED = True
+            print(f"  ⚠ _DWS搬移清单.json 与现盘不一致 {len(bad)} 条"
+                  f"（--allow-stale-dws-manifest：仍用 group，不刷新清单）")
+            for line in bad[:8]:
+                print(f"    {line}")
+            if len(bad) > 8:
+                print(f"    … 其余 {len(bad) - 8} 条")
+        return
+    raise StaleDwsManifest(bad)
+
+
+def _fail_stale(exc):
+    print(f"  ✗ {exc}")
+    for line in exc.mismatches[:8]:
+        print(f"    {line}")
+    if len(exc.mismatches) > 8:
+        print(f"    … 其余 {len(exc.mismatches) - 8} 条")
+    print("  加 --allow-stale-dws-manifest 可继续（不刷新清单、不覆盖脚本）")
+    return 1
+
+
+def dws_source_map(allow_stale=False):
+    _guard_dws_manifest(allow_stale)
     manifest = SCRIPTS / "_DWS搬移清单.json"
     if manifest.is_file():
         data = json.loads(manifest.read_text(encoding="utf-8"))
@@ -242,12 +322,10 @@ def dws_source_map():
 def stage_dws_from_jf(apply: bool, args=None):
     """把甲方 02-DWS执行脚本/*.txt 对账到 scripts/{系统}/dws/02_etl。
 
-    口径（2026-10-26 复核）：仓库 24 个脚本与甲方 txt **逐字节一致**，
-    本步骤默认只做**差异比对防漂移**，不落盘；一旦出现差异，默认保留
-    仓库版本，只有显式 --force-dws-raw 才用甲方原文覆盖。
-    ★ 例外：仓库脚本带 `DW-DEVIATION` 标记的（拼接副本已按口径修复），
-      `--force-dws-raw` 也**不覆盖** —— 覆盖会把修复连同甲方的缺陷一起还原。
+    只比对、不覆盖。仓库版含 Hive 4.2 方言修复，甲方原文跑不了；
+    ``apply`` 对这一步也不落盘。带 ``DW-DEVIATION`` 的脚本单独列出。
     """
+    del apply  # 保留参数以兼容调用方；本函数不再写脚本
     if not SRC_DWS_EXEC.is_dir():
         print(f"  {SRC_DWS_EXEC} 不存在，跳过")
         return 0, 0
@@ -256,7 +334,8 @@ def stage_dws_from_jf(apply: bool, args=None):
         print(f"  {SRC_DWS_EXEC} 无 *.txt，跳过")
         return 0, 0
 
-    mapping = dws_source_map()
+    allow = getattr(args, "allow_stale_dws_manifest", False)
+    mapping = dws_source_map(allow_stale=allow)
     planned, same, deviated = [], [], []
     for p in srcs:
         sysname = mapping.get(p.stem)
@@ -266,8 +345,6 @@ def stage_dws_from_jf(apply: bool, args=None):
         if dst.is_file() and p.read_bytes() == dst.read_bytes():
             same.append(p.stem)
             continue
-        # ★ 带 DW-DEVIATION 标记 = 有意偏离甲方原文（如修复拼接副本），
-        #   即使 --force-dws-raw 也不能覆盖回去，否则会把修复连同缺陷一起还原。
         if dst.is_file() and _sh_repair().DEVIATION_MARK in \
                 dst.read_bytes().decode("utf-8", "replace"):
             deviated.append(p.stem)
@@ -276,7 +353,7 @@ def stage_dws_from_jf(apply: bool, args=None):
 
     total = len(planned) + len(same) + len(deviated)
     if deviated:
-        print(f"  已知偏离（有意不改回甲方原文，--force-dws-raw 也不覆盖）"
+        print(f"  已知偏离（有意不改回甲方原文）"
               f"{len(deviated)} 个: {', '.join(deviated)}")
     if planned:
         print(f"  甲方 DWS {SRC_DWS_EXEC} -> {SCRIPTS}/{{系统}}/dws/02_etl: "
@@ -285,22 +362,9 @@ def stage_dws_from_jf(apply: bool, args=None):
             print(f"    差异: {sysname}/{p.name}")
         if len(planned) > 8:
             print(f"    … 其余 {len(planned) - 8} 个")
-        if not getattr(args, "force_dws_raw", False):
-            print("  ⚠ 与仓库存在差异，默认只比对不覆盖（防漂移）；"
-                  "如确需用甲方原文覆盖请加 --force-dws-raw")
+        print("  ⚠ 与仓库存在差异，只比对不覆盖（仓库版才是可执行基线）")
     elif not deviated:
         print(f"  甲方 DWS {total} 个与仓库完全一致")
-    if not apply or not planned:
-        return total, len(planned)
-    # ★ 2026-10-28：原先落盘只看 apply、与上面「默认不覆盖」的提示矛盾 ——
-    #   不带 --force-dws-raw 的 --apply 也会静默覆盖差异文件。当前 24/24
-    #   逐字节一致 ⇒ planned 恒空、此分支空跑；仅在未来出现差异时生效。
-    if not getattr(args, "force_dws_raw", False):
-        return total, len(planned)
-    for sysname, p, dst in planned:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(p, dst)
-        print(f"  甲方 DWS(原文) {p.name} -> {dst}")
     return total, len(planned)
 
 
@@ -344,7 +408,10 @@ def cmd_scripts(args):
     if "DWS" in layers:
         print("== DWS scripts ==")
         if args.source == "jf":
-            total, _diff = stage_dws_from_jf(args.apply, args)
+            try:
+                total, _diff = stage_dws_from_jf(args.apply, args)
+            except StaleDwsManifest as exc:
+                return _fail_stale(exc)
             n_repo = sum(len(list((SCRIPTS / s / "dws/02_etl").glob("*.sh"))) for s in SYS)
             print(f"  DWS 脚本合计（仓库） {n_repo}")
             if n_repo != DWS_EXPECT_SCRIPTS:
@@ -395,12 +462,14 @@ def _dwd_sanitize():
     return _dwd_sanitize_mod().sanitize_ddl
 
 
-def dws_table_sys_map():
+def dws_table_sys_map(allow_stale=False):
     """DWS 表 → 系统。`ddl/*.sql` 落位优先，`_DWS搬移清单.json` 的 group 补缺。
 
     ★ 两源取**并集**：清单可能含已不在 ddl/ 下的表，ddl/ 也可能有清单未登记的表。
       只取其一会让 cmd_verify_ddl 静默跳过缺失的表（校验变弱、不报错）。
+    ★ 清单带 sha256/bytes 时必须与现盘一致，否则抛 StaleDwsManifest（不改清单）。
     """
+    _guard_dws_manifest(allow_stale)
     m = {}
     for s in SYS:
         for p in (SCRIPTS / s / "dws/ddl").glob("*.sql"):
@@ -446,7 +515,7 @@ def parse_jf_ddl(path):
     return stmts
 
 
-def build_dws_ddl_from_jf(apply, strict=True):
+def build_dws_ddl_from_jf(apply, strict=True, allow_stale=False):
     """甲方 `02-DWS建表脚本.sql` → `scripts/{系统}/dws/ddl/*.sql` + `01_ddl.sql`。
 
     为什么要清洗：甲方脚本是 Inceptor 方言，含 `DEFAULT NULL`（Hive 4.2 不支持）
@@ -467,7 +536,7 @@ def build_dws_ddl_from_jf(apply, strict=True):
     if not stmts:
         print(f"  {SRC_DWS_DDL} 未解析出 CREATE TABLE")
         return 1
-    owner = dws_table_sys_map()
+    owner = dws_table_sys_map(allow_stale=allow_stale)
     have = {t: owner[t] for t in stmts if t in owner}
     miss = sorted(t for t in stmts if t not in owner)
     by_sys = {}
@@ -652,7 +721,12 @@ def cmd_ddl(args):
     if "DWS" in layers:
         print("== DWS DDL ==")
         if args.source == "jf":
-            rc |= build_dws_ddl_from_jf(args.apply, strict)
+            try:
+                rc |= build_dws_ddl_from_jf(
+                    args.apply, strict,
+                    allow_stale=getattr(args, "allow_stale_dws_manifest", False))
+            except StaleDwsManifest as exc:
+                return _fail_stale(exc)
             if strict:
                 for s in SYS:
                     _stale_warn(SRC_DWS_DDL, SCRIPTS / s / "dws/01_ddl.sql", f"{s} DWS 01_ddl.sql")
@@ -736,7 +810,11 @@ def cmd_verify_ddl(args):
             print(f"  ✗ {SRC_DWS_DDL} 不存在")
             return 1
         stmts = parse_jf_ddl(SRC_DWS_DDL)
-        owner = dws_table_sys_map()
+        try:
+            owner = dws_table_sys_map(
+                allow_stale=getattr(args, "allow_stale_dws_manifest", False))
+        except StaleDwsManifest as exc:
+            return _fail_stale(exc)
         have = {t: owner[t] for t in stmts if t in owner}
         verify = _load_ddl_verify()
         drift_count = 0
@@ -1024,7 +1102,7 @@ def cmd_repair(args):
                 nl = "\r\n" if "\r\n" in new else "\n"
                 mark = (f"# {mod.DEVIATION_MARK}: 甲方原文为两份脚本拼接（done 与 shebang 粘连，"
                         f"while 不闭合），按口径只保留第 1 个 beeline 的完整 SQL；"
-                        f"勿用 --force-dws-raw 覆盖")
+                        f"不要用甲方原文覆盖")
                 if new.startswith("#!") and nl in new:
                     i = new.index(nl) + len(nl)
                     new = new[:i] + mark + nl + new[i:]
@@ -1211,7 +1289,7 @@ def cmd_all(args):
 # --------------------------------------------------------------------------- #
 # CLI：参数单一来源 + 按子命令裁剪
 #   原来 7 个开关挂在**每个**子命令上（靠 argparse.SUPPRESS 防止子解析器覆盖默认值），
-#   于是 `verify --help` 会列出 --deploy / --force-dws-raw 这些完全无关的开关，
+#   于是 `verify --help` 会列出 --deploy 这类完全无关的开关，
 #   拼错子命令也不报错。现在改成「谁用谁声明」：verify 只有 --layers/--ds，
 #   deploy/delete/layout 只有 --layers/--apply，逃生舱只挂在 scripts 上。
 # --------------------------------------------------------------------------- #
@@ -1230,8 +1308,9 @@ OPT = {
         action="store_true", help="all 末尾追加删除/重建/排版")),
     "gen_err": (("--allow-gen-errors",), dict(
         action="store_true", help="gen 模式忽略生成器 ERROR 日志（仍会复制产物）")),
-    "raw": (("--force-dws-raw",), dict(
-        action="store_true", help="用甲方 02-DWS执行脚本 原文覆盖 scripts 里的 DWS 脚本")),
+    "stale_manifest": (("--allow-stale-dws-manifest",), dict(
+        action="store_true",
+        help="清单 sha256/bytes 与现盘不一致时仍继续（不刷新清单、不覆盖脚本）")),
     "no_strict": (("--no-strict",), dict(
         action="store_true", help="DDL 校验发现差异时不阻断（默认阻断）")),
     "strict": (("--strict",), dict(
@@ -1241,11 +1320,11 @@ OPT = {
 
 # 子命令 → (处理函数, 用到的参数, 一行说明)
 SUBCOMMANDS = {
-    "scripts": (cmd_scripts, ("layers", "source", "apply", "gen_err", "raw"),
+    "scripts": (cmd_scripts, ("layers", "source", "apply", "gen_err", "stale_manifest"),
                 "同步/生成脚本（jf 搬甲方 txt；gen 跑生成器）"),
-    "ddl": (cmd_ddl, ("layers", "source", "apply", "no_strict"),
+    "ddl": (cmd_ddl, ("layers", "source", "apply", "no_strict", "stale_manifest"),
             "重建建表语句（含 Inceptor 方言清洗，落盘后自检与甲方一致）"),
-    "verify-ddl": (cmd_verify_ddl, ("layers", "source", "no_strict"),
+    "verify-ddl": (cmd_verify_ddl, ("layers", "source", "no_strict", "stale_manifest"),
                    "仅校验本地 DDL 与甲方一致性（不落盘）"),
     "lineage": (cmd_lineage, ("layers", "apply"), "重建依赖/血缘工作簿"),
     "config": (cmd_config, ("layers", "apply"), "生成 DS 依赖配置 dep-config-*"),
@@ -1255,7 +1334,8 @@ SUBCOMMANDS = {
     "repair": (cmd_repair, ("layers", "apply"),
                "拼接副本修复：只保留第 1 个 beeline 的完整 SQL"),
     "verify": (cmd_verify, ("layers", "ds", "strict"), "校验脚本/DDL/依赖配置"),
-    "all": (cmd_all, ("layers", "source", "apply", "ds", "deploy", "gen_err", "raw", "no_strict", "strict"),
+    "all": (cmd_all, ("layers", "source", "apply", "ds", "deploy", "gen_err",
+                     "stale_manifest", "no_strict", "strict"),
             "串跑 scripts→ddl→verify-ddl→lineage→config→(deploy)→verify"),
 }
 
