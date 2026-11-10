@@ -1,7 +1,7 @@
 # Code Wiki — 数仓代码自动生成项目
 
 > 本文件是仓库级代码维基，覆盖：整体架构、模块职责、关键类与函数、依赖关系、运行方式。
-> 口径类规范以 [AGENTS.md](../AGENTS.md) / `CLAUDE.md` 为准；本文件只描述**代码结构与用法**。
+> 口径类规范以 [AGENTS.md](../AGENTS.md) 为准（`CLAUDE.md` 只是指向它的短入口）；本文件只描述**代码结构与用法**。
 
 ---
 
@@ -65,7 +65,9 @@ SQL 拿到本机 docker **Hive 4.2**（`hiveserver2`）做编译校验与真实�
 
 ```
 claude-code/
-├── AGENTS.md / CLAUDE.md      # 项目口径规范（两份内容一致，AI 辅助用）
+├── README.md                  # 给人看的简要说明
+├── AGENTS.md                  # 项目口径全文
+├── CLAUDE.md                  # 短入口，指向 AGENTS.md
 ├── pyproject.toml             # 包元信息；入口 generate-dw = tools.main:main
 ├── requirements.txt           # pandas / openpyxl / python-calamine(可选)
 ├── demo/templates/
@@ -414,7 +416,7 @@ python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 [--dry-run|--skip-
 | `test_table_utils.py` / `test_data_dict.py` | 工具 / 数据字典 | 各 11 |
 | `test_table_survey.py` / `test_validation.py` | 表级解析 / 安全校验 | 各 7 / 7 |
 | `test_excel_reader.py` | calamine/openpyxl 双路径 | 6 |
-| `test_project_consistency.py` | 口径守门（归属字典单一来源、`AGENTS.md`≡`CLAUDE.md`） | 4 |
+| `test_project_consistency.py` | 口径守门（归属字典单一来源、`CLAUDE.md` 只指向 `AGENTS.md`） | 5 |
 | 其余（`test_dwd_pipeline` `test_dw_pipeline` `test_sys_extractor` `test_field_survey`） | 管线与解析 | 3–8 |
 
 ```bash
@@ -425,7 +427,7 @@ python3 -m unittest discover -s tools/tests -p "test_*.py"
 
 | 文档 | 内容 |
 |---|---|
-| [AGENTS.md](../AGENTS.md) / `CLAUDE.md` | 项目口径：命名规范、系统列表、MASTER/DWD/DWS 基线、工作流归属与重启顺序 |
+| [AGENTS.md](../AGENTS.md) | 项目口径全文：命名规范、系统列表、MASTER/DWD/DWS 基线、工作流归属与重启顺序。`CLAUDE.md` 只是短入口 |
 | `docs/功能与规范文档.md` | 生成器功能与规范明细（含 J-xx 条目、§15.3 T-1 免配规则） |
 | `docs/DWD-DWS一体化管线使用说明.md` | `dw-pipeline` 使用手册 |
 | `docs/主数据生成说明.md` | MASTER 层口径（甲方脚本 + 手工血缘） |

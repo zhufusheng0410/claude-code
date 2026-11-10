@@ -50,10 +50,20 @@ class TestDepcfgDefaults(unittest.TestCase):
 
 
 class TestDocSync(unittest.TestCase):
-    def test_agents_equals_claude(self):
-        a = (ROOT / 'AGENTS.md').read_bytes()
-        c = (ROOT / 'CLAUDE.md').read_bytes()
-        self.assertEqual(a, c, 'AGENTS.md 与 CLAUDE.md 必须逐字节一致（改一个就复制过去）')
+    def test_claude_points_at_agents(self):
+        """口径全文只在 AGENTS.md。CLAUDE.md 是短入口，禁止再复制成第二份全文。"""
+        agents = (ROOT / 'AGENTS.md').read_text(encoding='utf-8')
+        claude = (ROOT / 'CLAUDE.md').read_text(encoding='utf-8')
+        self.assertIn('AGENTS.md', claude)
+        self.assertLess(len(claude), 800, 'CLAUDE.md 应保持短入口，不要复制 AGENTS.md')
+        self.assertGreater(len(agents), len(claude) * 5)
+        self.assertIn('数仓层级规范', agents)
+        self.assertNotEqual(agents, claude)
+
+    def test_readme_points_at_agents(self):
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        self.assertIn('AGENTS.md', readme)
+        self.assertLess(len(readme), 4000)
 
 
 if __name__ == '__main__':
