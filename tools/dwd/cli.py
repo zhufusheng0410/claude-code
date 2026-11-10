@@ -56,9 +56,12 @@ def cmd_verify(args):
         try:
             import ds_client
             ds = ds_client.get_client()
-        except Exception as e:
-            print('  ⚠ DS 连接失败:', e)
-            report['ds'] = {'error': str(e)}
+        except (ImportError, OSError, ValueError, RuntimeError) as e:
+            # ImportError：ds_client 缺失；OSError/URLError：连不上；
+            # ValueError：会话 JSON 坏；RuntimeError：SecretMissingError / DSClientError。
+            # 语法错误等编程错误不在此列，应直接抛出。
+            print(f'  ⚠ DS 连接失败（{type(e).__name__}）: {e}')
+            report['ds'] = {'error': f'{type(e).__name__}: {e}'}
             return 1
         P = '/projects/185582190746560'
         lst = ds_client.lst_of(

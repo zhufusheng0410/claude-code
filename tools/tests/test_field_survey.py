@@ -116,6 +116,16 @@ class TestFieldSurveyTempFile(unittest.TestCase):
         self.assertFalse(os.path.exists(self.path + ".fixed.xlsx"),
                          "修复产物不得留在甲方交付目录")
 
+    def test_non_read_error_is_not_sent_to_repair(self):
+        """编程错误不能被当成 autoFilter 失败吞进修复逻辑。"""
+        def boom(path, engine=None):
+            raise RuntimeError("not a read failure")
+
+        self.fs.pd.ExcelFile = boom
+        with self.assertRaises(RuntimeError) as ctx:
+            self.fs.parse_field_survey(self.path)
+        self.assertEqual(str(ctx.exception), "not a read failure")
+
 
 if __name__ == "__main__":
     unittest.main()

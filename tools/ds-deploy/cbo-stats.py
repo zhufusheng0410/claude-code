@@ -438,7 +438,10 @@ def _load_done(stmts: list) -> set:
     for p in sorted(_glob.glob(os.path.join(report_dir, "cbo_run_*.json"))):
         try:
             rows = json.loads(pathlib.Path(p).read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, OSError, UnicodeError) as e:
+            # 坏掉的断点文件跳过，不让一次写坏拖垮续跑；类型写进日志。
+            print("  ! 跳过无法读取的断点文件 %s（%s: %s）" % (
+                p, type(e).__name__, e))
             continue
         for row in rows:
             if row.get("ok") and row.get("sql") in want:

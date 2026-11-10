@@ -419,7 +419,9 @@ def _hive_result():
         return None
     try:
         data = json.loads(p.read_text(encoding='utf-8'))
-    except Exception:
+    except (json.JSONDecodeError, OSError, UnicodeError) as e:
+        # 残缺/不可读当作没有结果；类型写进日志，避免再被裸 Exception 静默吞掉。
+        print(f'  ! 语法校验结果无法读取 {p.name}: {type(e).__name__}: {e}')
         return None
     ddl = data.get('ddl') or {}
     etl = data.get('etl') or {}

@@ -3,7 +3,11 @@ import tempfile
 import shutil
 import os
 import re
+import xml.etree.ElementTree as ET
 import zipfile
+import zlib
+from openpyxl.utils.exceptions import InvalidFileException
+
 from ..core.ir import FieldMeta
 from ..core.type_mapper import oracle_to_hive
 from tools.utils.excel_reader import (
@@ -13,6 +17,19 @@ from tools.utils.pandas_helpers import safe_str, safe_float
 from tools.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
+
+# ★ 2026-11-10：只接住「文件读不出来」。编程错误（断言、未定义名等）继续抛，
+#   不再被裸 Exception 吞进 autoFilter 修复或包成一句 RuntimeError。
+_EXCEL_READ_ERRORS = (
+    OSError,
+    ValueError,
+    TypeError,
+    LookupError,
+    zipfile.BadZipFile,
+    zlib.error,
+    InvalidFileException,
+    ET.ParseError,
+)
 
 
 def parse_field_survey(filepath: str) -> dict:
@@ -56,10 +73,10 @@ def _read_excel_safely(filepath: str) -> pd.DataFrame:
         sheet_name = xls.sheet_names[0]
         df = pd.read_excel(xls, sheet_name=sheet_name, dtype=str)
         return df
-    except Exception:
-        pass  # 进入修复逻辑
-
-    logger.warning(f"  直接读取失败，尝试修复 autoFilter: {filepath}")
+    except _EXCEL_READ_ERRORS as e:
+        logger.warning(
+            f"  直接读取失败（{type(e).__name__}: {e}），尝试修复 autoFilter: {filepath}"
+        )
     tmp_dir = tempfile.mkdtemp()
     fixed_zip = None
     try:
@@ -102,8 +119,10 @@ def _read_excel_safely(filepath: str) -> pd.DataFrame:
         logger.debug(f"  autoFilter 修复成功")
         return df
 
-    except Exception as e:
-        raise RuntimeError(f"无法读取Excel文件 {filepath}: {e}")
+    except _EXCEL_READ_ERRORS as e:
+        raise RuntimeError(
+            f"无法读取Excel文件 {filepath}: {type(e).__name__}: {e}"
+        ) from e
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

@@ -11,9 +11,13 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
+import zipfile
+import zlib
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.hyperlink import Hyperlink
 
@@ -57,8 +61,10 @@ def _scan_mapping_xlsx(p, out):
                     v = row[entity_col] if entity_col < len(row) else None
                     if v is not None and TAB_RE.match(norm_table(v)):
                         out[norm_table(v)].append(p.name)
-    except Exception as e:
-        print(f'  ! {p.name}: {e}')
+    # ★ 2026-11-10：一个坏 xlsx 跳过并带上异常类型；编程错误不再被裸 Exception 吞掉。
+    except (OSError, ValueError, TypeError, LookupError, zipfile.BadZipFile,
+            zlib.error, InvalidFileException, ET.ParseError) as e:
+        print(f'  ! {p.name}: {type(e).__name__}: {e}')
     finally:
         wb.close()
 
