@@ -166,10 +166,20 @@
   **工作簿不混层** —— DWS 工作簿只做 DWS 侧分析，DWD 工作簿只做 DWD 侧分析，跨层文档不互相链接），
   `DWS_语法校验.md`（24/24 通过 Hive `EXPLAIN`）、
   `DWS_表中文名.json`、`_DWS搬移清单.json`）。
-- **DWS 脚本 = 甲方原文**（2026-10-26 复核：24/24 与 `05-脚本/02-脚本/02-DWS执行脚本/*.txt` **逐字节一致**，
+- **DWS 脚本 = 甲方原文 + J-28 同款方言修复**（2026-11-10 复核：仓库 24 个与
+  `05-脚本/02-脚本/02-DWS执行脚本/*.txt` **没有一个是逐字节一致的**）。差异全部来自
+  Hive 4.2 方言修复，共 5 类：`source ${hadoop_env}` + `source ${source_path}` →
+  `source /home/dolphinscheduler/hadoop_env`；补 `set hive.strict.checks.type.safety=false`；
+  删 Inceptor 专有 SET（`hive.input.format` / `inceptor.cross.join.enabled`）；
+  三参 `DATE_FORMAT` → 两参；INSERT 补 `PARTITION(P_DT = '${p_end_dt}')`。
   甲方交付 25 个，少的是 `DWS_TRAN_MKT_TRAN_PR_STAT_PTD`——3 份 MAPPING 里都没有它，
-  按「无 MAPPING 不纳管」排除，其表建了但无作业、无分区）。
-  管线仍保留「比对甲方 → 仓库」这一步用于防漂移；`--force-dws-raw` 目前等价空操作。
+  按「无 MAPPING 不纳管」排除，其表建了但无作业、无分区。
+  ⇒ **甲方原文本身在 Hive 4.2 上跑不了，仓库版才是可执行基线**；
+  `scripts --source jf` 里「比对甲方 → 仓库」因此会报 23 个差异，这是**预期**而非漂移。
+  ⚠ `--force-dws-raw` 一旦执行会把 23 个文件的方言修复还原成甲方原文（`DW-DEVIATION`
+  标记的那 1 个仍受保护）⇒ **视为禁用**；别再沿用「目前等价空操作」，它现在不等价。
+  ⚠ `_DWS搬移清单.json` 的 `bytes` / `sha256` 与现盘 24/24 均不匹配 ⇒ 清单整体过期，
+  刷新需 `dwd-pipeline.py distribute --apply`，待确认后再做。
   ⚠ 旧文档里「仓库为已修复版 / `baseline=repaired-current`」的说法已过期（清单无该字段），不要再据此判断。
 - DWS 依赖配置 `tools/ds-deploy/dep-config-dws` 24 份；工作流 `DWS_HSFA 7 / DWS_O32 9 /
   DWS_ZTA 8`，拓扑序 `DWS_HSFA → DWS_O32 → DWS_ZTA`。
@@ -433,14 +443,14 @@ python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
 
 | 子命令 | 作用 |
 |--------|------|
-| `scripts` | jf：DWD 调 `dwd-pipeline.py convert/distribute`；DWS 比对甲方 `02-DWS执行脚本` 与 `scripts/*/dws/02_etl`（现二者逐字节一致，比对仅防漂移；`--force-dws-raw` 等价空操作）。gen：`tools/main.py --layer DWD\|DWS` 生成到 `scripts/.dw-gen-*`，扫 `[ERROR` 失败即停；DWD 不碰 `scripts/MASTER` |
+| `scripts` | jf：DWD 调 `dwd-pipeline.py convert/distribute`；DWS 比对甲方 `02-DWS执行脚本` 与 `scripts/*/dws/02_etl`（必然报 23 个差异：仓库版是甲方原文 + Hive 4.2 方言修复；**`--force-dws-raw` 禁用**，执行会把方言修复还原成甲方原文）。gen：`tools/main.py --layer DWD\|DWS` 生成到 `scripts/.dw-gen-*`，扫 `[ERROR` 失败即停；DWD 不碰 `scripts/MASTER` |
 | `ddl` | jf：DWD 调 `dwd-pipeline.py ddl`；DWS **从甲方 `01-建表语句/02-DWS建表脚本.sql` 搬移**（清洗 `DEFAULT NULL`/`VARCHAR2`，逐表落 `ddl/*.sql` 并重建 `01_ddl.sql`）。gen：只校验既有产物 |
 | `lineage` | DWD 调 `dwd-pipeline.py lineage`；DWS 校验 3 份 `DWS_lineage.xlsx`（表级血缘） |
 | `config` | DWD → `dep-config-proscript`（逐表 `.dep.json`，按主题分组）；DWS → `dep-config-dws`（24 表/3 工作流），并刷新 `scripts/DWS_表中文名.json` |
 | `delete` | 先删 `DWS_*` 再删 `DWD_*`；只删 DWD 时若 DWS 仍存在会拒绝 |
 | `deploy` | 预删 DWS → 删/建 DWD → 建 DWS（拓扑 `HSFA→O32→ZTA`）→ relayout |
 | `layout` | `ds-relayout.py dwd\|dws` |
-| `verify` | DWD 本地/`--ds` 来源审计；DWS 24 脚本、24 依赖配置、3 工作流 ONLINE、脚本逐字节一致 |
+| `verify` | DWD 本地/`--ds` 来源审计；DWS 24 脚本、24 依赖配置、3 工作流 ONLINE、DS rawScript 与仓库逐字节一致（CRLF 归一到 LF 后比对） |
 | `all` | `scripts→ddl→lineage→config→verify`；加 `--deploy` 再串 `deploy` |
 
 - gen 模式：DWD 生成数量以生成器输出为准（`_INIT`/无 MAPPING 表不生成，不自动删旧脚本）；
