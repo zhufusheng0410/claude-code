@@ -27,6 +27,9 @@ dependencies = [
 [project.optional-dependencies]
 # MAPPING Excel 冷读加速（缺失时 parser 自动回退 openpyxl）
 fast = ["python-calamine>=0.2.0,<0.4"]
+# DS 元库直连（ds-run / ds-schedule / ds-sync-ods-scripts）。不是生成器硬依赖。
+# 安装：pip install '.[deploy]' -c constraints.txt
+deploy = ["psycopg2-binary>=2.9.10,<2.10"]
 
 [project.scripts]
 generate-dw = "tools.main:main"

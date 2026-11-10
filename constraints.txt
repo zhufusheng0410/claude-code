@@ -16,3 +16,6 @@ openpyxl==3.1.5
 # --- 可选加速（MAPPING Excel 冷读；缺失时 parser/mapping.py 自动回退 openpyxl）---
 # 用区间而非精确值：它是可选项，且各平台 wheel 版本滞后不一，锁太死会拖累安装。
 python-calamine>=0.2.0,<0.4
+
+# --- 可选部署（DS 元库；pyproject optional-dependencies.deploy，非硬依赖）---
+psycopg2-binary==2.9.10
