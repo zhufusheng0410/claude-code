@@ -32,3 +32,6 @@ jobs:
           if [ "$found" -eq 0 ]; then echo "no tracked .sh files"; fi
       - name: Run unit tests
         run: python -m unittest discover -s tools/tests -p "test_*.py"
+      - name: ds-deploy import smoke
+        # 不安装 psycopg2（可选组 deploy）。缺该包时测试必须 skip，不能让 CI 失败。
+        run: python -m unittest tools.tests.test_ds_deploy_import_smoke
