@@ -258,7 +258,7 @@ dw/
 │   └── tests/               # 单元测试（`unittest discover` 自动发现）
 ├── demo/templates/          # ODS ETL Shell 模板
 │   └── etl_ods_template.sh
-├── scripts/                 # 生成的脚本输出（gitignored）
+├── scripts/                 # 脚本输出（已纳入版本库；一次性备份见 scripts/.gitignore）
 ├── docs/                    # 文档目录
 │   ├── 功能与规范文档.md     # 生成器功能与规范
 │   ├── DWD-ODS依赖体检报告.md

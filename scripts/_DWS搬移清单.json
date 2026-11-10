@@ -1,0 +1,256 @@
+{
+ "dist": {
+  "HSFA": 7,
+  "HSZTA": 8,
+  "O32": 9
+ },
+ "total": 24,
+ "master": "annotated-only; no master folder",
+ "excluded": [
+  {
+   "name": "DWS_TRAN_MKT_TRAN_PR_STAT_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_MKT_TRAN_PR_STAT_PTD.sh",
+   "reason": "无映射/无DWS血缘，用户决定直接排除"
+  }
+ ],
+ "files": [
+  {
+   "group": "HSFA",
+   "name": "DWS_PROD_AST_INFO_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_AST_INFO_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_AST_INFO_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "8cb8cab7be8e22ffaa3a380d1a8d9203906b184b2da4c52d5c4afa073dda3df6",
+   "bytes": 19034
+  },
+  {
+   "group": "HSFA",
+   "name": "DWS_PROD_EQUI_INFO_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_EQUI_INFO_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_EQUI_INFO_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "b92ff1aa5b7cb6f72c7f3d6e5ee6e58c20aaa1297862dda9fc8c366fdc6d5b05",
+   "bytes": 2740
+  },
+  {
+   "group": "HSFA",
+   "name": "DWS_PROD_SALE_DATA_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SALE_DATA_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SALE_DATA_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "14f3ad04614b8f50a2f1989cc26ef187c79e3d5cc5bf87aa766eac7f41daa14d",
+   "bytes": 4023,
+   "deviation": "只保留第 1 个 beeline 的完整 SQL（甲方原文为两份脚本拼接，done 与 shebang 粘连导致 while 不闭合）"
+  },
+  {
+   "group": "HSFA",
+   "name": "DWS_PROD_SCR_HLDP_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_HLDP_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_HLDP_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "8ac04694fd0627f4c514afeb01bb4c59c38aec91010c031aea80b10ca0e52d2f",
+   "bytes": 13363
+  },
+  {
+   "group": "HSFA",
+   "name": "DWS_PROD_SCR_PL_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_PL_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_PL_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "7ce4e2b28d5fd1e135acb944cf053ddb179ca8c4cb38215d4bdfe6a142404370",
+   "bytes": 19247
+  },
+  {
+   "group": "HSFA",
+   "name": "DWS_PROD_SCR_TRAN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_TRAN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SCR_TRAN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "6d6ff08a23bd2df2e4f64a17d8177b323599e7b85012e3f7879a5ca5f4b83843",
+   "bytes": 74701
+  },
+  {
+   "group": "HSFA",
+   "name": "DWS_PROD_SUM_INFO_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SUM_INFO_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSFA\\dws\\02_etl\\DWS_PROD_SUM_INFO_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "d6580e4b1f95c565ad58b8387501672ee8e3fdc8af0c3c892d45464198d70075",
+   "bytes": 22567
+  },
+  {
+   "group": "HSZTA",
+   "name": "DWS_CUST_FST_TRAN_BTCH_PFD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_FST_TRAN_BTCH_PFD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_FST_TRAN_BTCH_PFD.sh",
+   "baseline": "repaired-current",
+   "sha256": "5ba504ecbb891e8ddce1b76b20d0b95502a1b893e7f9841c0fa5671e2d4682d3",
+   "bytes": 5497
+  },
+  {
+   "group": "HSZTA",
+   "name": "DWS_CUST_HOLD_AST_SUM_PFD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_HOLD_AST_SUM_PFD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_HOLD_AST_SUM_PFD.sh",
+   "baseline": "repaired-current",
+   "sha256": "f992af5993646fb645744c2743c89da334568d397d5899393793875f66548735",
+   "bytes": 4645
+  },
+  {
+   "group": "HSZTA",
+   "name": "DWS_CUST_HOLD_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_HOLD_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_CUST_HOLD_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "d246718d4cf469b536c1c64fb47c1556c7fdd60696df4c2bf2ce3510af0d84b0",
+   "bytes": 25357
+  },
+  {
+   "group": "HSZTA",
+   "name": "DWS_PROD_HOLD_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_PROD_HOLD_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_PROD_HOLD_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "83c59e89c0dcf33af553e4cac413488ec4acbe0db3a1081e9d6d711e7807a495",
+   "bytes": 7846
+  },
+  {
+   "group": "HSZTA",
+   "name": "DWS_PROD_INFO_PFD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_PROD_INFO_PFD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_PROD_INFO_PFD.sh",
+   "baseline": "repaired-current",
+   "sha256": "734611e944abdebc7a35d8c1edb63f8927e4642a076ababb619dbe22fcf2a65e",
+   "bytes": 23715
+  },
+  {
+   "group": "HSZTA",
+   "name": "DWS_TRAN_ACCT_OPEN_BTCH_PFD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_ACCT_OPEN_BTCH_PFD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_ACCT_OPEN_BTCH_PFD.sh",
+   "baseline": "repaired-current",
+   "sha256": "f4dc2bfe89ff27a169008ca51987dd086e37c5c697841695f697c2a21ad2996d",
+   "bytes": 66283
+  },
+  {
+   "group": "HSZTA",
+   "name": "DWS_TRAN_AFFI_BTCH_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_AFFI_BTCH_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_AFFI_BTCH_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "f37fb7e06629861ea7dd7f2e960ab01c43df24014b08ec313195ffa8d10b7e40",
+   "bytes": 17639
+  },
+  {
+   "group": "HSZTA",
+   "name": "DWS_TRAN_MKT_TRAN_CNFM_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_MKT_TRAN_CNFM_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\HSZTA\\dws\\02_etl\\DWS_TRAN_MKT_TRAN_CNFM_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "9271a4e5353e340d687ca0c26360d0f7643e5f46d64269b388ff857beb4b9451",
+   "bytes": 15177
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_BOND_TRAN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_BOND_TRAN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_BOND_TRAN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "cb8b59ace0fbdb5d019f88f4cc82e8d1903c9d4ddc8063b0f67043029858fdab",
+   "bytes": 38804
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_DPSI_TRAN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_DPSI_TRAN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_DPSI_TRAN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "4af758f50ad665a8655613f8c0fb27bc3500e6c5b9fd4088cc3885bc5c776f44",
+   "bytes": 15091
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_EXCH_BOND_OUT_IN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_EXCH_BOND_OUT_IN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_EXCH_BOND_OUT_IN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "111638d555dccaff468caeb866504cc4ec1974cc5d26cc28be099175a5c09cad",
+   "bytes": 12412
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_EXCH_FUND_TRAN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_EXCH_FUND_TRAN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_EXCH_FUND_TRAN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "b716a24c45e997c9a5c08d9bc5cbc08fb143c24dccc8cb071533b7010079e092",
+   "bytes": 12333
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_FUTR_TRAN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_FUTR_TRAN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_FUTR_TRAN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "1b18856ddf09e36e4005a0510a52d9918e7757b778b7100fe02347b002dfb9a3",
+   "bytes": 12224
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_OTC_FUND_TRAN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_OTC_FUND_TRAN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_OTC_FUND_TRAN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "56fc98c241bb7f20243202f83d94d5987e891e9bd7804bceae443e289753235f",
+   "bytes": 11400
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_REPO_TRAN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_REPO_TRAN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_REPO_TRAN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "0a4fe33e74b74e6404d89578e30843bbc2799b37decb550b5882e3e33516b2d5",
+   "bytes": 25451
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_SCR_CHANGE_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_SCR_CHANGE_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_SCR_CHANGE_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "cb0bfb28ec17dbc7123219d0c155bb52ec5b74964952095f8ad25f89753b7412",
+   "bytes": 33765
+  },
+  {
+   "group": "O32",
+   "name": "DWS_TRAN_STK_TRAN_DETAIL_PTD.sh",
+   "source": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\tools\\.dx-tmp\\backup-hszta-dws-nonZTA-20261020\\_超出TA-mapping-20261020\\DWS_TRAN_STK_TRAN_DETAIL_PTD.sh",
+   "dest": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts\\O32\\dws\\02_etl\\DWS_TRAN_STK_TRAN_DETAIL_PTD.sh",
+   "baseline": "repaired-current",
+   "sha256": "521fa07a5c1c2fa96379d79ad9d26bd80e617eaf1a776878faf0f093e9d6a091",
+   "bytes": 31020
+  }
+ ],
+ "run": {
+  "date": "20261018",
+  "mode": "direct-beeline",
+  "ok": 24,
+  "failed": 0,
+  "skipped": 0,
+  "all_target_counts_zero": true,
+  "note": "首轮 1-23 成功；第 24 个脚本清理残留 Tez 会话后单独重跑成功；再次全量复跑在 DWS_TRAN_ACCT_OPEN_BTCH_PFD 的 Tez 等待处中止，未计入结果",
+  "updated_at": "2026-10-20 19:57:31",
+  "report": "scripts/DWS_实际运行报告-20261018.md"
+ },
+ "generated_at": "2026-10-20 17:41:43",
+ "verification": {
+  "shell_syntax": "24/24",
+  "hive_explain": "24/24",
+  "hive_explain_report": "scripts/DWS_语法校验.md",
+  "run": "24/24",
+  "run_report": "scripts/DWS_实际运行报告-20261018.md"
+ },
+ "authoritative_source": "scripts/{系统}/dws/02_etl",
+ "deliverable_dir": "C:\\Users\\84148\\Desktop\\trae\\claude-code\\scripts"
+}

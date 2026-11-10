@@ -1,0 +1,617 @@
+#!/bin/sh
+#初始化环境变量：
+source /home/dolphinscheduler/hadoop_env
+inceptor_beeline()
+{
+    beeline -u ${hive_jdbc} -n ${hive_username} -p ${hive_password}   -e "$1"
+}
+inceptor_beeline "
+DROP TABLE IF EXISTS ODS_XDAY_JY.ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD_TMP;
+CREATE TABLE ODS_XDAY_JY.ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD_TMP(
+  ID  DECIMAL(19,0)  COMMENT  'ID',
+  INFOPUBLDATE  STRING  COMMENT  '信息发布日期',
+  INFOSOURCE  STRING  COMMENT  '信息来源',
+  BULLETINTYPE  DECIMAL(10,0)  COMMENT  '公告类别',
+  COMPANYCODE  STRING  COMMENT  '公司代码',
+  ENDDATE  STRING  COMMENT  '日期',
+  IFADJUSTED  DECIMAL(10,0)  COMMENT  '是否调整',
+  IFMERGED  STRING  COMMENT  '合并标志',
+  ACCOUNTINGSTANDARDS  DECIMAL(10,0)  COMMENT  '会计准则',
+  ENTERPRISETYPE  STRING  COMMENT  '工业企业类型',
+  GOODSSALESERVICERENDERCASH  DECIMAL(19,4)  COMMENT  '销售商品、提供劳务收到的现金(元)',
+  TAXLEVYREFUND  DECIMAL(19,4)  COMMENT  '收到的税费返还(元)',
+  NETDEPOSITINCREASE  DECIMAL(19,4)  COMMENT  '存款增加净额(元)',
+  NETBORROWINGFROMCENTRALBANK  DECIMAL(19,4)  COMMENT  '向中央银行借款净增加额',
+  NETBORROWINGFROMFINANCECO  DECIMAL(19,4)  COMMENT  '向其他金融企业拆借的资金净额(元)',
+  DRAWBACKLOANSCANCELED  DECIMAL(19,4)  COMMENT  '收回已核销贷款',
+  INTERESTANDCOMMISSIONCASHIN  DECIMAL(19,4)  COMMENT  '收取利息、手续费及佣金的现金',
+  NETDEALTRADINGASSETS  DECIMAL(19,4)  COMMENT  '处置交易性金融资产净增加额',
+  NETBUYBACK  DECIMAL(19,4)  COMMENT  '回购业务资金净增加额(元)',
+  NETORIGINALINSURANCECASH  DECIMAL(19,4)  COMMENT  '收到原保险合同保费取得的现金',
+  NETREINSURANCECASH  DECIMAL(19,4)  COMMENT  '收到再保业务现金净额',
+  NETINSURERDEPOSITINVESTMENT  DECIMAL(19,4)  COMMENT  '保户储金及投资款净增加额',
+  OTHERCASHINRELATEDOPERATE  DECIMAL(19,4)  COMMENT  '收到的其他与经营活动有关的现金(元)',
+  SPECIALITEMSOCIF  DECIMAL(19,4)  COMMENT  '##经营活动现金流入特殊项目',
+  ADJUSTMENTITEMSOCIF  DECIMAL(19,4)  COMMENT  '##经营活动现金流入调整项目',
+  SUBTOTALOPERATECASHINFLOW  DECIMAL(19,4)  COMMENT  '经营活动现金流入小计(元)',
+  GOODSSERVICESCASHPAID  DECIMAL(19,4)  COMMENT  '购买商品和劳务所支付的现金(元)',
+  STAFFBEHALFPAID  DECIMAL(19,4)  COMMENT  '支付给职工以及为职工支付的现金(元)',
+  ALLTAXESPAID  DECIMAL(19,4)  COMMENT  '支付的各项税费(元)',
+  NETLOANANDADVANCEINCREASE  DECIMAL(19,4)  COMMENT  '客户贷款及垫款净增加额',
+  NETDEPOSITINCBANDIB  DECIMAL(19,4)  COMMENT  '存放中央银行和同业款项净增加额',
+  NETLENDCAPITAL  DECIMAL(19,4)  COMMENT  '拆出资金净增加额(元)',
+  COMMISSIONCASHPAID  DECIMAL(19,4)  COMMENT  '支付手续费及佣金的现金',
+  ORIGINALCOMPENSATIONPAID  DECIMAL(19,4)  COMMENT  '支付原保险合同赔付款项的现金',
+  NETCASHFORREINSURANCE  DECIMAL(19,4)  COMMENT  '支付再保业务现金净额',
+  POLICYDIVIDENDCASHPAID  DECIMAL(19,4)  COMMENT  '支付保单红利的现金',
+  OTHEROPERATECASHPAID  DECIMAL(19,4)  COMMENT  '支付的其他与经营活动有关的现金(元)',
+  SPECIALITEMSOCOF  DECIMAL(19,4)  COMMENT  '##经营活动现金流出特殊项目',
+  ADJUSTMENTITEMSOCOF  DECIMAL(19,4)  COMMENT  '##经营活动现金流出调整项目',
+  SUBTOTALOPERATECASHOUTFLOW  DECIMAL(19,4)  COMMENT  '经营活动现金流出小计(元)',
+  ADJUSTMENTITEMSNOCF  DECIMAL(19,4)  COMMENT  '##经营活动现金流量净额调整项目',
+  NETOPERATECASHFLOW  DECIMAL(19,4)  COMMENT  '经营活动产生的现金流量净额(元)',
+  INVESTWITHDRAWALCASH  DECIMAL(19,4)  COMMENT  '收回投资所收到的现金(元)',
+  INVESTPROCEEDS  DECIMAL(19,4)  COMMENT  '取得投资收益收到的现金(元)',
+  FIXINTANOTHERASSETDISPOCASH  DECIMAL(19,4)  COMMENT  '处置固定资产、无形资产和其他长期资产而收回的现金净额(元)',
+  NETCASHDEALSUBCOMPANY  DECIMAL(19,4)  COMMENT  '处置子公司及其他营业单位收到的现金净额',
+  OTHERCASHFROMINVESTACT  DECIMAL(19,4)  COMMENT  '收到的其他与投资活动有关的现金(元)',
+  SPECIALITEMSICIF  DECIMAL(19,4)  COMMENT  '##投资活动现金流入特殊项目',
+  ADJUSTMENTITEMSICIF  DECIMAL(19,4)  COMMENT  '##投资活动现金流入调整项目',
+  SUBTOTALINVESTCASHINFLOW  DECIMAL(19,4)  COMMENT  '投资活动现金流入小计(元)',
+  FIXINTANOTHERASSETACQUICASH  DECIMAL(19,4)  COMMENT  '购建固定资产、无形资产和其他长期资产所支付的现金(元)',
+  INVESTCASHPAID  DECIMAL(19,4)  COMMENT  '投资支付的现金(元)',
+  NETCASHFROMSUBCOMPANY  DECIMAL(19,4)  COMMENT  '取得子公司及其他营业单位支付的现金净额',
+  IMPAWNEDLOANNETINCREASE  DECIMAL(19,4)  COMMENT  '质押贷款净增加额',
+  OTHERCASHTOINVESTACT  DECIMAL(19,4)  COMMENT  '支付的其他与投资活动有关的现金(元)',
+  SPECIALITEMSICOF  DECIMAL(19,4)  COMMENT  '##投资活动现金流出特殊项目',
+  ADJUSTMENTITEMSICOF  DECIMAL(19,4)  COMMENT  '##投资活动现金流出调整项目',
+  SUBTOTALINVESTCASHOUTFLOW  DECIMAL(19,4)  COMMENT  '投资活动现金流出小计(元)',
+  ADJUSTMENTITEMSNICF  DECIMAL(19,4)  COMMENT  '##投资活动现金流量净额调整项目',
+  NETINVESTCASHFLOW  DECIMAL(19,4)  COMMENT  '投资活动产生的现金流量净额(元)',
+  CASHFROMINVEST  DECIMAL(19,4)  COMMENT  '吸收投资收到的现金(元)',
+  CASHFROMMINOSINVESTSUB  DECIMAL(19,4)  COMMENT  '其中:子公司吸收少数股东投资收到的现金',
+  CASHFROMBONDSISSUE  DECIMAL(19,4)  COMMENT  '发行债券收到的现金',
+  CASHFROMBORROWING  DECIMAL(19,4)  COMMENT  '取得借款收到的现金',
+  OTHERFINANCEACTCASH  DECIMAL(19,4)  COMMENT  '收到其他与筹资活动有关的现金',
+  SPECIALITEMSFCIF  DECIMAL(19,4)  COMMENT  '##筹资活动现金流入特殊项目',
+  ADJUSTMENTITEMSFCIF  DECIMAL(19,4)  COMMENT  '##筹资活动现金流入调整项目',
+  SUBTOTALFINANCECASHINFLOW  DECIMAL(19,4)  COMMENT  '筹资活动现金流入小计(元)',
+  BORROWINGREPAYMENT  DECIMAL(19,4)  COMMENT  '偿还债务所支付的现金(元)',
+  DIVIDENDINTERESTPAYMENT  DECIMAL(19,4)  COMMENT  '分配股利、利润或偿付利息支付的现金',
+  PROCEEDSFROMSUBTOMINOS  DECIMAL(19,4)  COMMENT  '其中:子公司支付给少数股东的股利、利润或偿付的利息',
+  OTHERFINANCEACTPAYMENT  DECIMAL(19,4)  COMMENT  '支付的其他与筹资活动有关的现金(元)',
+  SPECIALITEMSFCOF  DECIMAL(19,4)  COMMENT  '##筹资活动现金流出特殊项目',
+  ADJUSTMENTITEMSFCOF  DECIMAL(19,4)  COMMENT  '##筹资活动现金流出调整项目',
+  SUBTOTALFINANCECASHOUTFLOW  DECIMAL(19,4)  COMMENT  '筹资活动现金流出小计(元)',
+  ADJUSTMENTITEMSNFCF  DECIMAL(19,4)  COMMENT  '##筹资活动流量现金净额调整项目',
+  NETFINANCECASHFLOW  DECIMAL(19,4)  COMMENT  '筹资活动产生的现金流量净额(元)',
+  EXCHANRATECHANGEEFFECT  DECIMAL(19,4)  COMMENT  '汇率变动对现金的影响额(元)',
+  OTHERITEMSEFFECTINGCE  DECIMAL(19,4)  COMMENT  '##影响现金及现金等价物的其他科目',
+  ADJUSTMENTITEMSCE  DECIMAL(19,4)  COMMENT  '##影响现金及现金等价物的调整项目',
+  CASHEQUIVALENTINCREASE  DECIMAL(19,4)  COMMENT  '现金及现金等价物净增加额(元)',
+  BEGINPERIODCASH  DECIMAL(19,4)  COMMENT  '期初现金及现金等价物余额(元)',
+  OTHERITEMSEFFECTINGCEI  DECIMAL(19,4)  COMMENT  '##现金及现金等价物净增加额的特殊项目',
+  ADJUSTMENTITEMSCEI  DECIMAL(19,4)  COMMENT  '##现金及现金等价物净增加额的调整项目',
+  ENDPERIODCASHEQUIVALENT  DECIMAL(19,4)  COMMENT  '现金及现金等价物的期末余额(元)',
+  NETPROFIT  DECIMAL(19,4)  COMMENT  '四、净利润(元)',
+  MINORITYPROFIT  DECIMAL(19,4)  COMMENT  '少数股东损益(元)',
+  ASSETSDEPRECIATIONRESERVES  DECIMAL(19,4)  COMMENT  '加:资产减值准备',
+  FIXEDASSETDEPRECIATION  DECIMAL(19,4)  COMMENT  '固定资产折旧(元)',
+  INTANGIBLEASSETAMORTIZATION  DECIMAL(19,4)  COMMENT  '无形资产摊销(元)',
+  DEFERREDEXPENSEAMORT  DECIMAL(19,4)  COMMENT  '长期待摊费用的摊销(元)',
+  DEFERREDEXPENSEDECREASED  DECIMAL(19,4)  COMMENT  '待摊费用的减少(减:增加)(元)',
+  ACCRUEDEXPENSEADDED  DECIMAL(19,4)  COMMENT  '预提费用的增加(减:减少)(元)',
+  FIXINTANOTHERASSETDISPOLOSS  DECIMAL(19,4)  COMMENT  '处理固定资产、无形资产和其他长期资产的损失(减:收益)(元)',
+  FIXEDASSETSCRAPLOSS  DECIMAL(19,4)  COMMENT  '固定资产报废损失(减:收益)(元)',
+  LOSSFROMFAIRVALUECHANGES  DECIMAL(19,4)  COMMENT  '公允价值变动损失',
+  FINANCIALEXPENSE  DECIMAL(19,4)  COMMENT  '财务费用(元)',
+  INVESTLOSS  DECIMAL(19,4)  COMMENT  '投资损失(元)',
+  DEFEREDTAXASSETDECREASE  DECIMAL(19,4)  COMMENT  '递延所得税资产减少',
+  DEFEREDTAXLIABILITYINCREASE  DECIMAL(19,4)  COMMENT  '递延所得税负债增加',
+  INVENTORYDECREASE  DECIMAL(19,4)  COMMENT  '存货的减少(减:增加)(元)',
+  OPERATERECEIVABLEDECREASE  DECIMAL(19,4)  COMMENT  '经营性应收项目的减少(减：增加)(元)',
+  OPERATEPAYABLEINCREASE  DECIMAL(19,4)  COMMENT  '经营性应付项目的增加',
+  OTHERS  DECIMAL(19,4)  COMMENT  '其他(元)',
+  SPECIALITEMSNOCF1  DECIMAL(19,4)  COMMENT  '##(附注)经营活动现金流量净额特殊项目',
+  ADJUSTMENTITEMSNOCF1  DECIMAL(19,4)  COMMENT  '##(附注)经营活动现金流量净额调整项目',
+  NETOPERATECASHFLOWNOTES  DECIMAL(19,4)  COMMENT  '(附注)经营活动产生的现金流量净额(元)',
+  CONTRASTADJUTMENTNOCF  DECIMAL(19,4)  COMMENT  '##加:经营流量净额前后对比调整项目',
+  DEBTTOCAPTICAL  DECIMAL(19,4)  COMMENT  '债务转为资本(元)',
+  CBSEXPIRINGWITHIN1Y  DECIMAL(19,4)  COMMENT  '一年内到期的可转换公司债券',
+  FIXEDASSETSFINANCELEASES  DECIMAL(19,4)  COMMENT  '融资租入固定资产',
+  CASHATENDOFYEAR  DECIMAL(19,4)  COMMENT  '现金的期末余额(元)',
+  CASHATBEGINNINGOFYEAR  DECIMAL(19,4)  COMMENT  '减:现金的期初余额',
+  CASHEQUIVALENTSATENDOFYEAR  DECIMAL(19,4)  COMMENT  '加:现金等价物的期末余额',
+  CASHEQUIVALENTSATBEGINNING  DECIMAL(19,4)  COMMENT  '减:现金等价物的期初余额',
+  SPECIALITEMSC  DECIMAL(19,4)  COMMENT  '##(附注)现金特殊项目(元)',
+  ADJUSTMENTITEMSC  DECIMAL(19,4)  COMMENT  '##(附注)现金调整项目',
+  NETINCRINCASHANDEQUIVALENTS  DECIMAL(19,4)  COMMENT  '(附注)现金及现金等价物净增加额',
+  CONTRASTADJUTMENTNC  DECIMAL(19,4)  COMMENT  '##加:现金净额前后对比调整项目',
+  SPECIALFIELDREMARK  STRING  COMMENT  '特殊字段说明',
+  UPDATETIME  STRING  COMMENT  '更新时间',
+  JSID  DECIMAL(19,0)  COMMENT  'JSID',
+  IFCOMPLETE  STRING  COMMENT  '完整标志',
+  INVESTPROPERTYDA  DECIMAL(19,4)  COMMENT  '',
+  NETINCBORFUNDS  DECIMAL(19,4)  COMMENT  '拆入资金净增加额',
+  NETCASHRECINVTS  DECIMAL(19,4)  COMMENT  '代理买卖证券收到的现金净额',
+  NETCASHRECAGEUTS  DECIMAL(19,4)  COMMENT  '代理承销证券收到的现金净额',
+  NETINCFINASSTRAPURP  DECIMAL(19,4)  COMMENT  '为交易目的而持有的金融资产净增加额',
+  NETINCCAPRESBUSOPER  DECIMAL(19,4)  COMMENT  '返售业务资金净增加额(经营)',
+  NETINCCAPRESBUSINV  DECIMAL(19,4)  COMMENT  '返售业务资金净增加额(投资)',
+  CASHRECISSOTHEQUINS  DECIMAL(19,4)  COMMENT  '发行其他权益工具收到的现金',
+  NETBUYBACKFIN  DECIMAL(19,4)  COMMENT  '回购业务资金净增加额(筹资)',
+  INTERESTEXPENSE  DECIMAL(19,4)  COMMENT  '利息支出1',
+  INCRESFUNDING  DECIMAL(19,4)  COMMENT  '受限资金的增加',
+  INCSPERESERVES  DECIMAL(19,4)  COMMENT  '专项储备增加',
+  CREDITIMPAIRMENTL  DECIMAL(19,4)  COMMENT  '信用减值损失',
+  DEFPROCEEDSAMO  DECIMAL(19,4)  COMMENT  '递延收益摊销',
+  INCESTLIABILITY  DECIMAL(19,4)  COMMENT  '预计负债的增加(减:减少)',
+  NETDECFINANCIALASSET  DECIMAL(19,4)  COMMENT  '融出资金净减少额',
+  NETCASHPAIDINVTS  DECIMAL(19,4)  COMMENT  '代理买卖证券支付的现金净额',
+  USUFRUCTASSETSDA  DECIMAL(19,4)  COMMENT  '使用权资产摊销/折旧',
+  INFOSOURCECODE  STRING  COMMENT  '信息来源编码',
+  INSERTTIME  STRING  COMMENT  '发布时间',
+  NETDECLOANANDADVANCE  DECIMAL(19,4)  COMMENT  '客户贷款及垫款净减少额',
+  NETDECREASEINCBANDIB  DECIMAL(19,4)  COMMENT  '存放中央银行和同业款项净减少额',
+  NETDECFUNDLENDING  DECIMAL(19,4)  COMMENT  '拆出资金净减少额',
+  NETDECCAPRESBUSOPER  DECIMAL(19,4)  COMMENT  '返售业务资金净减少额(经营)',
+  NETDECFINASSTRAPURP  DECIMAL(19,4)  COMMENT  '为交易目的而持有的金融资产净减少额',
+  NETINCFINLIATRAPURP  DECIMAL(19,4)  COMMENT  '为交易目的而持有的金融负债净增加额',
+  BFLAFVALONPLCHANGE  DECIMAL(19,4)  COMMENT  '客户存款和同业存放款项净减少额',
+  NETDECBORROWFROMCB  DECIMAL(19,4)  COMMENT  '向中央银行借款净减少额',
+  NETDECBORFROMFINANCECO  DECIMAL(19,4)  COMMENT  '向其他金融机构拆入资金净减少额',
+  NETDECINSURDPSTINVEST  DECIMAL(19,4)  COMMENT  '保户储金及投资款净减少额',
+  NETDECBORROWINGCAPITAL  DECIMAL(19,4)  COMMENT  '拆入资金净减少额',
+  NETDECOFBUYBACK  DECIMAL(19,4)  COMMENT  '回购业务资金净减少额',
+  NETCASHPAYAGEUTS  DECIMAL(19,4)  COMMENT  '代理承销证券支付的现金净额',
+  NETDECDEALTRADEASSETS  DECIMAL(19,4)  COMMENT  '处置交易性金融资产净减少额',
+  NETDECFINLIATRAPURP  DECIMAL(19,4)  COMMENT  '为交易目的而持有的金融负债净减少额',
+  OPEANDADMEXPFORCASH  DECIMAL(19,4)  COMMENT  '以现金支付的业务及管理费',
+  NETINCFINANCIALASSET  DECIMAL(19,4)  COMMENT  '融出资金净增加额',
+  NETDECBUYBACKFIN  DECIMAL(19,4)  COMMENT  '回购业务资金净减少额(筹资)',
+  NPPARENTCOMPANYOWNERS  DECIMAL(19,4)  COMMENT  '其中:归属于母公司所有者的净利润',
+  PRODUCTBIOASSETSDEP  DECIMAL(19,4)  COMMENT  '其中:生产性生物资产折旧',
+  INTERESTINCOME  DECIMAL(19,4)  COMMENT  '利息收入',
+  LEASELIAINTEXP  DECIMAL(19,4)  COMMENT  '其中:租赁负债利息支出',
+  BONDISSUEEXPENSE  DECIMAL(19,4)  COMMENT  '其中:发行债券利息支出',
+  EXCHANGELOSS  DECIMAL(19,4)  COMMENT  '汇兑损失(收益以"-"号填列)',
+  DEFERREDTAXCREDIT  DECIMAL(19,4)  COMMENT  '递延税款贷项(减:借项)1',
+  SHAREPAYMENT  DECIMAL(19,4)  COMMENT  '股份支付费用',
+  DECREASETRADEASSETS  DECIMAL(19,4)  COMMENT  '交易性金融资产的减少',
+  DECAVAILABLESALEASSETS  DECIMAL(19,4)  COMMENT  '可供出售金融资产的减少',
+  DECREASELOAN  DECIMAL(19,4)  COMMENT  '贷款的减少'
+)
+COMMENT '现金流量表_新会计准则'
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\\u0001';"
+
+json_obj=$(cat <<'EOF'
+{
+  "job": {
+    "setting": {
+      "speed": {
+        "channel": 1
+      },
+      "errorLimit": {
+        "record": 0,
+        "percentage": 0.02
+      }
+    },
+    "content": [
+      {
+        "reader": {
+          "name": "oraclereader",
+          "parameter": {
+            "username": "${jy_username}",
+            "password": "${jy_password}",
+            "connection": [{
+              "querySql": ["SELECT  ID
+                                   , INFOPUBLDATE
+                                   , INFOSOURCE
+                                   , BULLETINTYPE
+                                   , COMPANYCODE
+                                   , ENDDATE
+                                   , IFADJUSTED
+                                   , IFMERGED
+                                   , ACCOUNTINGSTANDARDS
+                                   , ENTERPRISETYPE
+                                   , GOODSSALESERVICERENDERCASH
+                                   , TAXLEVYREFUND
+                                   , NETDEPOSITINCREASE
+                                   , NETBORROWINGFROMCENTRALBANK
+                                   , NETBORROWINGFROMFINANCECO
+                                   , DRAWBACKLOANSCANCELED
+                                   , INTERESTANDCOMMISSIONCASHIN
+                                   , NETDEALTRADINGASSETS
+                                   , NETBUYBACK
+                                   , NETORIGINALINSURANCECASH
+                                   , NETREINSURANCECASH
+                                   , NETINSURERDEPOSITINVESTMENT
+                                   , OTHERCASHINRELATEDOPERATE
+                                   , SPECIALITEMSOCIF
+                                   , ADJUSTMENTITEMSOCIF
+                                   , SUBTOTALOPERATECASHINFLOW
+                                   , GOODSSERVICESCASHPAID
+                                   , STAFFBEHALFPAID
+                                   , ALLTAXESPAID
+                                   , NETLOANANDADVANCEINCREASE
+                                   , NETDEPOSITINCBANDIB
+                                   , NETLENDCAPITAL
+                                   , COMMISSIONCASHPAID
+                                   , ORIGINALCOMPENSATIONPAID
+                                   , NETCASHFORREINSURANCE
+                                   , POLICYDIVIDENDCASHPAID
+                                   , OTHEROPERATECASHPAID
+                                   , SPECIALITEMSOCOF
+                                   , ADJUSTMENTITEMSOCOF
+                                   , SUBTOTALOPERATECASHOUTFLOW
+                                   , ADJUSTMENTITEMSNOCF
+                                   , NETOPERATECASHFLOW
+                                   , INVESTWITHDRAWALCASH
+                                   , INVESTPROCEEDS
+                                   , FIXINTANOTHERASSETDISPOCASH
+                                   , NETCASHDEALSUBCOMPANY
+                                   , OTHERCASHFROMINVESTACT
+                                   , SPECIALITEMSICIF
+                                   , ADJUSTMENTITEMSICIF
+                                   , SUBTOTALINVESTCASHINFLOW
+                                   , FIXINTANOTHERASSETACQUICASH
+                                   , INVESTCASHPAID
+                                   , NETCASHFROMSUBCOMPANY
+                                   , IMPAWNEDLOANNETINCREASE
+                                   , OTHERCASHTOINVESTACT
+                                   , SPECIALITEMSICOF
+                                   , ADJUSTMENTITEMSICOF
+                                   , SUBTOTALINVESTCASHOUTFLOW
+                                   , ADJUSTMENTITEMSNICF
+                                   , NETINVESTCASHFLOW
+                                   , CASHFROMINVEST
+                                   , CASHFROMMINOSINVESTSUB
+                                   , CASHFROMBONDSISSUE
+                                   , CASHFROMBORROWING
+                                   , OTHERFINANCEACTCASH
+                                   , SPECIALITEMSFCIF
+                                   , ADJUSTMENTITEMSFCIF
+                                   , SUBTOTALFINANCECASHINFLOW
+                                   , BORROWINGREPAYMENT
+                                   , DIVIDENDINTERESTPAYMENT
+                                   , PROCEEDSFROMSUBTOMINOS
+                                   , OTHERFINANCEACTPAYMENT
+                                   , SPECIALITEMSFCOF
+                                   , ADJUSTMENTITEMSFCOF
+                                   , SUBTOTALFINANCECASHOUTFLOW
+                                   , ADJUSTMENTITEMSNFCF
+                                   , NETFINANCECASHFLOW
+                                   , EXCHANRATECHANGEEFFECT
+                                   , OTHERITEMSEFFECTINGCE
+                                   , ADJUSTMENTITEMSCE
+                                   , CASHEQUIVALENTINCREASE
+                                   , BEGINPERIODCASH
+                                   , OTHERITEMSEFFECTINGCEI
+                                   , ADJUSTMENTITEMSCEI
+                                   , ENDPERIODCASHEQUIVALENT
+                                   , NETPROFIT
+                                   , MINORITYPROFIT
+                                   , ASSETSDEPRECIATIONRESERVES
+                                   , FIXEDASSETDEPRECIATION
+                                   , INTANGIBLEASSETAMORTIZATION
+                                   , DEFERREDEXPENSEAMORT
+                                   , DEFERREDEXPENSEDECREASED
+                                   , ACCRUEDEXPENSEADDED
+                                   , FIXINTANOTHERASSETDISPOLOSS
+                                   , FIXEDASSETSCRAPLOSS
+                                   , LOSSFROMFAIRVALUECHANGES
+                                   , FINANCIALEXPENSE
+                                   , INVESTLOSS
+                                   , DEFEREDTAXASSETDECREASE
+                                   , DEFEREDTAXLIABILITYINCREASE
+                                   , INVENTORYDECREASE
+                                   , OPERATERECEIVABLEDECREASE
+                                   , OPERATEPAYABLEINCREASE
+                                   , OTHERS
+                                   , SPECIALITEMSNOCF1
+                                   , ADJUSTMENTITEMSNOCF1
+                                   , NETOPERATECASHFLOWNOTES
+                                   , CONTRASTADJUTMENTNOCF
+                                   , DEBTTOCAPTICAL
+                                   , CBSEXPIRINGWITHIN1Y
+                                   , FIXEDASSETSFINANCELEASES
+                                   , CASHATENDOFYEAR
+                                   , CASHATBEGINNINGOFYEAR
+                                   , CASHEQUIVALENTSATENDOFYEAR
+                                   , CASHEQUIVALENTSATBEGINNING
+                                   , SPECIALITEMSC
+                                   , ADJUSTMENTITEMSC
+                                   , NETINCRINCASHANDEQUIVALENTS
+                                   , CONTRASTADJUTMENTNC
+                                   , SPECIALFIELDREMARK
+                                   , UPDATETIME
+                                   , JSID
+                                   , IFCOMPLETE
+                                   , INVESTPROPERTYDA
+                                   , NETINCBORFUNDS
+                                   , NETCASHRECINVTS
+                                   , NETCASHRECAGEUTS
+                                   , NETINCFINASSTRAPURP
+                                   , NETINCCAPRESBUSOPER
+                                   , NETINCCAPRESBUSINV
+                                   , CASHRECISSOTHEQUINS
+                                   , NETBUYBACKFIN
+                                   , INTERESTEXPENSE
+                                   , INCRESFUNDING
+                                   , INCSPERESERVES
+                                   , CREDITIMPAIRMENTL
+                                   , DEFPROCEEDSAMO
+                                   , INCESTLIABILITY
+                                   , NETDECFINANCIALASSET
+                                   , NETCASHPAIDINVTS
+                                   , USUFRUCTASSETSDA
+                                   , INFOSOURCECODE
+                                   , INSERTTIME
+                                   , NETDECLOANANDADVANCE
+                                   , NETDECREASEINCBANDIB
+                                   , NETDECFUNDLENDING
+                                   , NETDECCAPRESBUSOPER
+                                   , NETDECFINASSTRAPURP
+                                   , NETINCFINLIATRAPURP
+                                   , BFLAFVALONPLCHANGE
+                                   , NETDECBORROWFROMCB
+                                   , NETDECBORFROMFINANCECO
+                                   , NETDECINSURDPSTINVEST
+                                   , NETDECBORROWINGCAPITAL
+                                   , NETDECOFBUYBACK
+                                   , NETCASHPAYAGEUTS
+                                   , NETDECDEALTRADEASSETS
+                                   , NETDECFINLIATRAPURP
+                                   , OPEANDADMEXPFORCASH
+                                   , NETINCFINANCIALASSET
+                                   , NETDECBUYBACKFIN
+                                   , NPPARENTCOMPANYOWNERS
+                                   , PRODUCTBIOASSETSDEP
+                                   , INTERESTINCOME
+                                   , LEASELIAINTEXP
+                                   , BONDISSUEEXPENSE
+                                   , EXCHANGELOSS
+                                   , DEFERREDTAXCREDIT
+                                   , SHAREPAYMENT
+                                   , DECREASETRADEASSETS
+                                   , DECAVAILABLESALEASSETS
+                                   , DECREASELOAN
+                                FROM ${jy_src_schema}.LC_CASHFLOWSTATEMENTALL"],
+              "jdbcUrl": ["${jy_jdbc}"]
+            }]
+          }
+        },
+        "writer": {
+          "name": "${hdfswriter}",
+          "parameter": {
+            "column": [{"name": "ID", "type": "DOUBLE"}, {"name": "INFOPUBLDATE", "type": "STRING"}, {"name": "INFOSOURCE", "type": "STRING"}, {"name": "BULLETINTYPE", "type": "DOUBLE"}, {"name": "COMPANYCODE", "type": "DOUBLE"}, {"name": "ENDDATE", "type": "STRING"}, {"name": "IFADJUSTED", "type": "DOUBLE"}, {"name": "IFMERGED", "type": "DOUBLE"}, {"name": "ACCOUNTINGSTANDARDS", "type": "DOUBLE"}, {"name": "ENTERPRISETYPE", "type": "DOUBLE"}, {"name": "GOODSSALESERVICERENDERCASH", "type": "DOUBLE"}, {"name": "TAXLEVYREFUND", "type": "DOUBLE"}, {"name": "NETDEPOSITINCREASE", "type": "DOUBLE"}, {"name": "NETBORROWINGFROMCENTRALBANK", "type": "DOUBLE"}, {"name": "NETBORROWINGFROMFINANCECO", "type": "DOUBLE"}, {"name": "DRAWBACKLOANSCANCELED", "type": "DOUBLE"}, {"name": "INTERESTANDCOMMISSIONCASHIN", "type": "DOUBLE"}, {"name": "NETDEALTRADINGASSETS", "type": "DOUBLE"}, {"name": "NETBUYBACK", "type": "DOUBLE"}, {"name": "NETORIGINALINSURANCECASH", "type": "DOUBLE"}, {"name": "NETREINSURANCECASH", "type": "DOUBLE"}, {"name": "NETINSURERDEPOSITINVESTMENT", "type": "DOUBLE"}, {"name": "OTHERCASHINRELATEDOPERATE", "type": "DOUBLE"}, {"name": "SPECIALITEMSOCIF", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSOCIF", "type": "DOUBLE"}, {"name": "SUBTOTALOPERATECASHINFLOW", "type": "DOUBLE"}, {"name": "GOODSSERVICESCASHPAID", "type": "DOUBLE"}, {"name": "STAFFBEHALFPAID", "type": "DOUBLE"}, {"name": "ALLTAXESPAID", "type": "DOUBLE"}, {"name": "NETLOANANDADVANCEINCREASE", "type": "DOUBLE"}, {"name": "NETDEPOSITINCBANDIB", "type": "DOUBLE"}, {"name": "NETLENDCAPITAL", "type": "DOUBLE"}, {"name": "COMMISSIONCASHPAID", "type": "DOUBLE"}, {"name": "ORIGINALCOMPENSATIONPAID", "type": "DOUBLE"}, {"name": "NETCASHFORREINSURANCE", "type": "DOUBLE"}, {"name": "POLICYDIVIDENDCASHPAID", "type": "DOUBLE"}, {"name": "OTHEROPERATECASHPAID", "type": "DOUBLE"}, {"name": "SPECIALITEMSOCOF", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSOCOF", "type": "DOUBLE"}, {"name": "SUBTOTALOPERATECASHOUTFLOW", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSNOCF", "type": "DOUBLE"}, {"name": "NETOPERATECASHFLOW", "type": "DOUBLE"}, {"name": "INVESTWITHDRAWALCASH", "type": "DOUBLE"}, {"name": "INVESTPROCEEDS", "type": "DOUBLE"}, {"name": "FIXINTANOTHERASSETDISPOCASH", "type": "DOUBLE"}, {"name": "NETCASHDEALSUBCOMPANY", "type": "DOUBLE"}, {"name": "OTHERCASHFROMINVESTACT", "type": "DOUBLE"}, {"name": "SPECIALITEMSICIF", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSICIF", "type": "DOUBLE"}, {"name": "SUBTOTALINVESTCASHINFLOW", "type": "DOUBLE"}, {"name": "FIXINTANOTHERASSETACQUICASH", "type": "DOUBLE"}, {"name": "INVESTCASHPAID", "type": "DOUBLE"}, {"name": "NETCASHFROMSUBCOMPANY", "type": "DOUBLE"}, {"name": "IMPAWNEDLOANNETINCREASE", "type": "DOUBLE"}, {"name": "OTHERCASHTOINVESTACT", "type": "DOUBLE"}, {"name": "SPECIALITEMSICOF", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSICOF", "type": "DOUBLE"}, {"name": "SUBTOTALINVESTCASHOUTFLOW", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSNICF", "type": "DOUBLE"}, {"name": "NETINVESTCASHFLOW", "type": "DOUBLE"}, {"name": "CASHFROMINVEST", "type": "DOUBLE"}, {"name": "CASHFROMMINOSINVESTSUB", "type": "DOUBLE"}, {"name": "CASHFROMBONDSISSUE", "type": "DOUBLE"}, {"name": "CASHFROMBORROWING", "type": "DOUBLE"}, {"name": "OTHERFINANCEACTCASH", "type": "DOUBLE"}, {"name": "SPECIALITEMSFCIF", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSFCIF", "type": "DOUBLE"}, {"name": "SUBTOTALFINANCECASHINFLOW", "type": "DOUBLE"}, {"name": "BORROWINGREPAYMENT", "type": "DOUBLE"}, {"name": "DIVIDENDINTERESTPAYMENT", "type": "DOUBLE"}, {"name": "PROCEEDSFROMSUBTOMINOS", "type": "DOUBLE"}, {"name": "OTHERFINANCEACTPAYMENT", "type": "DOUBLE"}, {"name": "SPECIALITEMSFCOF", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSFCOF", "type": "DOUBLE"}, {"name": "SUBTOTALFINANCECASHOUTFLOW", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSNFCF", "type": "DOUBLE"}, {"name": "NETFINANCECASHFLOW", "type": "DOUBLE"}, {"name": "EXCHANRATECHANGEEFFECT", "type": "DOUBLE"}, {"name": "OTHERITEMSEFFECTINGCE", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSCE", "type": "DOUBLE"}, {"name": "CASHEQUIVALENTINCREASE", "type": "DOUBLE"}, {"name": "BEGINPERIODCASH", "type": "DOUBLE"}, {"name": "OTHERITEMSEFFECTINGCEI", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSCEI", "type": "DOUBLE"}, {"name": "ENDPERIODCASHEQUIVALENT", "type": "DOUBLE"}, {"name": "NETPROFIT", "type": "DOUBLE"}, {"name": "MINORITYPROFIT", "type": "DOUBLE"}, {"name": "ASSETSDEPRECIATIONRESERVES", "type": "DOUBLE"}, {"name": "FIXEDASSETDEPRECIATION", "type": "DOUBLE"}, {"name": "INTANGIBLEASSETAMORTIZATION", "type": "DOUBLE"}, {"name": "DEFERREDEXPENSEAMORT", "type": "DOUBLE"}, {"name": "DEFERREDEXPENSEDECREASED", "type": "DOUBLE"}, {"name": "ACCRUEDEXPENSEADDED", "type": "DOUBLE"}, {"name": "FIXINTANOTHERASSETDISPOLOSS", "type": "DOUBLE"}, {"name": "FIXEDASSETSCRAPLOSS", "type": "DOUBLE"}, {"name": "LOSSFROMFAIRVALUECHANGES", "type": "DOUBLE"}, {"name": "FINANCIALEXPENSE", "type": "DOUBLE"}, {"name": "INVESTLOSS", "type": "DOUBLE"}, {"name": "DEFEREDTAXASSETDECREASE", "type": "DOUBLE"}, {"name": "DEFEREDTAXLIABILITYINCREASE", "type": "DOUBLE"}, {"name": "INVENTORYDECREASE", "type": "DOUBLE"}, {"name": "OPERATERECEIVABLEDECREASE", "type": "DOUBLE"}, {"name": "OPERATEPAYABLEINCREASE", "type": "DOUBLE"}, {"name": "OTHERS", "type": "DOUBLE"}, {"name": "SPECIALITEMSNOCF1", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSNOCF1", "type": "DOUBLE"}, {"name": "NETOPERATECASHFLOWNOTES", "type": "DOUBLE"}, {"name": "CONTRASTADJUTMENTNOCF", "type": "DOUBLE"}, {"name": "DEBTTOCAPTICAL", "type": "DOUBLE"}, {"name": "CBSEXPIRINGWITHIN1Y", "type": "DOUBLE"}, {"name": "FIXEDASSETSFINANCELEASES", "type": "DOUBLE"}, {"name": "CASHATENDOFYEAR", "type": "DOUBLE"}, {"name": "CASHATBEGINNINGOFYEAR", "type": "DOUBLE"}, {"name": "CASHEQUIVALENTSATENDOFYEAR", "type": "DOUBLE"}, {"name": "CASHEQUIVALENTSATBEGINNING", "type": "DOUBLE"}, {"name": "SPECIALITEMSC", "type": "DOUBLE"}, {"name": "ADJUSTMENTITEMSC", "type": "DOUBLE"}, {"name": "NETINCRINCASHANDEQUIVALENTS", "type": "DOUBLE"}, {"name": "CONTRASTADJUTMENTNC", "type": "DOUBLE"}, {"name": "SPECIALFIELDREMARK", "type": "STRING"}, {"name": "UPDATETIME", "type": "STRING"}, {"name": "JSID", "type": "DOUBLE"}, {"name": "IFCOMPLETE", "type": "DOUBLE"}, {"name": "INVESTPROPERTYDA", "type": "DOUBLE"}, {"name": "NETINCBORFUNDS", "type": "DOUBLE"}, {"name": "NETCASHRECINVTS", "type": "DOUBLE"}, {"name": "NETCASHRECAGEUTS", "type": "DOUBLE"}, {"name": "NETINCFINASSTRAPURP", "type": "DOUBLE"}, {"name": "NETINCCAPRESBUSOPER", "type": "DOUBLE"}, {"name": "NETINCCAPRESBUSINV", "type": "DOUBLE"}, {"name": "CASHRECISSOTHEQUINS", "type": "DOUBLE"}, {"name": "NETBUYBACKFIN", "type": "DOUBLE"}, {"name": "INTERESTEXPENSE", "type": "DOUBLE"}, {"name": "INCRESFUNDING", "type": "DOUBLE"}, {"name": "INCSPERESERVES", "type": "DOUBLE"}, {"name": "CREDITIMPAIRMENTL", "type": "DOUBLE"}, {"name": "DEFPROCEEDSAMO", "type": "DOUBLE"}, {"name": "INCESTLIABILITY", "type": "DOUBLE"}, {"name": "NETDECFINANCIALASSET", "type": "DOUBLE"}, {"name": "NETCASHPAIDINVTS", "type": "DOUBLE"}, {"name": "USUFRUCTASSETSDA", "type": "DOUBLE"}, {"name": "INFOSOURCECODE", "type": "DOUBLE"}, {"name": "INSERTTIME", "type": "STRING"}, {"name": "NETDECLOANANDADVANCE", "type": "DOUBLE"}, {"name": "NETDECREASEINCBANDIB", "type": "DOUBLE"}, {"name": "NETDECFUNDLENDING", "type": "DOUBLE"}, {"name": "NETDECCAPRESBUSOPER", "type": "DOUBLE"}, {"name": "NETDECFINASSTRAPURP", "type": "DOUBLE"}, {"name": "NETINCFINLIATRAPURP", "type": "DOUBLE"}, {"name": "BFLAFVALONPLCHANGE", "type": "DOUBLE"}, {"name": "NETDECBORROWFROMCB", "type": "DOUBLE"}, {"name": "NETDECBORFROMFINANCECO", "type": "DOUBLE"}, {"name": "NETDECINSURDPSTINVEST", "type": "DOUBLE"}, {"name": "NETDECBORROWINGCAPITAL", "type": "DOUBLE"}, {"name": "NETDECOFBUYBACK", "type": "DOUBLE"}, {"name": "NETCASHPAYAGEUTS", "type": "DOUBLE"}, {"name": "NETDECDEALTRADEASSETS", "type": "DOUBLE"}, {"name": "NETDECFINLIATRAPURP", "type": "DOUBLE"}, {"name": "OPEANDADMEXPFORCASH", "type": "DOUBLE"}, {"name": "NETINCFINANCIALASSET", "type": "DOUBLE"}, {"name": "NETDECBUYBACKFIN", "type": "DOUBLE"}, {"name": "NPPARENTCOMPANYOWNERS", "type": "DOUBLE"}, {"name": "PRODUCTBIOASSETSDEP", "type": "DOUBLE"}, {"name": "INTERESTINCOME", "type": "DOUBLE"}, {"name": "LEASELIAINTEXP", "type": "DOUBLE"}, {"name": "BONDISSUEEXPENSE", "type": "DOUBLE"}, {"name": "EXCHANGELOSS", "type": "DOUBLE"}, {"name": "DEFERREDTAXCREDIT", "type": "DOUBLE"}, {"name": "SHAREPAYMENT", "type": "DOUBLE"}, {"name": "DECREASETRADEASSETS", "type": "DOUBLE"}, {"name": "DECAVAILABLESALEASSETS", "type": "DOUBLE"}, {"name": "DECREASELOAN", "type": "DOUBLE"}],
+            "compress": "",
+            "defaultFS": "${defaultFS}",
+            "hadoopConfig": {
+              "dfs.data.transfer.protection": "authentication",
+              "dfs.client.use.datanode.hostname": "true"
+            },
+            "fieldDelimiter": "\\u0001",
+            "fileName": "ods_jy_lc_cashflowstatementall_pfd_tmp",
+            "fileType": "text",
+            "path": "${jy_path}/ods_jy_lc_cashflowstatementall_pfd_tmp",
+            "writeMode": "append",
+            "encoding": "utf-8",
+            "haveKerberos": "${haveKerberos}",
+            "kerberosKeytabFilePath": "${kerberosKeytabFilePath}",
+            "kerberosPrincipal": "${kerberosPrincipal}"
+          }
+        }
+      }
+    ]
+  }
+}
+EOF
+)
+
+sudo -u ${ds_user} echo $json_obj>${json_path}ods_jy_lc_cashflowstatementall_pfd_tmp.json
+
+sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" ${json_path}ods_jy_lc_cashflowstatementall_pfd_tmp.json
+
+if [ $? -ne 0 ]; then
+   echo "导入到ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD_TMP表失败"
+   exit 1
+else
+   echo "导入到ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD_TMP表成功"
+   sudo -u ${ds_user} rm -f ${json_path}ods_jy_lc_cashflowstatementall_pfd_tmp.json
+
+inceptor_beeline "
+
+set mapred.max.split.size=256000000;
+set mapred.min.split.size.per.node=100000000;
+set mapred.min.split.size.per.rack=100000000;
+set hive.merge.mapredfiles=true;
+set hive.merge.mapfiles=true;
+set hive.merge.smallfiles.avgsize=16000000;
+set hive.merge.size.per.task=256000000;
+INSERT OVERWRITE TABLE ODS_XDAY_JY.ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD PARTITION(P_DT='${p_end_dt}')
+SELECT
+       ID
+     , INFOPUBLDATE
+     , INFOSOURCE
+     , BULLETINTYPE
+     , COMPANYCODE
+     , ENDDATE
+     , IFADJUSTED
+     , IFMERGED
+     , ACCOUNTINGSTANDARDS
+     , ENTERPRISETYPE
+     , GOODSSALESERVICERENDERCASH
+     , TAXLEVYREFUND
+     , NETDEPOSITINCREASE
+     , NETBORROWINGFROMCENTRALBANK
+     , NETBORROWINGFROMFINANCECO
+     , DRAWBACKLOANSCANCELED
+     , INTERESTANDCOMMISSIONCASHIN
+     , NETDEALTRADINGASSETS
+     , NETBUYBACK
+     , NETORIGINALINSURANCECASH
+     , NETREINSURANCECASH
+     , NETINSURERDEPOSITINVESTMENT
+     , OTHERCASHINRELATEDOPERATE
+     , SPECIALITEMSOCIF
+     , ADJUSTMENTITEMSOCIF
+     , SUBTOTALOPERATECASHINFLOW
+     , GOODSSERVICESCASHPAID
+     , STAFFBEHALFPAID
+     , ALLTAXESPAID
+     , NETLOANANDADVANCEINCREASE
+     , NETDEPOSITINCBANDIB
+     , NETLENDCAPITAL
+     , COMMISSIONCASHPAID
+     , ORIGINALCOMPENSATIONPAID
+     , NETCASHFORREINSURANCE
+     , POLICYDIVIDENDCASHPAID
+     , OTHEROPERATECASHPAID
+     , SPECIALITEMSOCOF
+     , ADJUSTMENTITEMSOCOF
+     , SUBTOTALOPERATECASHOUTFLOW
+     , ADJUSTMENTITEMSNOCF
+     , NETOPERATECASHFLOW
+     , INVESTWITHDRAWALCASH
+     , INVESTPROCEEDS
+     , FIXINTANOTHERASSETDISPOCASH
+     , NETCASHDEALSUBCOMPANY
+     , OTHERCASHFROMINVESTACT
+     , SPECIALITEMSICIF
+     , ADJUSTMENTITEMSICIF
+     , SUBTOTALINVESTCASHINFLOW
+     , FIXINTANOTHERASSETACQUICASH
+     , INVESTCASHPAID
+     , NETCASHFROMSUBCOMPANY
+     , IMPAWNEDLOANNETINCREASE
+     , OTHERCASHTOINVESTACT
+     , SPECIALITEMSICOF
+     , ADJUSTMENTITEMSICOF
+     , SUBTOTALINVESTCASHOUTFLOW
+     , ADJUSTMENTITEMSNICF
+     , NETINVESTCASHFLOW
+     , CASHFROMINVEST
+     , CASHFROMMINOSINVESTSUB
+     , CASHFROMBONDSISSUE
+     , CASHFROMBORROWING
+     , OTHERFINANCEACTCASH
+     , SPECIALITEMSFCIF
+     , ADJUSTMENTITEMSFCIF
+     , SUBTOTALFINANCECASHINFLOW
+     , BORROWINGREPAYMENT
+     , DIVIDENDINTERESTPAYMENT
+     , PROCEEDSFROMSUBTOMINOS
+     , OTHERFINANCEACTPAYMENT
+     , SPECIALITEMSFCOF
+     , ADJUSTMENTITEMSFCOF
+     , SUBTOTALFINANCECASHOUTFLOW
+     , ADJUSTMENTITEMSNFCF
+     , NETFINANCECASHFLOW
+     , EXCHANRATECHANGEEFFECT
+     , OTHERITEMSEFFECTINGCE
+     , ADJUSTMENTITEMSCE
+     , CASHEQUIVALENTINCREASE
+     , BEGINPERIODCASH
+     , OTHERITEMSEFFECTINGCEI
+     , ADJUSTMENTITEMSCEI
+     , ENDPERIODCASHEQUIVALENT
+     , NETPROFIT
+     , MINORITYPROFIT
+     , ASSETSDEPRECIATIONRESERVES
+     , FIXEDASSETDEPRECIATION
+     , INTANGIBLEASSETAMORTIZATION
+     , DEFERREDEXPENSEAMORT
+     , DEFERREDEXPENSEDECREASED
+     , ACCRUEDEXPENSEADDED
+     , FIXINTANOTHERASSETDISPOLOSS
+     , FIXEDASSETSCRAPLOSS
+     , LOSSFROMFAIRVALUECHANGES
+     , FINANCIALEXPENSE
+     , INVESTLOSS
+     , DEFEREDTAXASSETDECREASE
+     , DEFEREDTAXLIABILITYINCREASE
+     , INVENTORYDECREASE
+     , OPERATERECEIVABLEDECREASE
+     , OPERATEPAYABLEINCREASE
+     , OTHERS
+     , SPECIALITEMSNOCF1
+     , ADJUSTMENTITEMSNOCF1
+     , NETOPERATECASHFLOWNOTES
+     , CONTRASTADJUTMENTNOCF
+     , DEBTTOCAPTICAL
+     , CBSEXPIRINGWITHIN1Y
+     , FIXEDASSETSFINANCELEASES
+     , CASHATENDOFYEAR
+     , CASHATBEGINNINGOFYEAR
+     , CASHEQUIVALENTSATENDOFYEAR
+     , CASHEQUIVALENTSATBEGINNING
+     , SPECIALITEMSC
+     , ADJUSTMENTITEMSC
+     , NETINCRINCASHANDEQUIVALENTS
+     , CONTRASTADJUTMENTNC
+     , SPECIALFIELDREMARK
+     , UPDATETIME
+     , JSID
+     , IFCOMPLETE
+     , INVESTPROPERTYDA
+     , NETINCBORFUNDS
+     , NETCASHRECINVTS
+     , NETCASHRECAGEUTS
+     , NETINCFINASSTRAPURP
+     , NETINCCAPRESBUSOPER
+     , NETINCCAPRESBUSINV
+     , CASHRECISSOTHEQUINS
+     , NETBUYBACKFIN
+     , INTERESTEXPENSE
+     , INCRESFUNDING
+     , INCSPERESERVES
+     , CREDITIMPAIRMENTL
+     , DEFPROCEEDSAMO
+     , INCESTLIABILITY
+     , NETDECFINANCIALASSET
+     , NETCASHPAIDINVTS
+     , USUFRUCTASSETSDA
+     , INFOSOURCECODE
+     , INSERTTIME
+     , NETDECLOANANDADVANCE
+     , NETDECREASEINCBANDIB
+     , NETDECFUNDLENDING
+     , NETDECCAPRESBUSOPER
+     , NETDECFINASSTRAPURP
+     , NETINCFINLIATRAPURP
+     , BFLAFVALONPLCHANGE
+     , NETDECBORROWFROMCB
+     , NETDECBORFROMFINANCECO
+     , NETDECINSURDPSTINVEST
+     , NETDECBORROWINGCAPITAL
+     , NETDECOFBUYBACK
+     , NETCASHPAYAGEUTS
+     , NETDECDEALTRADEASSETS
+     , NETDECFINLIATRAPURP
+     , OPEANDADMEXPFORCASH
+     , NETINCFINANCIALASSET
+     , NETDECBUYBACKFIN
+     , NPPARENTCOMPANYOWNERS
+     , PRODUCTBIOASSETSDEP
+     , INTERESTINCOME
+     , LEASELIAINTEXP
+     , BONDISSUEEXPENSE
+     , EXCHANGELOSS
+     , DEFERREDTAXCREDIT
+     , SHAREPAYMENT
+     , DECREASETRADEASSETS
+     , DECAVAILABLESALEASSETS
+     , DECREASELOAN
+     , FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyy-MM-dd HH:mm:ss') LD_TIME
+  FROM ODS_XDAY_JY.ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD_TMP
+;
+TRUNCATE TABLE ODS_XDAY_JY.ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD_TMP;"
+if [ $? -ne 0 ]; then
+      echo "插入到ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD失败"
+      exit 1
+   else
+      echo "插入到ODS_JY_LC_CASHFLOWSTATEMENTALL_PFD成功"
+      exit 0
+   fi
+fi

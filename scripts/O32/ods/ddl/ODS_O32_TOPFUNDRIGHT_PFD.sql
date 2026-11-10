@@ -1,0 +1,15 @@
+CREATE TABLE ODS_XDAY_O32.ODS_O32_TOPFUNDRIGHT_PFD (
+   l_operator_no  DECIMAL(18,2) COMMENT '操作员代码',
+   l_fund_id  DECIMAL(18,2) COMMENT '基金序号',
+   l_role_id  DECIMAL(18,2) COMMENT '角色代码',
+   l_asset_id  DECIMAL(18,2) COMMENT '资产单元序号',
+   l_basecombi_id  DECIMAL(18,2) COMMENT '投资组合序号',
+   c_layer  STRING COMMENT '权限层次',
+   vc_rights  STRING COMMENT '权限',
+   VC_TIMESTAMP  STRING COMMENT '时间戳',
+   L_VIRTUAL_KEY  DECIMAL(18,2) COMMENT '虚拟主键',
+   LD_TIME  STRING COMMENT '加载时间'
+)
+COMMENT '操作员基金权限表'
+PARTITIONED BY ( P_DT  STRING)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' NULL DEFINED AS '' ; ;

@@ -1,0 +1,11 @@
+# 一次性备份 / 调试残留，不入库。
+# 权威脚本仍在同级正式目录；这些是带日期的快照或 hack 副本。
+
+HSFA/dws/_缺陷版备份-20261020/
+HSZTA/dws/data_dict/DWS_dict_bak-20261019.xlsx
+HSZTA/dws/lineage/DWS_lineage_bak-20261019-删字段级.xlsx
+HSZTA/dws/lineage/DWS_lineage_bak-20261019.xlsx
+MASTER/dwd/02_etl/*.unprefix_hack_*
+
+# 生成器临时输出（tools/main.py --layer 写入），不入库。
+.dw-gen-*/

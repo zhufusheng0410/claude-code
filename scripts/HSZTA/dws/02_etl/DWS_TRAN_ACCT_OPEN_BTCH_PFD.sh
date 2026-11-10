@@ -1,0 +1,1761 @@
+#!/bin/sh
+#初始化环境变量：
+source /home/dolphinscheduler/hadoop_env
+inceptor_beeline()
+{
+    beeline -u ${hive_jdbc} -n ${hive_username} -p ${hive_password}   -e "$1"
+}
+
+inceptor_beeline "
+    set hive.strict.checks.type.safety=false;
+-- **************************************************************************
+-- ** 主题:渠道
+-- ** 描述:交易账户开户网点
+-- ** 创建者:auto
+-- ** 创建日期:2023-08-10
+-- ** 修改日志:
+-- ** 2023-08-10，auto，新建
+-- ** 目标表：DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD  交易账户开户网点
+-- ** 源表：  DWDXDAY.DWD_ACCT_ACCT_CNFM_PFD 账户确认
+-- **         DWDXDAY.DWD_CMM_AREA_INFO_PFD 区域信息
+-- **         DWDXDAY.DWD_PTY_CUST_INFO_PFD 客户信息表
+-- **         ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD
+-- **         ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD 网点视图
+-- **************************************************************************
+
+set hive.exec.dynamic.partition=true;
+set hive.exec.dynamic.partition.mode=nonstrict;
+set hive.exec.max.dynamic.partitions.pernode=10000;
+set hive.exec.max.dynamic.partitions=10000;
+set hive.exec.max.created.files=10000;
+set mapred.max.split.size=256000000;
+set mapred.min.split.size.per.node=100000000;
+set mapred.min.split.size.per.rack=100000000;
+set hive.merge.mapredfiles=true;
+set hive.merge.mapfiles=true;
+set hive.merge.smallfiles.avgsize=16000000;
+set hive.merge.size.per.task=256000000;
+set mapreduce.job.reduces=2;
+
+INSERT OVERWRITE TABLE DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD PARTITION(P_DT = '${p_end_dt}')
+SELECT T1.BUSIN_TYPE_CODE    --业务类型代码
+     , T1.CUST_INCD           --客户编码
+     , T1.CUST_NAME          --客户名称
+     , T1.TRAN_ACCO          --交易账号
+     , T1.FUND_ACCO          --基金账号
+     , T1.OPEN_BTCH_INCD     --开户网点内码
+     , T1.PTCD               --邮政编码
+     , T1.TEL                --电话
+     , T1.MOBL               --手机
+     , T1.ADDR               --地址
+     , T1.CERT_TYPE_CODE     --证件类型代码
+     , T1.CERT_NO            --证件号码
+     , T1.CUST_PTCD           --客户邮政编码
+     , T1.CUST_TEL            --客户电话
+     , T1.CUST_MOBL           --客户手机
+     , T1.CUST_ADDR           --客户地址
+     , T1.CUST_CERT_TYPE_CODE --客户证件类型代码
+     , T1.CUST_CERT_NO        --客户证件号码
+     , T1.OPEN_CHNL_NUM      --开户渠道编码
+     , T1.OPEN_CHNL_NAME     --开户渠道名称
+     , T1.OPEN_BTCH_NUM      --开户网点编码
+     , T1.OPEN_BTCH_NAME     --开户网点名称
+     , T1.OPEN_AREA_CODE     --开户区域代码
+     , T1.OPEN_CITY_CODE     --开户城市代码
+     , T1.OPEN_CITY_NAME     --开户城市名称
+     , T1.OPEN_PROVINCE_CODE --开户省份代码
+     , T1.OPEN_PROVINCE_NAME --开户省份名称
+     , T1.ST_DATE            --开始日期
+     , T1.END_DATE           --结束日期
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , T1.SPLIT_RULE_NAME    --拆分规则名称
+     , T1.MODIFY_TIME        --修改时间
+ FROM DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD T1
+WHERE T1.P_DT = DATE_FORMAT(DATE_SUB(TO_DATE(FROM_UNIXTIME(UNIX_TIMESTAMP('${p_end_dt}','yyyyMMdd'))),1),'yyyyMMdd')  
+;
+TRUNCATE TABLE  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP ;
+INSERT OVERWRITE TABLE  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT T1.BUSIN_TYPE_CODE
+             , T1.CUST_INCD              
+             , T1.CUST_NAME             
+             , T1.TRAN_ACCO             
+             , T1.FUND_ACCO             
+             , T1.OPER_BTCH_NO          
+             , T1.PTCD             AS PTCD
+             , T1.TEL              AS TEL                
+             , T1.MOBL             AS MOBL               
+             , TRIM(REGEXP_REPLACE(T1.ADDR,'[-|%||中国]',''))              AS ADDR               
+             , T1.CERT_TYPE_CODE   AS CERT_TYPE_CODE      
+             , T1.CERT_NO          AS CERT_NO  
+             , T3.PTCD             AS CUST_PTCD
+             , T3.PHONE            AS CUST_TEL                
+             , T3.MOBI_NO             AS CUST_MOBL    
+             , TRIM(REGEXP_REPLACE(T3.ADDR,'[-|%||中国]',''))               AS CUST_ADDR
+             , T3.CUST_CERT_TYPE   AS CUST_CERT_TYPE_CODE      
+             , T3.CUST_CERT_NO          AS CUST_CERT_NO 
+             , T1.CHNL_NUM              
+             , T1.CNFM_DATE
+             , T1.CHNL_INCD
+             , T1.REQ_DATE
+             , T1.REQ_NO
+          FROM DWDXDAY.DWD_ACCT_ACCT_CNFM_PFD T1 --账户确认  
+          LEFT JOIN DWDXDAY.DWD_PTY_CUST_FUNDACCT_RELA_PFD  T4 --客户基金帐号关系
+            ON T1.CUST_INCD = T4.CUST_INCD
+           AND T1.FUND_ACCO = T4.FUNDACCO
+           AND T1.SSYS = T4.SSYS
+           AND T4.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+          LEFT JOIN DWDXDAY.DWD_PTY_CUST_INFO_PFD T3
+            ON T4.CUST_NUM = T3.CUST_NUM
+         WHERE T1.P_DT = '${p_end_dt}'
+           AND T1.STATUS = 1
+           AND T1.CNFM_DATE = '${p_end_dt}'
+;
+
+TRUNCATE TABLE DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP;
+INSERT INTO DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T5.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T5.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T5.SK_REGION AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '邮编'
+     , '按邮编' SPLIT_RULE_NAME
+     , '1' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  --按邮编
+  INNER JOIN DWDXDAY.DWD_CMM_PTCD_AREA_RELA_PFD T41 
+    ON T1.PTCD = T41.PTCD
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+            )T5
+    ON COALESCE(T41.CITY_CODE,T41.PROVINCE_CODE) = T5.SK_REGION 
+   AND T1.CHNL_INCD = T5.AGENCYNO
+   AND T5.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T5.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T5.RN = 1
+  LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE T1.PTCD IS NOT NULL  AND TT.FUND_ACCO IS NULL
+;
+
+
+
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T10.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T10.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T10.SK_REGION AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '邮编'
+     , '按配置表中邮编' SPLIT_RULE_NAME
+     , '2' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  --按配置表中邮编
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD  T8
+    ON T8.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+   AND T8.DK_RG_SPLIT_CODE = 'ZIPCODE'
+   AND T1.PTCD = T8.BK_RG_SPLIT_CODE
+  INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T9
+    ON T8.SK_REGION = T9.AREA_NUM
+   AND T9.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                 , T.BK_AGENCY
+                 , T.SK_AGENCY
+                 , T.AGENCY_BRANCH_NAME
+                 , T.SK_REGION 
+                 , T.AGENCYNO
+                 , T.EFFECTIVE_FROM
+                 , T.EFFECTIVE_TO
+              FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+             WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+               AND T.EFFECTIVE_FROM IS NOT NULL
+           )T10
+    ON NVL(T9.CITY_CODE,T9.PROVINCE_CODE) = T10.SK_REGION  
+   AND T1.CHNL_INCD = T10.AGENCYNO
+   AND T10.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T10.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T10.RN = 1
+ LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE T1.PTCD IS NOT NULL  AND TT.FUND_ACCO IS NULL
+;
+
+
+
+
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T7.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T7.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T7.SK_REGION AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '邮编'
+     , '客户-按邮编' SPLIT_RULE_NAME
+     , '2' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+ --按客户邮编
+  INNER JOIN DWDXDAY.DWD_CMM_PTCD_AREA_RELA_PFD T61 
+    ON T1.CUST_PTCD = T61.PTCD
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+               AND T.EFFECTIVE_FROM IS NOT NULL
+            )T7
+    ON COALESCE(T61.CITY_CODE,T61.PROVINCE_CODE) = T7.SK_REGION 
+   AND T1.CHNL_INCD = T7.AGENCYNO
+   AND T7.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T7.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T7.RN = 1   
+ LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE T1.CUST_PTCD IS NOT NULL AND TT.FUND_ACCO IS NULL
+;
+
+
+
+
+
+
+
+
+
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T13.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T13.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T13.SK_REGION AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '邮编'
+     , '客户-按配置表中邮编' SPLIT_RULE_NAME
+     , '4' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  --按配置表中客户邮编
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD  T11
+    ON T11.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+   AND T11.DK_RG_SPLIT_CODE = 'ZIPCODE'
+   AND T1.CUST_PTCD  = T11.BK_RG_SPLIT_CODE
+ INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T12
+    ON T11.SK_REGION = T12.AREA_NUM
+   AND T12.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+ INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                 , T.BK_AGENCY
+                 , T.SK_AGENCY
+                 , T.AGENCY_BRANCH_NAME
+                 , T.SK_REGION 
+                 , T.AGENCYNO
+                 , T.EFFECTIVE_FROM
+                 , T.EFFECTIVE_TO
+              FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+             WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+               AND T.EFFECTIVE_FROM IS NOT NULL
+           )T13
+    ON NVl(T12.CITY_CODE,T12.PROVINCE_CODE) = T13.SK_REGION  
+   AND T1.CHNL_INCD = T13.AGENCYNO
+   AND T13.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T13.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T13.RN = 1
+ LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE  T1.CUST_PTCD IS NOT NULL AND TT.FUND_ACCO IS NULL
+;
+
+
+
+
+--地址
+
+
+--地址
+set mapreduce.job.reduces=5;
+INSERT INTO DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T2.SK_AGENCY
+     , T2.AGENCY_BRANCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址'
+     , T1.SPLIT_RULE_NAME
+     , T1.RULE_LVL
+ FROM (
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.FUND_ACCO
+     , T1.TRAN_ACCO
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO  
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL    
+     , T4.CITY_CODE  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址-省市带市' SPLIT_RULE_NAME
+     , '1' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  INNER JOIN (SELECT DISTINCT PROVINCE_CODE,PROVINCE_NAME,CITY_CODE,CITY_NAME,CONCAT (T4.PROVINCE_NAME,'省', T4.CITY_NAME,'%') PROVINCE_CITY
+               FROM DWDXDAY.DWD_CMM_AREA_INFO_PFD T4
+              WHERE T4.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T4.CITY_CODE IS NOT NULL
+             )T4
+    ON  T1.ADDR LIKE  T4.PROVINCE_CITY 
+LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE T1.ADDR IS NOT NULL  AND TT.FUND_ACCO IS NULL
+)T1
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+           )T2
+    ON T1.OPEN_AREA_CODE   = T2.SK_REGION  
+   AND T1.CHNL_INCD = T2.AGENCYNO
+   AND T2.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T2.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T2.RN = 1
+ WHERE T1.OPEN_AREA_CODE IS NOT NULL 
+;
+
+
+
+
+
+
+
+
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T2.SK_AGENCY
+     , T2.AGENCY_BRANCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址'
+     , T1.SPLIT_RULE_NAME
+     , T1.RULE_LVL
+ FROM (
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.FUND_ACCO
+     , T1.TRAN_ACCO
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO  
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL    
+     , T7.CITY_CODE  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址-省市' SPLIT_RULE_NAME
+     , '2' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  INNER JOIN (SELECT DISTINCT PROVINCE_CODE,PROVINCE_NAME,CITY_CODE,CITY_NAME,CONCAT (T4.PROVINCE_NAME, T4.CITY_NAME,'%') PROVINCE_CITY
+               FROM DWDXDAY.DWD_CMM_AREA_INFO_PFD T4
+              WHERE T4.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T4.CITY_CODE IS NOT NULL
+             )T7
+    ON T1.ADDR LIKE  T7.PROVINCE_CITY 
+LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE T1.ADDR IS NOT NULL  AND TT.FUND_ACCO IS NULL
+)T1
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+           )T2
+    ON T1.OPEN_AREA_CODE   = T2.SK_REGION  
+   AND T1.CHNL_INCD = T2.AGENCYNO
+   AND T2.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T2.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T2.RN = 1
+ WHERE T1.OPEN_AREA_CODE IS NOT NULL 
+;
+
+
+
+
+
+
+
+
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T2.SK_AGENCY
+     , T2.AGENCY_BRANCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址'
+     , T1.SPLIT_RULE_NAME
+     , T1.RULE_LVL
+ FROM (
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.FUND_ACCO
+     , T1.TRAN_ACCO
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO  
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL    
+     , NVL(T52.CITY_CODE,T52.PROVINCE_CODE)  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址-市' SPLIT_RULE_NAME
+     , '4' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD T5
+    ON T5.MEMO  ='按地址市名称左匹配拆分'
+   AND T1.ADDR LIKE CONCAT(T5.BK_RG_SPLIT_CODE,'%')
+   AND T5.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+  INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T52
+    ON T5.SK_REGION = T52.AREA_NUM
+   AND T52.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE T1.ADDR IS NOT NULL  AND TT.FUND_ACCO IS NULL
+)T1
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+           )T2
+    ON T1.OPEN_AREA_CODE   = T2.SK_REGION  
+   AND T1.CHNL_INCD = T2.AGENCYNO
+   AND T2.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T2.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T2.RN = 1
+ WHERE T1.OPEN_AREA_CODE IS NOT NULL 
+;
+
+
+
+
+
+
+
+
+
+
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T2.SK_AGENCY
+     , T2.AGENCY_BRANCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址'
+     , T1.SPLIT_RULE_NAME
+     , T1.RULE_LVL
+ FROM (
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.FUND_ACCO
+     , T1.TRAN_ACCO
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO  
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL    
+     , NVL(T62.CITY_CODE,T62.PROVINCE_CODE)  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址-省' SPLIT_RULE_NAME
+     , '5' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD T6
+    ON T6.MEMO = '按地址省份名称左匹配拆分'
+   AND T1.ADDR LIKE CONCAT(T6.BK_RG_SPLIT_CODE,'%')
+   AND T6.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期  
+   INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T62
+    ON T6.SK_REGION = T62.AREA_NUM
+   AND T62.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+  WHERE  T1.ADDR IS NOT NULL AND TT.FUND_ACCO IS NULL
+)T1
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+           )T2
+    ON T1.OPEN_AREA_CODE   = T2.SK_REGION  
+   AND T1.CHNL_INCD = T2.AGENCYNO
+   AND T2.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T2.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T2.RN = 1
+ WHERE T1.OPEN_AREA_CODE IS NOT NULL 
+;
+
+
+
+
+
+
+
+
+
+
+
+
+INSERT INTO DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T2.SK_AGENCY
+     , T2.AGENCY_BRANCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址'
+     , T1.SPLIT_RULE_NAME
+     , T1.RULE_LVL
+ FROM (
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.FUND_ACCO
+     , T1.TRAN_ACCO
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO  
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL    
+     , T41.CITY_CODE  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '客户-地址-省市带市' SPLIT_RULE_NAME
+     , '6' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  INNER JOIN (SELECT DISTINCT PROVINCE_CODE,PROVINCE_NAME,CITY_CODE,CITY_NAME,CONCAT (T4.PROVINCE_NAME,'省', T4.CITY_NAME,'%') PROVINCE_CITY
+               FROM DWDXDAY.DWD_CMM_AREA_INFO_PFD T4
+              WHERE T4.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T4.CITY_CODE IS NOT NULL
+             )T41
+    ON T1.CUST_ADDR LIKE  T41.PROVINCE_CITY
+LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE T1.CUST_ADDR IS NOT NULL  AND TT.FUND_ACCO IS NULL
+)T1
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+           )T2
+    ON T1.OPEN_AREA_CODE   = T2.SK_REGION  
+   AND T1.CHNL_INCD = T2.AGENCYNO
+   AND T2.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T2.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T2.RN = 1
+ WHERE T1.OPEN_AREA_CODE IS NOT NULL 
+;
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T2.SK_AGENCY
+     , T2.AGENCY_BRANCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址'
+     , T1.SPLIT_RULE_NAME
+     , T1.RULE_LVL
+ FROM (
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.FUND_ACCO
+     , T1.TRAN_ACCO
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO  
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL    
+     , T71.CITY_CODE  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '客户-地址-省市' SPLIT_RULE_NAME
+     , '7' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  INNER JOIN (SELECT DISTINCT PROVINCE_CODE,PROVINCE_NAME,CITY_CODE,CITY_NAME,CONCAT (T4.PROVINCE_NAME, T4.CITY_NAME,'%') PROVINCE_CITY
+               FROM DWDXDAY.DWD_CMM_AREA_INFO_PFD T4
+              WHERE T4.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T4.CITY_CODE IS NOT NULL
+             )T71
+    ON T1.CUST_ADDR LIKE  T71.PROVINCE_CITY
+LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE  T1.CUST_ADDR IS NOT NULL  AND TT.FUND_ACCO IS NULL 
+)T1
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+           )T2
+    ON T1.OPEN_AREA_CODE   = T2.SK_REGION  
+   AND T1.CHNL_INCD = T2.AGENCYNO
+   AND T2.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T2.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T2.RN = 1
+ WHERE T1.OPEN_AREA_CODE IS NOT NULL 
+;
+
+
+
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T2.SK_AGENCY
+     , T2.AGENCY_BRANCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址'
+     , T1.SPLIT_RULE_NAME
+     , T1.RULE_LVL
+ FROM (
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.FUND_ACCO
+     , T1.TRAN_ACCO
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO  
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL    
+     , NVL(T53.CITY_CODE,T53.PROVINCE_CODE)  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '客户-地址-市' SPLIT_RULE_NAME
+     , '9' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD T51
+    ON T51.MEMO  ='按地址市名称左匹配拆分'
+   AND T1.CUST_ADDR LIKE CONCAT(T51.BK_RG_SPLIT_CODE,'%')
+   AND T51.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+  INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T53
+    ON T51.SK_REGION = T53.AREA_NUM
+   AND T53.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+   LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE  T1.CUST_ADDR IS NOT NULL  AND TT.FUND_ACCO IS NULL
+)T1
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+           )T2
+    ON T1.OPEN_AREA_CODE   = T2.SK_REGION  
+   AND T1.CHNL_INCD = T2.AGENCYNO
+   AND T2.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T2.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T2.RN = 1
+ WHERE T1.OPEN_AREA_CODE IS NOT NULL 
+;
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T2.SK_AGENCY
+     , T2.AGENCY_BRANCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '地址'
+     , T1.SPLIT_RULE_NAME
+     , T1.RULE_LVL
+ FROM (
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.FUND_ACCO
+     , T1.TRAN_ACCO
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO  
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL    
+     , NVL(T63.CITY_CODE,T63.PROVINCE_CODE)  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '客户-地址-省' SPLIT_RULE_NAME
+     , '10' RULE_LVL
+  FROM  DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD T61
+    ON T61.MEMO = '按地址省份名称左匹配拆分'
+   AND T1.CUST_ADDR LIKE CONCAT(T61.BK_RG_SPLIT_CODE,'%')
+   AND T61.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+  INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T63
+    ON T61.SK_REGION = T63.AREA_NUM
+   AND T63.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+  LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO 
+ WHERE T1.CUST_ADDR IS NOT NULL  AND TT.FUND_ACCO IS NULL
+)T1
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                  , T.BK_AGENCY
+                  , T.SK_AGENCY
+                  , T.AGENCY_BRANCH_NAME
+                  , T.SK_REGION 
+                  , T.AGENCYNO
+                  , T.EFFECTIVE_FROM
+                  , T.EFFECTIVE_TO
+               FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+              WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+                AND T.EFFECTIVE_FROM IS NOT NULL
+           )T2
+    ON T1.OPEN_AREA_CODE   = T2.SK_REGION  
+   AND T1.CHNL_INCD = T2.AGENCYNO
+   AND T2.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T2.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T2.RN = 1
+ WHERE T1.OPEN_AREA_CODE IS NOT NULL 
+;
+
+
+
+
+
+
+
+
+ --联系电话
+set mapreduce.job.reduces=5;
+INSERT INTO DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO  
+     , T3.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T3.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T3.SK_REGION  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '电话'
+     , '电话' SPLIT_RULE_NAME
+     , '3'
+  FROM DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1 
+   --按配置表中电话
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD  T2
+    ON T2.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+   AND T2.MEMO = '按电话区号拆分'
+   AND REGEXP_EXTRACT(T1.TEL,'[^-]+',0) = T2.BK_RG_SPLIT_CODE
+  INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T4
+    ON T2.SK_REGION = T4.AREA_NUM
+   AND T4.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                 , T.BK_AGENCY
+                 , T.SK_AGENCY
+                 , T.AGENCY_BRANCH_NAME
+                 , T.SK_REGION 
+                 , T.AGENCYNO
+                 , T.EFFECTIVE_FROM
+                 , T.EFFECTIVE_TO
+              FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+             WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+               AND T.EFFECTIVE_FROM IS NOT NULL
+           )T3
+    ON NVL(T4.CITY_CODE,T4.PROVINCE_CODE) = T3.SK_REGION  
+   AND T1.CHNL_INCD = T3.AGENCYNO
+   AND T3.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T3.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T3.RN = 1
+  LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO  
+  WHERE T1.TEL IS NOT NULL 
+   AND T1.TEL LIKE '0%-%'
+   AND TT.FUND_ACCO IS NULL  
+ ;
+
+
+set mapreduce.job.reduces=5;
+INSERT INTO DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO  
+     , T7.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T7.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T7.SK_REGION  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '电话'
+     , '电话' SPLIT_RULE_NAME
+     , '3'
+  FROM DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1 
+ --按配置表中客户电话
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD  T5
+    ON T5.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+   AND T5.MEMO = '按电话区号拆分'
+   AND REGEXP_EXTRACT(T1.CUST_TEL,'[^-]+',0) = T5.BK_RG_SPLIT_CODE
+  INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T6
+    ON T5.SK_REGION = T6.AREA_NUM
+   AND T6.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                 , T.BK_AGENCY
+                 , T.SK_AGENCY
+                 , T.AGENCY_BRANCH_NAME
+                 , T.SK_REGION 
+                 , T.AGENCYNO
+                 , T.EFFECTIVE_FROM
+                 , T.EFFECTIVE_TO
+              FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+             WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+              AND T.EFFECTIVE_FROM IS NOT NULL
+           )T7
+    ON NVL(T6.CITY_CODE,T6.PROVINCE_CODE) = T7.SK_REGION  
+   AND T1.CHNL_INCD = T7.AGENCYNO
+   AND T7.EFFECTIVE_FROM <= T1.CNFM_DATE
+   AND T7.EFFECTIVE_TO >= T1.CNFM_DATE
+   AND T7.RN = 1
+  LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO    
+ WHERE T1.CUST_TEL IS NOT NULL 
+   AND T1.CUST_TEL LIKE '0%-%'
+   AND TT.FUND_ACCO IS NULL
+;
+
+
+
+
+
+
+
+ 
+ 
+--身份证
+
+
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T6.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T6.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T6.SK_REGION  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '身份证'
+     , '按身份证前四位与SK_REGION关联' SPLIT_RULE_NAME
+     , '3' AS RULE_LVL
+  FROM DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+ --按身份证前四位与SK_REGION关联
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                 , T.BK_AGENCY
+                 , T.SK_AGENCY
+                 , T.AGENCY_BRANCH_NAME
+                 , T.SK_REGION 
+                 , T.AGENCYNO
+                 , T.EFFECTIVE_FROM
+                 , T.EFFECTIVE_TO
+              FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+             WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+               AND T.EFFECTIVE_FROM IS NOT NULL
+           )T6
+   ON  CONCAT(SUBSTR(CERT_NO,1,4),'00')   = T6.SK_REGION  
+  AND T1.CHNL_INCD = T6.AGENCYNO
+  AND T6.EFFECTIVE_FROM <= T1.CNFM_DATE
+  AND T6.EFFECTIVE_TO >= T1.CNFM_DATE
+  AND T6.RN = 1
+  LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE  TT.FUND_ACCO IS NULL AND T1.CERT_TYPE_CODE =0;
+ 
+ 
+ 
+ 
+ INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T7.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T7.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T7.SK_REGION  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '身份证'
+     , '按身份证前四位与AGENCY_AREA_CODE关联' SPLIT_RULE_NAME
+     , '4' AS RULE_LVL
+  FROM DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+ --按身份证前四位与AGENCY_AREA_CODE关联
+  INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.AGENCY_AREA_CODE ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                 , T.BK_AGENCY
+                 , T.SK_AGENCY
+                 , T.AGENCY_BRANCH_NAME
+                 , T.SK_REGION 
+                 , T.AGENCYNO
+                 , T.EFFECTIVE_FROM
+                 , T.EFFECTIVE_TO
+                 , T.AGENCY_AREA_CODE
+              FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+             WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+              AND T.EFFECTIVE_FROM IS NOT NULL
+           )T7
+   ON  CONCAT(SUBSTR(CERT_NO,1,4),'00')   = T7.AGENCY_AREA_CODE  
+  AND T1.CHNL_INCD = T7.AGENCYNO
+  AND T7.EFFECTIVE_FROM <= T1.CNFM_DATE
+  AND T7.EFFECTIVE_TO >= T1.CNFM_DATE
+  AND T7.RN = 1
+   LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE  TT.FUND_ACCO IS NULL AND T1.CERT_TYPE_CODE =0;
+  ;
+  
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T15.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T15.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T15.SK_REGION  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '身份证'
+     , '按配置表中身份证前四位' SPLIT_RULE_NAME
+     , '1' AS RULE_LVL
+  FROM DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+  --按配置表中身份证前四位
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD  T13
+    ON T13.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+   AND T13.DK_RG_SPLIT_CODE = 'IDNO'
+   AND SUBSTR(T1.CERT_NO,1,4) = T13.BK_RG_SPLIT_CODE
+ INNER JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T10
+    ON T13.SK_REGION = T10.AREA_NUM
+   AND T10.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+ INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                 , T.BK_AGENCY
+                 , T.SK_AGENCY
+                 , T.AGENCY_BRANCH_NAME
+                 , T.SK_REGION 
+                 , T.AGENCYNO
+                 , T.EFFECTIVE_FROM
+                 , T.EFFECTIVE_TO
+              FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+             WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+              AND T.EFFECTIVE_FROM IS NOT NULL
+           )T15
+   ON NVL(T10.CITY_CODE,T10.PROVINCE_CODE) = T15.SK_REGION  
+  AND T1.CHNL_INCD = T15.AGENCYNO
+  AND T15.EFFECTIVE_FROM <= T1.CNFM_DATE
+  AND T15.EFFECTIVE_TO >= T1.CNFM_DATE
+  AND T15.RN = 1
+ LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE  TT.FUND_ACCO IS NULL AND T1.CERT_TYPE_CODE =0;
+  ;
+  
+INSERT INTO  DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP PARTITION(P_DT = '${p_end_dt}')
+SELECT DISTINCT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CNFM_DATE
+     , T1.CUST_INCD
+     , T1.CHNL_NUM
+     , T1.CHNL_INCD
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.PTCD
+     , T1.TEL      
+     , T1.MOBL 
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE  
+     , T1.CERT_NO 
+     , T1.CUST_PTCD
+     , T1.CUST_TEL                
+     , T1.CUST_MOBL               
+     , T1.CUST_ADDR               
+     , T1.CUST_CERT_TYPE_CODE      
+     , T1.CUST_CERT_NO 
+     , T16.SK_AGENCY  AS OPEN_BTCH_NUM
+     , T16.AGENCY_BRANCH_NAME  AS OPEN_BTCH_NAME
+     , T16.SK_REGION  AS OPEN_AREA_CODE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , '身份证'
+     , '按配置表中身份证前两位' SPLIT_RULE_NAME
+     , '2' AS RULE_LVL
+  FROM DWSXDAY.DWS_TRAN_ACCT_INFO_TMP T1
+ --按配置表中身份证前两位
+  INNER JOIN ODS_XDAY_OA.ODS_OA_COMM_REGION_SPLIT_MAPP_PFD  T14
+    ON T14.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+   AND T14.DK_RG_SPLIT_CODE = 'IDNO_2'
+   AND SUBSTR(T1.CERT_NO,1,2) = T14.BK_RG_SPLIT_CODE  
+  INNER  JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T11
+    ON T14.SK_REGION = T11.AREA_NUM
+   AND T11.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+ INNER JOIN (SELECT ROW_NUMBER () OVER(PARTITION BY T.AGENCYNO, T.SK_REGION ORDER BY AGENCY_LEVEL,DK_VIRTUAL_FLAG DESC , SK_AGENCY  DESC   )RN
+                 , T.BK_AGENCY
+                 , T.SK_AGENCY
+                 , T.AGENCY_BRANCH_NAME
+                 , T.SK_REGION 
+                 , T.AGENCYNO
+                 , T.EFFECTIVE_FROM
+                 , T.EFFECTIVE_TO
+              FROM ODS_XDAY_OA.ODS_OA_AGENCY_VIEW_PFD T  --渠道解析网点信息 
+             WHERE T.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+              AND T.EFFECTIVE_FROM IS NOT NULL
+           )T16
+   ON NVL(T11.CITY_CODE,T11.PROVINCE_CODE) = T16.SK_REGION  
+  AND T1.CHNL_INCD = T16.AGENCYNO
+  AND T16.EFFECTIVE_FROM <= T1.CNFM_DATE
+  AND T16.EFFECTIVE_TO >= T1.CNFM_DATE
+  AND T16.RN = 1
+  LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP TT
+    ON T1.FUND_ACCO = TT.FUND_ACCO
+   AND T1.TRAN_ACCO = TT.TRAN_ACCO
+   AND T1.REQ_DATE = TT.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = TT.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = TT.REQ_NO
+ WHERE  TT.FUND_ACCO IS NULL AND T1.CERT_TYPE_CODE =0
+  ;
+
+
+
+INSERT INTO DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD PARTITION(P_DT = '${p_end_dt}')
+SELECT T1.BUSIN_TYPE_CODE                                                            AS BUSIN_TYPE_CODE                --客户编码
+     , T1.CUST_INCD                                                                   AS CUST_INCD                       --客户编码
+     , T1.CUST_NAME                                                                  AS CUST_NAME                      --客户名称
+     , T1.TRAN_ACCO                                                                  AS TRAN_ACCO                      --交易账号
+     , T1.FUND_ACCO                                                                  AS FUND_ACCO                      --基金账号
+     , T1.OPER_BTCH_NO                                                               AS OPEN_BTCH_INCD                 --开户网点内码
+     , T1.PTCD                                                                       AS PTCD                           --邮政编码
+     , T1.TEL                                                                        AS TEL                            --电话
+     , T1.MOBL                                                                       AS MOBL                           --手机
+     , T1.ADDR                                                                       AS ADDR                           --地址
+     , T1.CERT_TYPE_CODE                                                             AS CERT_TYPE_CODE                 --证件类型代码
+     , T1.CERT_NO                                                                    AS CERT_NO                        --证件号码
+     , T1.CUST_PTCD                                                                  AS CUST_PTCD                      --客户邮政编码
+     , T1.CUST_TEL                                                                   AS CUST_TEL                       --客户电话
+     , T1.CUST_MOBL                                                                  AS CUST_MOBL                      --客户手机
+     , T1.CUST_ADDR                                                                  AS CUST_ADDR                      --客户地址
+     , T1.CUST_CERT_TYPE_CODE                                                        AS CUST_CERT_TYPE_CODE            --客户证件类型代码
+     , T1.CUST_CERT_NO                                                               AS CUST_CERT_NO                   --客户证件号码
+     , T1.CHNL_NUM                                                                   AS OPEN_CHNL_NUM                  --开户渠道编码
+     , T3.CHNL_NAME                                                                  AS OPEN_CHNL_NAME                 --开户渠道名称
+     , T2.OPEN_BTCH_NUM                                                              AS OPEN_BTCH_NUM                  --开户网点编码
+     , T2.OPEN_BTCH_NAME                                                             AS OPEN_BTCH_NAME                 --开户网点名称
+     , T2.OPEN_AREA_CODE                                                             AS OPEN_AREA_CODE                 --开户区域代码
+     , T4.CITY_CODE                                                                  AS OPEN_CITY_CODE                 --开户城市代码
+     , T4.CITY_NAME                                                                  AS OPEN_CITY_NAME                 --开户城市名称
+     , T4.PROVINCE_CODE                                                              AS OPEN_PROVINCE_CODE             --开户省份代码
+     , T4.PROVINCE_NAME                                                              AS OPEN_PROVINCE_NAME             --开户省份名称
+     , T1.CNFM_DATE                                                                  AS ST_DATE                        --开始日期
+     , T1.END_DATE                                                                   AS END_DATE                       --结束日期
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , T2.SPLIT_RULE_NAME
+     , FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyy-MM-dd HH:mm:ss')      AS MODIFY_TIME                    --修改时间
+  FROM (SELECT T1.BUSIN_TYPE_CODE
+             , T1.CUST_INCD              
+             , T1.CUST_NAME             
+             , T1.TRAN_ACCO             
+             , T1.FUND_ACCO             
+             , T1.OPER_BTCH_NO          
+             , T1.PTCD             AS PTCD
+             , T1.TEL              AS TEL                
+             , T1.MOBL             AS MOBL               
+             , T1.ADDR             AS ADDR               
+             , T1.CERT_TYPE_CODE   AS CERT_TYPE_CODE      
+             , T1.CERT_NO          AS CERT_NO  
+             , T3.PTCD             AS CUST_PTCD
+             , T3.PHONE            AS CUST_TEL                
+             , T3.MOBI_NO             AS CUST_MOBL    
+             , T3.ADDR                AS CUST_ADDR
+             , T3.CUST_CERT_TYPE   AS CUST_CERT_TYPE_CODE      
+             , T3.CUST_CERT_NO          AS CUST_CERT_NO            
+             , T1.CHNL_NUM              
+             , T1.CNFM_DATE
+             , T1.CHNL_INCD
+             , T1.REQ_DATE
+             , T1.REQ_NO
+             , NVL(LEAD(DATE_FORMAT(DATE_SUB(TO_DATE(FROM_UNIXTIME(UNIX_TIMESTAMP(T1.CNFM_DATE,'yyyyMMdd'))),1),'yyyyMMdd'),1) OVER(PARTITION BY T1.FUND_ACCO,T1.TRAN_ACCO ORDER BY T1.CNFM_DATE ),'29991231')  AS END_DATE 
+          FROM DWDXDAY.DWD_ACCT_ACCT_CNFM_PFD T1 --账户确认  
+          LEFT JOIN DWDXDAY.DWD_PTY_CUST_FUNDACCT_RELA_PFD  T4 --客户基金帐号关系
+            ON T1.CUST_INCD = T4.CUST_INCD
+           AND T1.FUND_ACCO = T4.FUNDACCO
+           AND T1.SSYS = T4.SSYS
+           AND T4.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+          LEFT JOIN DWDXDAY.DWD_PTY_CUST_INFO_PFD T3
+            ON T4.CUST_NUM = T3.CUST_NUM
+          LEFT JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD T5
+           ON T1.FUND_ACCO = T5.FUND_ACCO
+          AND T1.TRAN_ACCO = T5.TRAN_ACCO
+          AND T1.REQ_DATE = T5.REQ_DATE
+          AND T1.BUSIN_TYPE_CODE = T5.BUSIN_TYPE_CODE
+          AND T1.REQ_NO = T5.REQ_NO
+         WHERE T1.P_DT = '${p_end_dt}'
+           AND T1.STATUS = 1
+           AND T1.CNFM_DATE = '${p_end_dt}'
+           AND T5.FUND_ACCO IS NULL 
+           AND T1.STATUS = 1
+        )T1  
+  LEFT JOIN DWDXDAY.DWD_CHNL_CHNL_BASIC_INFO_PFD T3 --渠道基本信息表
+    ON T1.CHNL_NUM = T3.CHNL_NUM
+   AND T3.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期
+  LEFT JOIN (SELECT T.*,ROW_NUMBER() OVER(PARTITION BY  FUND_ACCO,TRAN_ACCO,REQ_DATE,BUSIN_TYPE_CODE,REQ_NO ORDER BY  RULE_LVL) RN 
+                FROM DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD_TMP T
+               WHERE OPEN_BTCH_NUM IS NOT NULL
+             ) T2
+    ON T1.FUND_ACCO = T2.FUND_ACCO
+   AND T1.TRAN_ACCO = T2.TRAN_ACCO
+   AND T1.REQ_DATE = T2.REQ_DATE
+   AND T1.BUSIN_TYPE_CODE = T2.BUSIN_TYPE_CODE
+   AND T1.REQ_NO = T2.REQ_NO
+   AND T2.RN = 1
+  LEFT JOIN DWDXDAY.DWD_CMM_AREA_INFO_PFD T4
+    ON T2.OPEN_AREA_CODE = T4.AREA_CODE
+   AND T4.P_DT = DATE_ADD(FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyyMMdd'),-1) --取最新日期 
+;
+
+
+INSERT OVERWRITE TABLE DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD PARTITION(P_DT = '${p_end_dt}')
+SELECT BUSIN_TYPE_CODE                --客户编码
+     , CUST_INCD                       --客户编码
+     , CUST_NAME                      --客户名称
+     , TRAN_ACCO                      --交易账号
+     , FUND_ACCO                      --基金账号
+     , OPEN_BTCH_INCD                 --开户网点内码
+     , PTCD                           --邮政编码
+     , TEL                            --电话
+     , MOBL                           --手机
+     , ADDR                           --地址
+     , CERT_TYPE_CODE                 --证件类型代码
+     , CERT_NO                        --证件号码
+     , CUST_PTCD                      --客户邮政编码
+     , CUST_TEL                       --客户电话
+     , CUST_MOBL                      --客户手机
+     , CUST_ADDR                      --客户地址
+     , CUST_CERT_TYPE_CODE            --客户证件类型代码
+     , CUST_CERT_NO                   --客户证件号码
+     , OPEN_CHNL_NUM                  --开户渠道编码
+     , OPEN_CHNL_NAME                 --开户渠道名称
+     , OPEN_BTCH_NUM                  --开户网点编码
+     , OPEN_BTCH_NAME                 --开户网点名称
+     , OPEN_AREA_CODE                 --开户区域代码
+     , OPEN_CITY_CODE                 --开户城市代码
+     , OPEN_CITY_NAME                 --开户城市名称
+     , OPEN_PROVINCE_CODE             --开户省份代码
+     , OPEN_PROVINCE_NAME             --开户省份名称
+     , ST_DATE                        --开始日期
+     , NVL(LEAD(DATE_FORMAT(DATE_SUB(TO_DATE(FROM_UNIXTIME(UNIX_TIMESTAMP(T1.ST_DATE,'yyyyMMdd'))),1),'yyyyMMdd'),1) OVER(PARTITION BY T1.FUND_ACCO,T1.TRAN_ACCO ORDER BY T1.ST_DATE ),'29991231')                                                                   AS END_DATE                       --结束日期
+     , REQ_DATE
+     , REQ_NO
+     , T1.SPLIT_RULE_NAME
+     , FROM_UNIXTIME(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()),'yyyy-MM-dd HH:mm:ss')      AS MODIFY_TIME                    --修改时间
+ FROM DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD T1
+WHERE T1.P_DT = '${p_end_dt}'
+;
+
+
+INSERT OVERWRITE TABLE DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD PARTITION(P_DT = '${p_end_dt}')
+SELECT 
+       T1.BUSIN_TYPE_CODE
+     , T1.CUST_INCD
+     , T1.CUST_NAME
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.OPEN_BTCH_INCD
+     , T1.PTCD
+     , T1.TEL
+     , T1.MOBL
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE
+     , T1.CERT_NO
+     , T1.CUST_PTCD
+     , T1.CUST_TEL
+     , T1.CUST_MOBL
+     , T1.CUST_ADDR
+     , T1.CUST_CERT_TYPE_CODE
+     , T1.CUST_CERT_NO
+     , T1.OPEN_CHNL_NUM
+     , T1.OPEN_CHNL_NAME
+     , T1.OPEN_BTCH_NUM
+     , T1.OPEN_BTCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.OPEN_CITY_CODE
+     , T1.OPEN_CITY_NAME
+     , T1.OPEN_PROVINCE_CODE
+     , T1.OPEN_PROVINCE_NAME
+     , T1.ST_DATE
+     , T2.END_DATE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , T1.SPLIT_RULE_NAME
+     , T1.MODIFY_TIME 
+  FROM DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD t1
+ INNER JOIN DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD t2
+    ON T1.TRAN_ACCO = T2.TRAN_ACCO
+   AND T1.FUND_ACCO = T2.FUND_ACCO
+   AND T1.ST_DATE = T2.ST_DATE
+   AND T2.ST_DATE <= T2.END_DATE
+   AND T2.P_DT = '${p_end_dt}'
+ WHERE T1.ST_DATE>T1.END_DATE
+   AND T1.P_DT = '${p_end_dt}'
+UNION ALL
+SELECT T1.BUSIN_TYPE_CODE
+     , T1.CUST_INCD
+     , T1.CUST_NAME
+     , T1.TRAN_ACCO
+     , T1.FUND_ACCO
+     , T1.OPEN_BTCH_INCD
+     , T1.PTCD
+     , T1.TEL
+     , T1.MOBL
+     , T1.ADDR
+     , T1.CERT_TYPE_CODE
+     , T1.CERT_NO
+     , T1.CUST_PTCD
+     , T1.CUST_TEL
+     , T1.CUST_MOBL
+     , T1.CUST_ADDR
+     , T1.CUST_CERT_TYPE_CODE
+     , T1.CUST_CERT_NO
+     , T1.OPEN_CHNL_NUM
+     , T1.OPEN_CHNL_NAME
+     , T1.OPEN_BTCH_NUM
+     , T1.OPEN_BTCH_NAME
+     , T1.OPEN_AREA_CODE
+     , T1.OPEN_CITY_CODE
+     , T1.OPEN_CITY_NAME
+     , T1.OPEN_PROVINCE_CODE
+     , T1.OPEN_PROVINCE_NAME
+     , T1.ST_DATE
+     , T1.END_DATE
+     , T1.REQ_DATE
+     , T1.REQ_NO
+     , T1.SPLIT_RULE_NAME
+     , T1.MODIFY_TIME
+  FROM DWSXDAY.DWS_TRAN_ACCT_OPEN_BTCH_PFD T1
+ WHERE T1.ST_DATE<=T1.END_DATE
+   AND T1.P_DT = '${p_end_dt}'
+;
+"

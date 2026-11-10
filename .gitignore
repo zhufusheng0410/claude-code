@@ -34,7 +34,7 @@ wheels/
 .trae/
 
 # Generated files (build artifacts)
-scripts/
+# scripts/ 已纳入版本库（2026-11-10）。一次性备份与生成临时目录见 scripts/.gitignore。
 docs/superpowers/
 *.log
 
