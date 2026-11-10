@@ -73,7 +73,7 @@ claude-code/
 ├── demo/templates/
 │   └── etl_ods_template.sh    # ODS ETL Shell 模板（${...} 占位符）
 ├── docs/                      # 规范文档（功能与规范、DWD-DWS 管线、主数据、依赖体检）
-├── scripts/                   # ★ 生成产物（gitignored），按 {系统}/{层}/ 组织
+├── scripts/                   # ★ 脚本输出（已纳入版本库；一次性备份见 scripts/.gitignore）
 │   ├── {O32|HSFA|HSZTA|WIND|...}/{ods|dws}/...
 │   ├── MASTER/dwd/            # 主数据：甲方脚本 + 手工血缘（不可重生成）
 │   ├── 建表语句/  DWD_依赖关系.xlsx  DWS_*.xlsx  数据字典_汇总.xlsx
@@ -396,7 +396,7 @@ python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 [--dry-run|--skip-
 - **gen vs jf**：gen = 生成器自产（`main.py`）；jf = 甲方交付脚本搬移 + 方言修复。
 - **MASTER 例外**：主数据脚本/DDL/血缘均为甲方交付 + 手工定稿，任何 gen 重生成都会覆盖。
 - **写盘统一走** `table_utils.write_file / write_file_safe`（UTF-8 + LF）。
-- 临时产物一律进 `tools/.dx-tmp/`（gitignored）；归档/退役脚本进 `tools/.archive/`（gitignored）；`scripts/` 也在 gitignore 中。
+- 临时产物一律进 `tools/.dx-tmp/`（gitignored）；归档/退役脚本进 `tools/.archive/`（gitignored）。`scripts/` 已纳入版本库，一次性备份与生成临时目录见 `scripts/.gitignore`（口径以 `AGENTS.md` 为准）。
 
 ---
 
