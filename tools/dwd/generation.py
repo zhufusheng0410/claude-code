@@ -346,7 +346,7 @@ def cmd_convert(args):
             print(f'    … 其余 {len(failed) - 10} 个')
     print('变换计数:', stats)
     ok, bad = 0, []
-    master_shs = sorted(MASTER.glob('*.sh'))
+    master_shs = sorted(_ns.MASTER.glob('*.sh'))
     for sh in master_shs:
         t = sh.stem
         p = JF / (t + '.txt')
@@ -376,7 +376,7 @@ def cmd_distribute(args):
     dist = {}
     for s in SYS:
         dist[s] = len(list(etl_dir(s).glob('*.sh')))
-    n_master = len(list(MASTER.glob('*.sh')))
+    n_master = len(list(_ns.MASTER.glob('*.sh')))
     if sum(dist.values()) + n_master == 0:
         sys.exit('scripts/ 下没有任何 DWD 脚本 ⇒ 先跑 dwd-pipeline.py convert --apply')
     assign = resolved_assign(load_owner(write=args.apply), args.force_sys)
@@ -954,10 +954,11 @@ def cmd_prevday(args):
         print(f'（{no_ref} 条边的上游在脚本里找不到引用，未计入）')
 
     if args.apply:
-        PREVDAY_OUT.parent.mkdir(parents=True, exist_ok=True)
-        PREVDAY_OUT.write_text(json.dumps(doc, ensure_ascii=False, indent=1),
+        prevday_out = _ns.PREVDAY_OUT
+        prevday_out.parent.mkdir(parents=True, exist_ok=True)
+        prevday_out.write_text(json.dumps(doc, ensure_ascii=False, indent=1),
                                encoding='utf-8')
-        print(f'\n写出 {PREVDAY_OUT}')
+        print(f'\n写出 {prevday_out}')
     else:
         print('\n(dry-run，未落盘)')
     return 0

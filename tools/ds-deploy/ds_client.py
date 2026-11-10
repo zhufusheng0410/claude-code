@@ -391,9 +391,16 @@ def project_code_of(ds, project: str | None = None) -> int:
     ★ 2026-11-10：`ds-run` / `ds-schedule` / `ds-sync-dwd-scripts` 等原先把
       code 硬编码为 ``185582190746560`` —— 换集群即静默 404/写错项目。
       项目名默认取 :func:`ds_config.ds_project`（``DS_PROJECT``，缺省 ``dw``）。
-    ★ 用 ``/projects/list?searchVal=`` 而非 ``/projects``：前者是既有脚本
-      （`ds-run.pcode_of`）在本集群验证过的入口。
+    ★ 用 ``/projects`` 而**不是** ``/projects/list``：后者按项目授权过滤，
+      普通账号（如 ``ds_script``）可能拿到空列表（见
+      ``tools/ds-deploy/README.md`` 的「注意（踩过的坑）」）。
+      ``/projects`` 是 ds-check-tables-exist / ds-add-dwd-table / ds-relayout
+      正在用的入口。
+    ★ 受限账号可直接设 ``DS_PROJECT_CODE``，跳过查询（不做可见性校验）。
     """
+    override = (os.environ.get("DS_PROJECT_CODE") or "").strip()
+    if override.isdigit():
+        return int(override)
     name = project or ds_project()
     base = getattr(ds, "base", "") or getattr(
         getattr(ds, "client", None), "base", "")
@@ -401,8 +408,7 @@ def project_code_of(ds, project: str | None = None) -> int:
     cached = _PROJECT_CODE_CACHE.get(key)
     if cached is not None:
         return cached
-    res = ds.call("GET", "/projects/list",
-                  params={"searchVal": name, "pageSize": 50, "pageNo": 1})
+    res = ds.call("GET", "/projects", params={"pageNo": 1, "pageSize": 100})
     code = project_code(res, name)
     _PROJECT_CODE_CACHE[key] = code
     return code

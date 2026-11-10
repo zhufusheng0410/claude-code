@@ -26,11 +26,8 @@ JF_DDL = DELIVERY / '05-脚本/01-建表语句/01-DWD建表脚本.sql'
 MAP_ROOT = DELIVERY / '04-源与目标映射MAPPING/01-DWD'
 
 SCRIPTS = REPO / 'scripts'
-MASTER = SCRIPTS / 'MASTER/dwd/02_etl'
 SYS = ('HSFA', 'HSZTA', 'O32')
 GROUPS = SYS + ('主数据',)
-OWNER_JSON = REPO / 'tools/.dx-tmp/dwd_owner_map.json'
-DEPCFG_OUT = REPO / 'tools/ds-deploy/dep-config-proscript'
 ALIAS = {'01-ZTA': 'HSZTA', '02-O32': 'O32', '03-HSFA': 'HSFA'}
 
 # ★ 2026-10-22（评审 HIGH-10）：系统简称的合法字符集。
@@ -88,4 +85,21 @@ TGT = re.compile(
     r'INSERT\s+(?:OVERWRITE|INTO)\s+(?:TABLE\s+)?(?:[A-Za-z0-9_]+\.)?([A-Za-z][A-Za-z0-9_]*)',
     re.I)
 
-PREVDAY_OUT = REPO / 'tools/_prev_day_deps.json'
+#: 由 REPO / SCRIPTS **派生**的路径：按需求值，不在 import 时固化。
+#: ★ 2026-11-10（评审复审）：这些名字若写成模块级常量，改 `ns.SCRIPTS` 后
+#:   它们仍指向真实仓库 ⇒ 沙箱（测试）里读写的其实是仓库文件。
+#:   改为 PEP 562 的模块级 `__getattr__`：`_ns.MASTER` 始终跟随当前值。
+_DERIVED_PATHS = {
+    'MASTER': lambda: SCRIPTS / 'MASTER/dwd/02_etl',
+    'OWNER_JSON': lambda: REPO / 'tools/.dx-tmp/dwd_owner_map.json',
+    'DEPCFG_OUT': lambda: REPO / 'tools/ds-deploy/dep-config-proscript',
+    'PREVDAY_OUT': lambda: REPO / 'tools/_prev_day_deps.json',
+}
+
+
+def __getattr__(name):
+    """按当前 REPO/SCRIPTS 现算派生路径（PEP 562）。"""
+    fn = _DERIVED_PATHS.get(name)
+    if fn is not None:
+        return fn()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

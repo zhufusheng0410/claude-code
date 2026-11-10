@@ -182,8 +182,9 @@ def ds_project() -> str:
     """DS 项目名（非敏感，默认 ``dw``）。
 
     ★ 2026-11-10：各脚本原先把项目 code 硬编码为 ``185582190746560``，
-      换集群/换项目即失效。改为按名查 code（``ds_client.resolve_project_code``），
-      项目名可用 ``DS_PROJECT``（旧名 ``DW_DS_PROJECT``）覆盖。
+      换集群/换项目即失效。改为按名查 code（``ds_client.project_code_of``），
+      项目名可用 ``DS_PROJECT``（旧名 ``DW_DS_PROJECT``）覆盖；
+      受限账号可直接给 ``DS_PROJECT_CODE`` 跳过查询。
     """
     return prefer_env("DS_PROJECT", "DW_DS_PROJECT", "dw")
 

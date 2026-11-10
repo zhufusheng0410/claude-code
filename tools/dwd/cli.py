@@ -57,6 +57,12 @@ def cmd_verify(args):
         try:
             import ds_client
             ds = ds_client.get_client()
+            # ★ 2026-11-10（评审 H3）：原先硬编码 `/projects/185582190746560`，
+            #   换集群/换项目即失效。项目名取 DS_PROJECT（缺省 dw），
+            #   查询与缓存统一在 ds_client.project_code_of()。
+            #   ★ 必须放在本 try 内：项目查不到会抛 DSClientError（RuntimeError），
+            #     要落到下面的「DS 连接失败」分支，而不是裸 traceback。
+            P = '/projects/%s' % ds_client.project_code_of(ds)
         except (ImportError, OSError, ValueError, RuntimeError) as e:
             # ImportError：ds_client 缺失；OSError/URLError：连不上；
             # ValueError：会话 JSON 坏；RuntimeError：SecretMissingError / DSClientError。
@@ -64,11 +70,6 @@ def cmd_verify(args):
             print(f'  ⚠ DS 连接失败（{type(e).__name__}）: {e}')
             report['ds'] = {'error': f'{type(e).__name__}: {e}'}
             return 1
-        # ★ 2026-11-10（评审 H3）：原先硬编码 `/projects/185582190746560`，
-        #   换集群/换项目即失效。项目名取 DS_PROJECT（缺省 dw），
-        #   查询与缓存统一在 ds_client.project_code_of()；找不到抛
-        #   DSClientError 并说明原因，不再是魔数静默 404。
-        P = '/projects/%s' % ds_client.project_code_of(ds)
         lst = ds_client.lst_of(
             ds.call('GET', P + '/workflow-definition?pageNo=1&pageSize=500'))
         # ★ 2026-10-29：范围改为 GROUPS（含主数据）。原为 SYS（HSFA/HSZTA/O32），
@@ -176,9 +177,9 @@ def main():
         if name in ('owner', 'convert', 'distribute', 'ddl', 'lineage', 'all'):
             p.add_argument('--force-sys', default='', help='归属歧义时强制归到该系统')
         if name in ('depcfg', 'all'):
-            p.add_argument('--out', default=str(DEPCFG_OUT), help='依赖配置输出目录')
+            p.add_argument('--out', default=str(_ns.DEPCFG_OUT), help='依赖配置输出目录')
         if name == 'prevday':
-            p.add_argument('--out', default=str(PREVDAY_OUT),
+            p.add_argument('--out', default=str(_ns.PREVDAY_OUT),
                            help='上一日依赖清单输出路径')
         if name in ('verify', 'all'):
             p.add_argument('--ds', action='store_true', help='连 DS 审计脚本来源')

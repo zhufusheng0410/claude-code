@@ -306,6 +306,21 @@ class TestManifestGroupTraversal(unittest.TestCase):
         self._manifest(['oops'])
         self.assertTrue(WP.dws_manifest_mismatches())
 
+    def test_non_string_group_reported(self):
+        """★ 复审：group 是 int 时 safe_sysname 会抛 TypeError，必须被拦下。"""
+        self._manifest([{'name': 'DWS_X.sh', 'group': 123}])
+        self.assertTrue(WP.dws_manifest_mismatches())
+
+    def test_non_string_name_reported(self):
+        """★ 复审：name 是 int 时 .endswith 会抛 AttributeError。"""
+        self._manifest([{'name': 123, 'group': 'HSFA'}])
+        self.assertTrue(WP.dws_manifest_mismatches())
+
+    def test_null_files_does_not_crash(self):
+        """★ 复审：`{"files": null}` 时取值不得抛 NoneType is not iterable。"""
+        self._manifest(None)
+        self.assertEqual(WP.dws_source_map(allow_stale=True), {})
+
     def test_name_with_separator_reported(self):
         self._manifest([{'name': '../../x.sh', 'group': 'HSFA'}])
         self.assertTrue(WP.dws_manifest_mismatches())

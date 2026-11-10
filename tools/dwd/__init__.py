@@ -11,7 +11,8 @@
 #:   独立名字；`ns.SCRIPTS` 改成临时目录后，拷贝仍指向真实仓库 ——
 #:   实测 `parsing._script_index()` 扫描的是仓库而非临时目录。
 #:   现在统一走 `_ns.REPO` / `_ns.SCRIPTS`（调用时取值），裸用即 NameError。
-MUTABLE_PATHS = ("REPO", "SCRIPTS")
+MUTABLE_PATHS = ("REPO", "SCRIPTS", "MASTER", "OWNER_JSON",
+                 "DEPCFG_OUT", "PREVDAY_OUT")
 
 
 def export_ns(mod, namespace: dict) -> None:

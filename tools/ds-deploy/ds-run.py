@@ -238,7 +238,9 @@ def _trigger_wf(ds, pcode, code, failure_strategy, start_node=None,
 def cmd_manual(args):
     c = pg()
     cur = c.cursor()
-    pcode = project_code_of(DSClient())
+    # ★ 2026-11-10：pcode 只在「真正触发」时用到。--list/--status/干跑走纯 PG，
+    #   不能因为 DS 不可用或未配 DS_PASSWORD 就失败（原先在函数开头就解析）。
+    pcode = None
 
     if args.list:
         cur.execute("select name, code from t_ds_workflow_definition order by name")
@@ -284,6 +286,7 @@ def cmd_manual(args):
         cur.close(); c.close(); return 0
 
     ds = DSClient()
+    pcode = project_code_of(ds)
     slots = args.max_parallel - run
     batch = targets[:slots]
     if len(batch) < len(targets):

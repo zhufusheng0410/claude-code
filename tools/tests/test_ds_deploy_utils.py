@@ -673,7 +673,14 @@ class TestResolveProjectCode(unittest.TestCase):
         self.assertEqual(ds_client.project_code_of(ds, "dw"), 42)
         self.assertEqual(ds_client.project_code_of(ds, "dw"), 42)
         self.assertEqual(len(ds.calls), 1, "第二次应命中缓存")
-        self.assertEqual(ds.calls[0][1], "/projects/list")
+        self.assertEqual(ds.calls[0][1], "/projects")
+
+    def test_explicit_code_override_skips_query(self):
+        """受限账号（/projects 也不可见）可直接给 DS_PROJECT_CODE。"""
+        ds = self._Fake([])
+        with unittest.mock.patch.dict(os.environ, {"DS_PROJECT_CODE": "999"}):
+            self.assertEqual(ds_client.project_code_of(ds), 999)
+        self.assertEqual(ds.calls, [])
 
     def test_missing_raises_readable_error(self):
         ds = self._Fake([{"name": "other", "code": 1}])

@@ -249,7 +249,12 @@ def _safe_group(group):
     ★ 2026-11-10（评审 H2）：`SCRIPTS / group / …` 直接用清单值，等于把
       `..`、`/` 之类交给调用方。`safe_sysname` 已实现这套拒绝规则，
       这里只做「非法 → None」的适配，避免各处重复 try/except。
+    ★ 2026-11-10（评审复审）：**先验类型**。`safe_sysname` 内部走 re.match，
+      传 int 会抛 TypeError 而不是 ValueError —— 畸形的外部 JSON 会直接崩，
+      绕过 StaleDwsManifest 的「可报告」路径。
     """
+    if not isinstance(group, str):
+        return None
     try:
         return safe_sysname(group or "")
     except ValueError:
@@ -275,7 +280,13 @@ def dws_manifest_mismatches():
         if not isinstance(entry, dict):
             bad.append(f"清单条目不是对象（{type(entry).__name__}）")
             continue
-        name = entry.get("name") or "?"
+        name = entry.get("name")
+        if not isinstance(name, str):
+            # ★ 2026-11-10（评审复审）：name 非字符串时 `.endswith` 会抛
+            #   AttributeError，畸形清单直接崩而非被当作不一致上报。
+            bad.append(f"name 不是字符串（{type(name).__name__}）")
+            continue
+        name = name or "?"
         group = entry.get("group")
         # ★ 放在 sha 校验**之前**：没有校验值的条目同样会被拼进路径，
         #   只查「有 sha 的」等于给未登记项留后门。
@@ -345,7 +356,7 @@ def dws_source_map(allow_stale=False):
         if not isinstance(data, dict):
             data = {}
         mapping = {}
-        for f in data.get("files", []):
+        for f in data.get("files") or []:
             if not isinstance(f, dict):
                 continue
             name = f.get("name", "")
@@ -518,7 +529,7 @@ def dws_table_sys_map(allow_stale=False):
         data = json.loads(manifest.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             data = {}
-        for f in data.get("files", []):
+        for f in data.get("files") or []:
             if not isinstance(f, dict):
                 continue
             name = f.get("name", "")

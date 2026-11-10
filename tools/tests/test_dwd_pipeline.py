@@ -226,6 +226,28 @@ class TestPathPatchPropagation(unittest.TestCase):
         self.assertNotIn('SCRIPTS', parsing._script_index.__globals__)
         self.assertNotIn('REPO', parsing._script_index.__globals__)
 
+    def test_derived_paths_follow_patch(self):
+        """★ 复审：MASTER/OWNER_JSON/DEPCFG_OUT/PREVDAY_OUT 必须现算。
+
+        这些名字若在 import 时算成常量，改 SCRIPTS/REPO 后仍指向真实仓库。
+        """
+        from tools.dwd import ns
+        for name in ('MASTER', 'OWNER_JSON', 'DEPCFG_OUT', 'PREVDAY_OUT'):
+            with self.subTest(name=name):
+                self.assertNotIn(name, vars(ns), '派生路径不得固化在模块字典里')
+        saved = (DP.REPO, DP.SCRIPTS)
+        self.addCleanup(lambda: (setattr(DP, 'REPO', saved[0]),
+                                 setattr(DP, 'SCRIPTS', saved[1])))
+        DP.REPO = Path('/tmp/dw-probe-repo')
+        DP.SCRIPTS = Path('/tmp/dw-probe-scripts')
+        self.assertEqual(ns.MASTER, Path('/tmp/dw-probe-scripts/MASTER/dwd/02_etl'))
+        self.assertEqual(ns.OWNER_JSON,
+                         Path('/tmp/dw-probe-repo/tools/.dx-tmp/dwd_owner_map.json'))
+        self.assertEqual(ns.DEPCFG_OUT,
+                         Path('/tmp/dw-probe-repo/tools/ds-deploy/dep-config-proscript'))
+        self.assertEqual(ns.PREVDAY_OUT,
+                         Path('/tmp/dw-probe-repo/tools/_prev_day_deps.json'))
+
 
 if __name__ == '__main__':
     unittest.main()

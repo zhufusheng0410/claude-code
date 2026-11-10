@@ -30,15 +30,16 @@ class TestScanMasterUpstream(unittest.TestCase):
         for s in DR.SYS:
             (scripts / s / 'dws' / '02_etl').mkdir(parents=True)
         self.master.mkdir(parents=True)
-        self._saved = (DR.REPO, DR.SCRIPTS, DR.P.SCRIPTS, DR.P.MASTER)
+        self._saved = (DR.REPO, DR.SCRIPTS, DR.P.SCRIPTS)
         DR.REPO = root
         DR.SCRIPTS = scripts
+        # ★ 2026-11-10：主数据目录由 P.etl_dir('主数据') 从 SCRIPTS 现算，
+        #   不再需要（也不能）单独打补丁 P.MASTER —— 它是派生路径。
         DR.P.SCRIPTS = scripts
-        DR.P.MASTER = self.master
         self.addCleanup(self._restore)
 
     def _restore(self):
-        DR.REPO, DR.SCRIPTS, DR.P.SCRIPTS, DR.P.MASTER = self._saved
+        DR.REPO, DR.SCRIPTS, DR.P.SCRIPTS = self._saved
 
     def _write(self, path, body):
         path.write_text(body, encoding='utf-8')

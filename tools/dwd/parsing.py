@@ -87,7 +87,7 @@ def build_owner(write=True):
             owner[t].add(sysname)
         print(f'{d.name:8s} -> {sysname:6s} 表数={len(names)}')
     owner = {k: sorted(v) for k, v in owner.items()}
-    master_stems = {p.stem for p in MASTER.glob('*.sh')}
+    master_stems = {p.stem for p in _ns.MASTER.glob('*.sh')}
     stems = [p.stem for p in sorted(JF.glob('*.txt'))
              if p.stem not in master_stems and not p.stem.endswith('_INIT')]
     assign, amb, none = {}, {}, []
@@ -107,15 +107,16 @@ def build_owner(write=True):
     for s in none:
         print(f'  NONE {s}')
     if write:
-        OWNER_JSON.parent.mkdir(parents=True, exist_ok=True)
-        OWNER_JSON.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
-        print('写出', OWNER_JSON)
+        owner_json = _ns.OWNER_JSON
+        owner_json.parent.mkdir(parents=True, exist_ok=True)
+        owner_json.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
+        print('写出', owner_json)
     return data
 
 
 def load_owner(write=False):
-    if OWNER_JSON.exists():
-        return json.loads(OWNER_JSON.read_text(encoding='utf-8'))
+    if _ns.OWNER_JSON.exists():
+        return json.loads(_ns.OWNER_JSON.read_text(encoding='utf-8'))
     print('归属缓存不存在，现场扫描 MAPPING …')
     return build_owner(write=write)
 
