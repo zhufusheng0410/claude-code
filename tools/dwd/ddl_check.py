@@ -18,19 +18,19 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 
 from tools.core.loader import load as _load_file
 
+from tools.dwd import export_ns
 from tools.dwd import ns as _ns
 from tools.dwd import parsing as _parsing
-globals().update({k: v for k, v in vars(_ns).items() if not k.startswith("__")})
-globals().update({k: v for k, v in vars(_parsing).items() if not k.startswith("__")})
+export_ns(_ns, globals())
+export_ns(_parsing, globals())
 
 # --------------------------------------------------------------------------- #
 # DDL
 # --------------------------------------------------------------------------- #
 RE_CREATE = re.compile(
     r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)', re.I)
-TGT = re.compile(
-    r'INSERT\s+(?:OVERWRITE|INTO)\s+(?:TABLE\s+)?(?:[A-Za-z0-9_]+\.)?([A-Za-z][A-Za-z0-9_]*)',
-    re.I)
+# ★ 2026-11-10（评审 M2）：`TGT` 与 `ns.TGT` 逐字相同，已由 export_ns 引入。
+#   本处不再重复定义 —— 两份副本改一处忘另一处就会让解析口径漂移。
 NEED_DDL = [
     'DWD_AST_BAL_INFO_PTD', 'DWD_AST_BAL_INFO_PTD_TMP',
     'DWD_CMM_CALENDAR_INFO_PFD',
@@ -190,9 +190,9 @@ def cmd_ddl(args):
         print('(dry-run，未落盘)')
         return 0
     stamp = time.strftime('%Y%m%d-%H%M%S')
-    bak = REPO / 'tools/.dx-tmp' / f'backup-dwd-ddl-{stamp}'
+    bak = _ns.REPO / 'tools/.dx-tmp' / f'backup-dwd-ddl-{stamp}'
     for s in GROUPS:
-        d = SCRIPTS / ('MASTER/dwd' if s == '主数据' else f'{s}/dwd')
+        d = _ns.SCRIPTS / ('MASTER/dwd' if s == '主数据' else f'{s}/dwd')
         if (d / 'ddl').exists():
             shutil.copytree(d / 'ddl', bak / s / 'ddl', dirs_exist_ok=True)
         if (d / '01_ddl.sql').exists():
@@ -219,13 +219,13 @@ def cmd_ddl(args):
             '\n\n'.join(parts) + '\n', encoding='utf-8', newline='\n')
         print(f'  {s}: 01_ddl.sql <- {len(parts)} 张表')
 
-    top = SCRIPTS / '建表语句'
+    top = _ns.SCRIPTS / '建表语句'
     top.mkdir(parents=True, exist_ok=True)
     for s in GROUPS:
         main_sql = ddl_main(s)
         if main_sql.is_file():
             shutil.copy2(main_sql, top / f'DWD_{s}_建表语句.sql')
-    print(f'  DDL 已落地 {SCRIPTS}/{{系统}}/dwd/ddl、01_ddl.sql 和 {top}')
+    print(f'  DDL 已落地 {_ns.SCRIPTS}/{{系统}}/dwd/ddl、01_ddl.sql 和 {top}')
     print('备份:', bak)
 
     # ★ A8（2026-11-09 评审）：落盘后与甲方逐表自检（结构 + 语句边界）。

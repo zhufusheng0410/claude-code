@@ -3,14 +3,18 @@
 import argparse
 import sys
 
+from tools.dwd import export_ns
 from tools.dwd import ns as _ns
 from tools.dwd import parsing as _parsing
 from tools.dwd import generation as _generation
 from tools.dwd import ddl_check as _ddl
-globals().update({k: v for k, v in vars(_ns).items() if not k.startswith("__")})
-globals().update({k: v for k, v in vars(_parsing).items() if not k.startswith("__")})
-globals().update({k: v for k, v in vars(_generation).items() if not k.startswith("__")})
-globals().update({k: v for k, v in vars(_ddl).items() if not k.startswith("__")})
+export_ns(_ns, globals())
+export_ns(_parsing, globals())
+export_ns(_generation, globals())
+export_ns(_ddl, globals())
+
+#: DS 项目名（`verify --ds` 查询项目 code 用）。环境变量可覆盖。
+DEFAULT_PROJECT = 'dw'
 
 # --------------------------------------------------------------------------- #
 # 校验
@@ -32,7 +36,7 @@ def cmd_verify(args):
     print('== DDL 完整性（scripts/{系统}/dwd）')
     ddl_bad = {}
     for s in GROUPS:
-        d = SCRIPTS / ('MASTER/dwd' if s == '主数据' else f'{s}/dwd')
+        d = _ns.SCRIPTS / ('MASTER/dwd' if s == '主数据' else f'{s}/dwd')
         per = {p.name: p for p in (d / 'ddl').glob('*.sql')} if (d / 'ddl').is_dir() else {}
         f1 = d / '01_ddl.sql'
         diff = []
@@ -52,9 +56,10 @@ def cmd_verify(args):
 
     if args.ds:
         print('== DS 脚本来源审计')
-        sys.path.insert(0, str(REPO / 'tools/ds-deploy'))
+        sys.path.insert(0, str(_ns.REPO / 'tools/ds-deploy'))
         try:
             import ds_client
+            from ds_config import prefer_env
             ds = ds_client.get_client()
         except (ImportError, OSError, ValueError, RuntimeError) as e:
             # ImportError：ds_client 缺失；OSError/URLError：连不上；
@@ -63,7 +68,13 @@ def cmd_verify(args):
             print(f'  ⚠ DS 连接失败（{type(e).__name__}）: {e}')
             report['ds'] = {'error': f'{type(e).__name__}: {e}'}
             return 1
-        P = '/projects/185582190746560'
+        # ★ 2026-11-10（评审 H3）：原先硬编码 `/projects/185582190746560`，
+        #   换集群/换项目即失效。改为按项目名查 code（ds_client.project_code
+        #   找不到会抛 DSClientError 并说明原因，不再是魔数静默 404）。
+        project = prefer_env('DS_PROJECT', 'DW_DS_PROJECT', DEFAULT_PROJECT)
+        projects = ds.call('GET', '/projects',
+                           params={'pageNo': 1, 'pageSize': 100})
+        P = '/projects/%s' % ds_client.project_code(projects, project)
         lst = ds_client.lst_of(
             ds.call('GET', P + '/workflow-definition?pageNo=1&pageSize=500'))
         # ★ 2026-10-29：范围改为 GROUPS（含主数据）。原为 SYS（HSFA/HSZTA/O32），
@@ -116,7 +127,7 @@ def cmd_verify(args):
     #   dry-run 也会在仓库里落文件。
     #   ⇒ dry-run 只打印摘要；--apply 时才写报告文件。
     if getattr(args, 'apply', False):
-        out = REPO / 'tools/.dx-tmp/dwd-pipeline-verify.json'
+        out = _ns.REPO / 'tools/.dx-tmp/dwd-pipeline-verify.json'
         out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding='utf-8')
         print('报告:', out)
     else:

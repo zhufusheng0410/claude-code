@@ -18,10 +18,11 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 
 from tools.core.loader import load as _load_file
 
+from tools.dwd import export_ns
 from tools.dwd import ns as _ns
 from tools.dwd import parsing as _parsing
-globals().update({k: v for k, v in vars(_ns).items() if not k.startswith("__")})
-globals().update({k: v for k, v in vars(_parsing).items() if not k.startswith("__")})
+export_ns(_ns, globals())
+export_ns(_parsing, globals())
 
 # --------------------------------------------------------------------------- #
 # 甲方 txt → sh 转换器（J-28 口径）
@@ -304,9 +305,9 @@ def cmd_convert(args):
     print(f'清理旧 INIT 脚本 {len(init_old)} 个')
     if args.apply:
         if init_old:
-            bak = REPO / 'tools/.dx-tmp' / f'backup-dwd-init-{time.strftime("%Y%m%d-%H%M%S")}'
+            bak = _ns.REPO / 'tools/.dx-tmp' / f'backup-dwd-init-{time.strftime("%Y%m%d-%H%M%S")}'
             for p in init_old:
-                rel = p.relative_to(REPO)
+                rel = p.relative_to(_ns.REPO)
                 dst = bak / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(p, dst)
@@ -381,13 +382,13 @@ def cmd_distribute(args):
     assign = resolved_assign(load_owner(write=args.apply), args.force_sys)
     ddl = {s: len(list(ddl_dir(s).glob('*.sql'))) for s in GROUPS}
     manifest = {'dist': dist, 'master': n_master, 'ddl': ddl, 'assign': assign,
-                'scripts_root': str(SCRIPTS)}
+                'scripts_root': str(_ns.SCRIPTS)}
     if args.apply:
-        (SCRIPTS / '_DWD搬移清单.json').write_text(
+        (_ns.SCRIPTS / '_DWD搬移清单.json').write_text(
             json.dumps(manifest, ensure_ascii=False, indent=1), encoding='utf-8')
     print(f'分布: {dist} | 主数据 {n_master}')
     print(f'DDL 表数: {ddl}')
-    print(f'清单: {SCRIPTS}/_DWD搬移清单.json')
+    print(f'清单: {_ns.SCRIPTS}/_DWD搬移清单.json')
     if not args.apply:
         print('(dry-run，未落盘)')
     return 0
@@ -414,7 +415,7 @@ def _shell_check(folder):
 
 def _hive_result():
     """读 Hive 语法校验结果；结构不完整（陈旧/残缺）时返回 None，避免写出误导性的 0/0。"""
-    p = REPO / 'tools/.dx-tmp/dwd-syntax-check.json'
+    p = _ns.REPO / 'tools/.dx-tmp/dwd-syntax-check.json'
     if not p.exists():
         return None
     try:
@@ -510,7 +511,7 @@ def build_cover(wb, title, subtitle, notes, links=None, sheets=None):
         c.fill = PatternFill('solid', fgColor='DDEBF7')
     r += 1
     for name, fname, desc in (links if links is not None else COVER_LINKS):
-        if not (SCRIPTS / fname).is_file():
+        if not (_ns.SCRIPTS / fname).is_file():
             continue
         _link_cell(ws.cell(r, 1), fname, fname)
         ws.cell(r, 2, fname.rsplit('.', 1)[-1].upper())
@@ -844,7 +845,7 @@ def cmd_lineage(args):
             '本工作簿只做 DWD 层分析；DWD 不依赖 DWS 层。',
         ])
 
-    out = SCRIPTS / 'DWD_依赖关系.xlsx'
+    out = _ns.SCRIPTS / 'DWD_依赖关系.xlsx'
     if args.apply:
         # ★ 目标 xlsx 常被 Excel 打开占用（PermissionError: Errno 13）。
         #   跑一遍 lineage 要几分钟，不能因为文件被占就整轮白费 ⇒ 降级写到 .new 文件，
@@ -907,7 +908,7 @@ def cmd_prevday(args):
                 if need is None:
                     no_ref += 1
                     continue
-                rel = str(p.relative_to(REPO)).replace('\\', '/')
+                rel = str(p.relative_to(_ns.REPO)).replace('\\', '/')
                 if need is False:
                     if src == p.stem.upper():
                         self_edges.append((p.stem, src))
@@ -968,8 +969,8 @@ def cmd_prevday(args):
 
 
 def cmd_depcfg(args):
-    L = _load_file(str(REPO / 'tools/ds-deploy/ds-build-dependent-from-lineage.py'), 'LINEAGE_BUILDER')
-    xlsx = SCRIPTS / 'DWD_依赖关系.xlsx'
+    L = _load_file(str(_ns.REPO / 'tools/ds-deploy/ds-build-dependent-from-lineage.py'), 'LINEAGE_BUILDER')
+    xlsx = _ns.SCRIPTS / 'DWD_依赖关系.xlsx'
     if not xlsx.exists():
         sys.exit(f'缺 {xlsx} ⇒ 先跑 dwd-pipeline.py lineage --apply')
     # ★ 2026-10-23：改用 openpyxl 读（本文件本来就硬依赖 openpyxl），

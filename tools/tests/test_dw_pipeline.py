@@ -249,7 +249,7 @@ class TestDwsManifestSha(unittest.TestCase):
             old_s, old_src = WP.SCRIPTS, WP.SRC_DWS_EXEC
             WP.SCRIPTS, WP.SRC_DWS_EXEC = scripts, jf
             try:
-                WP.stage_dws_from_jf(True, argparse.Namespace(
+                WP.stage_dws_from_jf(argparse.Namespace(
                     allow_stale_dws_manifest=False))
                 self.assertEqual(dst.read_bytes(), b'repo-fixed')
             finally:
@@ -263,6 +263,56 @@ class TestDwsManifestSha(unittest.TestCase):
         for name, (_fn, opts, _text) in WP.SUBCOMMANDS.items():
             self.assertNotIn('raw', opts, name)
 
+
+
+class TestManifestGroupTraversal(unittest.TestCase):
+    """★ 2026-11-10（评审 H2）：清单 ``group`` 是外部数据，必须当路径校验。
+
+    原先 `SCRIPTS / group / …` 直接拼清单值：一条 `group: "../../x"` 就能
+    让 `build_dws_ddl_from_jf` 把 `*.sql` 写到 `scripts/` 之外。
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self._saved = (WP.SCRIPTS, WP._STALE_MANIFEST_WARNED)
+        WP.SCRIPTS = self.root
+        WP._STALE_MANIFEST_WARNED = False
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        WP.SCRIPTS, WP._STALE_MANIFEST_WARNED = self._saved
+
+    def _manifest(self, files):
+        import json
+        (self.root / '_DWS搬移清单.json').write_text(
+            json.dumps({'files': files}, ensure_ascii=False), encoding='utf-8')
+
+    def test_group_with_dotdot_raises(self):
+        self._manifest([{'name': 'DWS_X.sh', 'group': '../../evil'}])
+        with self.assertRaises(WP.StaleDwsManifest):
+            WP.dws_source_map()
+
+    def test_group_with_slash_never_maps_even_allow_stale(self):
+        self._manifest([{'name': 'DWS_X.sh', 'group': 'HSFA/../../evil'}])
+        self.assertEqual(WP.dws_source_map(allow_stale=True), {})
+
+    def test_legal_group_still_maps(self):
+        self._manifest([{'name': 'DWS_X.sh', 'group': 'HSFA'}])
+        self.assertEqual(WP.dws_source_map()['DWS_X'], 'HSFA')
+
+    def test_non_object_entry_reported(self):
+        self._manifest(['oops'])
+        self.assertTrue(WP.dws_manifest_mismatches())
+
+    def test_name_with_separator_reported(self):
+        self._manifest([{'name': '../../x.sh', 'group': 'HSFA'}])
+        self.assertTrue(WP.dws_manifest_mismatches())
+
+    def test_dwd_etl_dir_rejects_traversal(self):
+        with self.assertRaises(ValueError):
+            WP.dwd_etl_dir('../evil')
 
 
 class TestDwdDdlCmd(unittest.TestCase):

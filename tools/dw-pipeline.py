@@ -36,6 +36,7 @@ REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 from tools.core.loader import load as _load_file  # noqa: E402
+from tools.dwd.ns import safe_sysname  # noqa: E402
 
 
 def _load_ddl_verify():
@@ -143,13 +144,19 @@ def _dry(args):
 
 
 def dwd_etl_dir(sysname):
-    """DWD 脚本目录（主数据归 scripts/MASTER，不是 scripts/主数据）。"""
+    """DWD 脚本目录（主数据归 scripts/MASTER，不是 scripts/主数据）。
+
+    ★ 2026-11-10（评审 H2）：补 `safe_sysname` 校验。本函数是 `dwd.ns.etl_dir`
+      的同规则副本，但此前漏了路径校验 —— 与 ns 那份不一致就等于没有防线。
+    """
+    safe_sysname(sysname)
     return (SCRIPTS / "MASTER/dwd/02_etl") if sysname == "主数据" \
         else (SCRIPTS / sysname / "dwd/02_etl")
 
 
 def ddl_main(sysname):
     """DWD 合并 DDL 路径（主数据归 scripts/MASTER/dwd/01_ddl.sql）。"""
+    safe_sysname(sysname)
     return (SCRIPTS / "MASTER/dwd/01_ddl.sql") if sysname == "主数据" \
         else (SCRIPTS / sysname / "dwd/01_ddl.sql")
 
@@ -236,6 +243,19 @@ class StaleDwsManifest(RuntimeError):
             f"_DWS搬移清单.json 与现盘不一致 {len(self.mismatches)} 条")
 
 
+def _safe_group(group):
+    """清单里的 ``group`` 是外部数据，拼进路径前必须校验。
+
+    ★ 2026-11-10（评审 H2）：`SCRIPTS / group / …` 直接用清单值，等于把
+      `..`、`/` 之类交给调用方。`safe_sysname` 已实现这套拒绝规则，
+      这里只做「非法 → None」的适配，避免各处重复 try/except。
+    """
+    try:
+        return safe_sysname(group or "")
+    except ValueError:
+        return None
+
+
 def dws_manifest_mismatches():
     """核对清单里已登记的 sha256/bytes。没有校验字段的条目不查。
 
@@ -248,16 +268,29 @@ def dws_manifest_mismatches():
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         return [f"清单不是合法 JSON（{type(exc).__name__}: {exc}）"]
+    if not isinstance(data, dict):
+        return [f"清单顶层不是 JSON 对象（{type(data).__name__}）"]
     bad = []
     for entry in data.get("files") or []:
-        if "sha256" not in entry and "bytes" not in entry:
+        if not isinstance(entry, dict):
+            bad.append(f"清单条目不是对象（{type(entry).__name__}）")
             continue
         name = entry.get("name") or "?"
         group = entry.get("group")
+        # ★ 放在 sha 校验**之前**：没有校验值的条目同样会被拼进路径，
+        #   只查「有 sha 的」等于给未登记项留后门。
+        if name.endswith(".sh") and os.path.basename(name) != name:
+            bad.append(f"{name}: 文件名含路径分隔，拒绝拼路径")
+            continue
+        if name.endswith(".sh") and group and _safe_group(group) is None:
+            bad.append(f"{name}: group 非法（{group!r}），拒绝拼路径")
+            continue
+        if "sha256" not in entry and "bytes" not in entry:
+            continue
         if not name.endswith(".sh") or not group:
             bad.append(f"{name}: 有校验值但缺 group/文件名，无法核对")
             continue
-        path = SCRIPTS / group / "dws" / "02_etl" / name
+        path = SCRIPTS / _safe_group(group) / "dws" / "02_etl" / name
         if not path.is_file():
             bad.append(f"{name}: 清单有校验值但现盘无此脚本")
             continue
@@ -309,23 +342,29 @@ def dws_source_map(allow_stale=False):
     manifest = SCRIPTS / "_DWS搬移清单.json"
     if manifest.is_file():
         data = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            data = {}
         mapping = {}
         for f in data.get("files", []):
+            if not isinstance(f, dict):
+                continue
             name = f.get("name", "")
-            if name.endswith(".sh"):
-                mapping[name[:-3]] = f.get("group")
+            group = _safe_group(f.get("group"))
+            if name.endswith(".sh") and group:
+                mapping[name[:-3]] = group
         if mapping:
             return mapping
     return {p.stem: s for s in SYS for p in (SCRIPTS / s / "dws/02_etl").glob("*.sh")}
 
 
-def stage_dws_from_jf(apply: bool, args=None):
+def stage_dws_from_jf(args=None):
     """把甲方 02-DWS执行脚本/*.txt 对账到 scripts/{系统}/dws/02_etl。
 
-    只比对、不覆盖。仓库版含 Hive 4.2 方言修复，甲方原文跑不了；
-    ``apply`` 对这一步也不落盘。带 ``DW-DEVIATION`` 的脚本单独列出。
+    只比对、不覆盖。仓库版含 Hive 4.2 方言修复，甲方原文跑不了。
+    带 ``DW-DEVIATION`` 的脚本单独列出。
+    ★ 2026-11-10（评审 L1）：去掉 `apply` 形参 —— 本函数从不落盘，
+      留着它会让调用方误以为 `--apply` 控制这一步。
     """
-    del apply  # 保留参数以兼容调用方；本函数不再写脚本
     if not SRC_DWS_EXEC.is_dir():
         print(f"  {SRC_DWS_EXEC} 不存在，跳过")
         return 0, 0
@@ -409,7 +448,7 @@ def cmd_scripts(args):
         print("== DWS scripts ==")
         if args.source == "jf":
             try:
-                total, _diff = stage_dws_from_jf(args.apply, args)
+                total, _diff = stage_dws_from_jf(args)
             except StaleDwsManifest as exc:
                 return _fail_stale(exc)
             n_repo = sum(len(list((SCRIPTS / s / "dws/02_etl").glob("*.sh"))) for s in SYS)
@@ -477,10 +516,15 @@ def dws_table_sys_map(allow_stale=False):
     manifest = SCRIPTS / "_DWS搬移清单.json"
     if manifest.is_file():
         data = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            data = {}
         for f in data.get("files", []):
+            if not isinstance(f, dict):
+                continue
             name = f.get("name", "")
-            if name.endswith(".sh") and f.get("group"):
-                m.setdefault(name[:-3].upper(), f["group"])
+            group = _safe_group(f.get("group"))
+            if name.endswith(".sh") and group:
+                m.setdefault(name[:-3].upper(), group)
     return m
 
 

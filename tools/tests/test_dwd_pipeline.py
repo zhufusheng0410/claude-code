@@ -199,5 +199,33 @@ class TestDwdDdlSelfCheck(unittest.TestCase):
         self.assertIn('仅本地有列: C', text)
 
 
+class TestPathPatchPropagation(unittest.TestCase):
+    """★ 2026-11-10（评审 H1）：改 facade 的 REPO/SCRIPTS 必须对**所有**子模块生效。
+
+    原先 parsing / generation / ddl_check 各持一份 `globals().update(vars(ns))`
+    **拷贝**出来的 `SCRIPTS`；把 facade 的指向临目录后，它们仍读写真实仓库
+    （实测 `parsing._script_index()` 扫的是仓库）。现在一律走 `_ns.SCRIPTS`。
+    """
+
+    SUBMODULES = ('parsing', 'generation', 'ddl_check', 'cli')
+
+    def test_patch_reaches_every_submodule(self):
+        from tools.dwd import cli, ddl_check, generation, parsing
+        mods = {'parsing': parsing, 'generation': generation,
+                'ddl_check': ddl_check, 'cli': cli}
+        sentinel = Path(tempfile.gettempdir()) / 'dw-h1-probe-scripts'
+        saved = DP.SCRIPTS
+        self.addCleanup(setattr, DP, 'SCRIPTS', saved)
+        DP.SCRIPTS = sentinel
+        for name in self.SUBMODULES:
+            with self.subTest(module=name):
+                self.assertNotIn('SCRIPTS', vars(mods[name]),
+                                 '子模块不得自带 SCRIPTS 快照')
+                self.assertEqual(mods[name].etl_dir('HSFA'),
+                                 sentinel / 'HSFA' / 'dwd' / '02_etl')
+        self.assertNotIn('SCRIPTS', parsing._script_index.__globals__)
+        self.assertNotIn('REPO', parsing._script_index.__globals__)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -609,19 +609,22 @@ class TestBeelinePasswordNotInArgv(unittest.TestCase):
              unittest.mock.patch.object(mod.subprocess, "run", side_effect=fake_run):
             rc, _out, _err = mod.beeline("SELECT 1", force=True)
         self.assertEqual(rc, 0)
-        self.assertEqual(len(calls), 3)
-        for cmd, _inp in calls:
+        # ★ 2026-11-10（评审 M5）：首次调用会先清一次容器内遗留口令文件
+        #   （`find /tmp -name 'hivepw_*' -mmin +60 -delete`），故为 4 次。
+        self.assertEqual(len(calls), 4)
+        self.assertIn("find", " ".join(calls[0][0]))
+        for cmd, _inp in calls[1:]:
             self.assertNotIn(secret, "\n".join(cmd))
             self.assertNotIn("-p", cmd)
-        self.assertEqual(calls[0][1], secret.encode("utf-8"))
-        self.assertIn("cat >", calls[0][0][-1])
-        script = calls[1][0][-1]
+        self.assertEqual(calls[1][1], secret.encode("utf-8"))
+        self.assertIn("cat >", calls[1][0][-1])
+        script = calls[2][0][-1]
         self.assertIn("--password-file", script)
         self.assertIn("--force=true", script)
         self.assertNotIn("-p ", script)
         self.assertNotIn(secret, script)
-        self.assertEqual(calls[1][1], b"SELECT 1")
-        self.assertIn("rm", calls[2][0])
+        self.assertEqual(calls[2][1], b"SELECT 1")
+        self.assertIn("rm", calls[3][0])
 
     def test_plant_failure_does_not_echo_password(self):
         mod = self._load()

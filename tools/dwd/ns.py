@@ -79,6 +79,8 @@ def ddl_main(sysname):
     safe_sysname(sysname)
     return (SCRIPTS / 'MASTER/dwd/01_ddl.sql') if sysname == '主数据' \
         else (SCRIPTS / sysname / 'dwd/01_ddl.sql')
+
+
 TAB_RE = re.compile(r'^DWD_[A-Z0-9_]+$')
 SCHEDULE_EXCLUDE = {'DWD_CMM_STD_DICT_CDVAL_MAP'}
 # 脚本 INSERT 目标表。解析（_parse_script）与 DDL 落盘共用，必须在两边都可见。

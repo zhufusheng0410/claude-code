@@ -23,8 +23,9 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 
 from tools.core.loader import load as _load_file
 
+from tools.dwd import export_ns
 from tools.dwd import ns as _ns
-globals().update({k: v for k, v in vars(_ns).items() if not k.startswith("__")})
+export_ns(_ns, globals())
 
 # --------------------------------------------------------------------------- #
 # 归属
@@ -62,7 +63,9 @@ def _scan_mapping_xlsx(p, out):
                     if v is not None and TAB_RE.match(norm_table(v)):
                         out[norm_table(v)].append(p.name)
     # ★ 2026-11-10：一个坏 xlsx 跳过并带上异常类型；编程错误不再被裸 Exception 吞掉。
-    except (OSError, ValueError, TypeError, LookupError, zipfile.BadZipFile,
+    #   ★ 评审 M4：**不含 TypeError** —— 这是「读不出来」的分支，吞掉 TypeError
+    #     会把参数个数写错之类的编程错误变成「安静跳过一份 MAPPING」。
+    except (OSError, ValueError, LookupError, zipfile.BadZipFile,
             zlib.error, InvalidFileException, ET.ParseError) as e:
         print(f'  ! {p.name}: {type(e).__name__}: {e}')
     finally:
@@ -512,8 +515,9 @@ def _script_index():
       改为调用方构建一次索引后传入，扫描次数降为 1。
     """
     idx = {}
-    for s in sorted(os.listdir(SCRIPTS)):
-        d = SCRIPTS / s / 'dwd/02_etl'
+    scripts = _ns.SCRIPTS
+    for s in sorted(os.listdir(scripts)):
+        d = scripts / s / 'dwd/02_etl'
         if not d.is_dir():
             continue
         for p in d.glob('*.sh'):
@@ -532,7 +536,7 @@ def _script_of(table, index=None):
 
 
 def _ods_chunks(sys_name):
-    d = SCRIPTS / sys_name / 'ods/etl_sh'
+    d = _ns.SCRIPTS / sys_name / 'ods/etl_sh'
     if not d.is_dir():
         return []
     files = sorted(f[:-3] for f in os.listdir(d)
@@ -567,7 +571,7 @@ def _locate_ods(table, chunks_cache=None):
 
 # 归属口径：**唯一来源** tools/core/dwd_ownership.py（与
 # ds-deploy/ds-build-dependent-from-lineage.py 共用，不再各存一份字典）。
-_OWNERSHIP = _load_file(str(REPO / 'tools/core/dwd_ownership.py'), 'DWD_OWNERSHIP')
+_OWNERSHIP = _load_file(str(_ns.REPO / 'tools/core/dwd_ownership.py'), 'DWD_OWNERSHIP')
 WORKFLOW_OVERRIDE = _OWNERSHIP.WORKFLOW_OVERRIDE
 
 

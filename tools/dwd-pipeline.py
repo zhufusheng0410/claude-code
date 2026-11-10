@@ -38,7 +38,13 @@ for _mod in (ns, parsing, generation, ddl_check, cli):
 
 
 class _PatchBridge(types.ModuleType):
-    """按路径加载后，测试会改 ``REPO`` / ``SCRIPTS``。写穿到 ns，路径函数才看得见。"""
+    """按路径加载后，测试会改本模块的 ``REPO`` / ``SCRIPTS``；写穿到 ns。
+
+    ★ 2026-11-10（评审 H1/M6）：本模块是**唯一的补丁入口**。各子模块不再
+      自带 `REPO`/`SCRIPTS` 快照（见 ``tools/dwd/__init__.py::export_ns``），
+      一律读 ``ns.REPO`` / ``ns.SCRIPTS``，所以只要在这里写穿一次，
+      parsing / generation / ddl_check / cli 全部立刻生效。
+    """
 
     def __setattr__(self, name, value):
         if name in ('REPO', 'SCRIPTS'):

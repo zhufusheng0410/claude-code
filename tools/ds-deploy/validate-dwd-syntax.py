@@ -256,6 +256,32 @@ def _sh_quote(s: str) -> str:
     return "'" + str(s).replace("'", "'\\''") + "'"
 
 
+_PW_SWEPT = False
+
+
+def _sweep_stale_pw_files():
+    """清掉上次异常退出（SIGKILL / 断电）遗留在容器内的口令文件。
+
+    ★ 2026-11-10（评审 M5）：`finally` 能覆盖超时与普通异常，覆盖不了进程
+      被强杀。这些文件 0600 且位于容器 /tmp，长期累积同样是泄露面。
+      只删 **60 分钟前**的：并发跑批时别人的口令文件刚写好，不能被误删。
+      每个进程只扫一次；扫描失败不阻断主流程。
+    """
+    global _PW_SWEPT
+    if _PW_SWEPT:
+        return
+    _PW_SWEPT = True
+    try:
+        subprocess.run(
+            ["docker", "exec", CONTAINER, "sh", "-c",
+             "find /tmp -maxdepth 1 -name 'hivepw_*' -mmin +60 -delete "
+             "2>/dev/null || true"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def beeline(sql: str, timeout: int = 900, force: bool = False) -> tuple:
     """在 hive 容器里跑一段 SQL，返回 (returncode, stdout, stderr)。
 
@@ -270,6 +296,7 @@ def beeline(sql: str, timeout: int = 900, force: bool = False) -> tuple:
     --password-file`` 读取；SQL 走第二次 ``docker exec -i`` 的 stdin。用完删除。
     """
     user, pwd = _hive_credentials()
+    _sweep_stale_pw_files()
     pw_path = "/tmp/hivepw_%s" % uuid.uuid4().hex
     try:
         plant = subprocess.run(
@@ -304,7 +331,10 @@ def beeline(sql: str, timeout: int = 900, force: bool = False) -> tuple:
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 timeout=30,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+        # ★ 2026-11-10（评审 M5）：这里**不能**只接 OSError/TimeoutExpired。
+        #   finally 里漏出的异常会覆盖并吞掉原始异常（beeline 超时/编译失败），
+        #   清理失败最多只该告警。
+        except Exception as exc:  # noqa: BLE001 —— 清理失败不得掩盖原始异常
             print("警告：未能删除容器内 Hive 口令文件 %s：%s"
                   % (pw_path, exc), file=sys.stderr)
 
