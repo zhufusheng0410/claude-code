@@ -480,6 +480,18 @@ class TestRunDwdEtlSelectDdls(unittest.TestCase):
         _kept, _n, partitioned = self.mod.select_ddls(ddls)
         self.assertEqual(partitioned, {"B"})
 
+    def test_external_skipped_unless_flag(self):
+        ddls = [
+            ("DWD_A", "CREATE TABLE DWDXDAY.DWD_A (X STRING)"),
+            ("DWD_B", "CREATE EXTERNAL TABLE DWDXDAY.DWD_B (X STRING)"),
+        ]
+        kept, skipped = self.mod.partition_external(ddls, False)
+        self.assertEqual([t for t, _ in kept], ["DWD_A"])
+        self.assertEqual(skipped, ["DWD_B"])
+        kept_on, skipped_on = self.mod.partition_external(ddls, True)
+        self.assertEqual([t for t, _ in kept_on], ["DWD_A", "DWD_B"])
+        self.assertEqual(skipped_on, [])
+
 
 class TestCollectCounts(unittest.TestCase):
     """C4 回归：无分区表不能套 `WHERE P_DT = ...`（J-37 后 6 张正式表无分区）。"""

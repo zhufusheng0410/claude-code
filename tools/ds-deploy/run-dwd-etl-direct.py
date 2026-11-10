@@ -38,6 +38,7 @@ worker Tez AM 约 1.5 GiB ⇒ WSL `MemAvailable` < 阈值就等。
     python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 --dry-run
     python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010              # 全量（重建DDL+执行+回采）
     python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 --skip-ddl  # 只执行（DDL已对齐）
+    python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 --rebuild-external  # 连 EXTERNAL 一起重建
     python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 --only A,B  # 只跑指定表
     python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 --no-count  # 跳过行数回采
     python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 --exec-par 2  # 层内并行（慎用）
@@ -321,6 +322,23 @@ def select_ddls(ddls_all: list) -> tuple:
     return ddls, len(ddls_all) - len(ddls), partitioned
 
 
+def partition_external(ddls, rebuild_external=False):
+    """EXTERNAL 表默认不进 DROP+CREATE。
+
+    返回 ``(kept, skipped_names)``。``rebuild_external`` 为真时 skipped 为空，
+    EXTERNAL 留在 kept 里。默认关：甲方 DDL 无 LOCATION，按默认路径重建会指错目录。
+    """
+    if rebuild_external:
+        return list(ddls), []
+    kept, skipped = [], []
+    for table, stmt in ddls:
+        if V.RE_EXTERNAL.search(stmt):
+            skipped.append(table)
+        else:
+            kept.append((table, stmt))
+    return kept, skipped
+
+
 def main():
     ap = argparse.ArgumentParser(description="真实执行 DWD ETL（直跑 Hive）")
     ap.add_argument("--date", default=EXEC_DATE_DEFAULT,
@@ -338,6 +356,8 @@ def main():
     ap.add_argument("--no-count", action="store_true", help="跳过行数回采")
     ap.add_argument("--dry-run", "--dry", dest="dry_run", action="store_true",
                     help="只打印分层与顺序，不执行")
+    ap.add_argument("--rebuild-external", action="store_true",
+                    help="连 EXTERNAL 表一起 DROP+CREATE（默认关；关闭时列出被跳过的表）")
     args = ap.parse_args()
 
     def log(s):
@@ -350,12 +370,11 @@ def main():
     V.DATE_PREV = args.date
     ddls_all = V.load_ddls()
     ddls, n_tmp, partitioned = select_ddls(ddls_all)
-    # ★ 2026-11-10：**EXTERNAL 表不预建**。甲方交付的主数据 DDL 是
-    #   `CREATE EXTERNAL TABLE` 且不带 LOCATION；按 Hive 默认路径重建会把表
-    #   指向错误目录、读不到原数据。校验沙箱（validate-dwd-syntax）会建它们
-    #   （沙箱跑完即 DROP，无副作用），真实重建一律排除。
+    # ★ EXTERNAL 默认不预建。甲方交付的主数据 DDL 是 `CREATE EXTERNAL TABLE`
+    #   且不带 LOCATION；按 Hive 默认路径重建会把表指向错误目录。
+    #   `--rebuild-external` 才纳入。关闭时必须列出表名，不能只报个数。
     n_ext = sum(1 for _t, s in ddls if V.RE_EXTERNAL.search(s))
-    ddls = [(t, s) for t, s in ddls if not V.RE_EXTERNAL.search(s)]
+    ddls, skipped_ext = partition_external(ddls, args.rebuild_external)
     etls = V.load_etls(sandbox=None)          # 保持真实 DWDXDAY 目标
     sqls = {t: s for t, s in etls}
     etls = [(t, s) for t, s in etls if t not in EXCLUDE]
@@ -374,8 +393,14 @@ def main():
         groups.setdefault(lvl[t], []).append(t)
 
     log("DWD ETL %d 脚本（排除 %d 张指定表）/ DDL %d 张"
-        "（另 %d 张 TMP、%d 张 EXTERNAL 不预建）/ date=%s"
-        % (len(etls), len(EXCLUDE), len(ddls), n_tmp, n_ext, args.date))
+        "（另 %d 张 TMP 不预建、EXTERNAL %s %d 张）/ date=%s"
+        % (len(etls), len(EXCLUDE), len(ddls), n_tmp,
+           "纳入重建" if args.rebuild_external else "不预建", n_ext, args.date))
+    if skipped_ext:
+        log("跳过 EXTERNAL %d 张（默认不重建；--rebuild-external 才纳入）:"
+            % len(skipped_ext))
+        for name in skipped_ext:
+            log("  %s" % name)
     for lv in sorted(groups):
         log("  L%d: %s" % (lv, ", ".join(groups[lv])))
     if args.dry_run:
