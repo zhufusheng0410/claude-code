@@ -282,7 +282,8 @@ DWS 依赖关系报表生成（配合 `scripts/DWS_依赖关系.xlsx` 使用）�
 `require_secret(key)` 优先级 = **进程环境变量 → `tools/ds-deploy/.env.local` → `~/.dw-secrets.env` → 抛
 `SecretMissingError`**；访问器 `ds_base/ds_user/ds_password/ds_service_user/ds_service_password/
 ds_admin_user/ds_admin_password/pg_conn/pg_password/hive_user/hive_password`；`preflight(*keys)` 批量预检。
-另支持 `DW_DS` / `DW_DS_USER` / `DW_DS_PWD` / `DW_DS_PROJECT` / `DW_REPO` / `DW_DEPCFG` 环境变量。
+另支持 `DS_BASE` / `DS_ADMIN_USER` / `DS_ADMIN_PASSWORD` / `DS_PROJECT` / `DW_REPO` / `DW_DEPCFG` 环境变量
+（旧名 `DW_DS` / `DW_DS_USER` / `DW_DS_PWD` / `DW_DS_PROJECT` 仍可读，打印废弃告警；备份路径旧名 `DW_DS_DUMP` 对应 `DS_DUMP`）。
 
 **[ds_text.py](../tools/ds-deploy/ds_text.py)** —— `normalize_newlines()`（CRLF→LF）、`read_script()`，
 保证本地脚本与 DS 上 `rawScript` 可逐字节比对。

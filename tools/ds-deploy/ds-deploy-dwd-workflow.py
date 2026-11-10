@@ -76,18 +76,19 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dw_paths  # noqa: E402
 from ds_client import task_definitions  # noqa: E402
-from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, prefer_env  # noqa: E402
 from ds_text import read_script  # noqa: E402
 
 # ★ 全部支持环境变量覆盖：脚本同步到生成器侧（`…\claude-code\tools\ds-deploy\`）后，
 #   仍默认指向本集群；要指向别的 DS/别的产物目录，设对应环境变量即可。
-DS = os.environ.get("DW_DS", "http://localhost:12345/dolphinscheduler")
-# ★ 2026-10-22：口令不再有源码缺省值。DW_DS_USER/DW_DS_PWD 仍可覆盖，
+#   统一用 DS_*；旧名 DW_DS / DW_DS_USER / DW_DS_PWD / DW_DS_PROJECT 仍可读，会告警。
+DS = prefer_env("DS_BASE", "DW_DS", "http://localhost:12345/dolphinscheduler")
+# ★ 2026-10-22：口令不再有源码缺省值。DS_ADMIN_USER / DS_ADMIN_PASSWORD 可覆盖，
 #   否则回落到 ds_config（环境变量 / .env.local / ~/.dw-secrets.env）；
 #   都缺失则抛 SecretMissingError 并提示配置方式。
-USER = os.environ.get("DW_DS_USER") or ds_admin_user()
-PWD = os.environ.get("DW_DS_PWD") or ds_admin_password()
-PROJECT = os.environ.get("DW_DS_PROJECT", "dw")
+USER = prefer_env("DS_ADMIN_USER", "DW_DS_USER") or ds_admin_user()
+PWD = prefer_env("DS_ADMIN_PASSWORD", "DW_DS_PWD") or ds_admin_password()
+PROJECT = prefer_env("DS_PROJECT", "DW_DS_PROJECT", "dw")
 def _wsl_path(p):
     r"""Windows 路径在 WSL 里不存在时回退 `/mnt/<盘>/...`（本工具两种环境都跑）。"""
     if os.path.isdir(p) or ":" not in p:

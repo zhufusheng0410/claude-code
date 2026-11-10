@@ -31,12 +31,14 @@ from __future__ import annotations
 
 import os
 import pathlib
+import sys
+import warnings
 
 __all__ = [
     "ds_base", "ds_user", "ds_password", "ds_admin_user", "ds_admin_password",
     "ds_service_user", "ds_service_password",
     "pg_conn", "pg_password", "hive_user", "hive_password", "require_secret",
-    "preflight", "SecretMissingError", "LOCAL_ENV_FILE", "HOME_ENV_FILE",
+    "prefer_env", "preflight", "SecretMissingError", "LOCAL_ENV_FILE", "HOME_ENV_FILE",
 ]
 
 # ---------- 凭据文件位置 ----------
@@ -73,6 +75,30 @@ HIVE_USER = os.environ.get("DS_HIVE_USER", "hive")
 
 class SecretMissingError(RuntimeError):
     """缺少必需的凭据时抛出。"""
+
+
+#: 已告警过的废弃变量名（同一进程只提示一次，且**绝不打印值**）。
+_LEGACY_WARNED: set[str] = set()
+
+
+def prefer_env(name: str, legacy: str, default: str | None = None) -> str | None:
+    """读环境变量：优先 ``name``（``DS_*``），回退 ``legacy``（``DW_DS_*``）并告警。
+
+    空串视为未设置（与 ``os.environ.get(k) or fallback`` 一致）。
+    告警只含变量名，不含值。两者都没有时返回 ``default``（不告警）。
+    """
+    value = os.environ.get(name)
+    if value:
+        return value
+    old = os.environ.get(legacy)
+    if old:
+        if legacy not in _LEGACY_WARNED:
+            _LEGACY_WARNED.add(legacy)
+            msg = "环境变量 %s 已废弃，请改用 %s" % (legacy, name)
+            warnings.warn(msg, DeprecationWarning, stacklevel=2)
+            print("警告：" + msg, file=sys.stderr)
+        return old
+    return default
 
 
 # ---------- 凭据文件解析 ----------

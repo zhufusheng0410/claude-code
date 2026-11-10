@@ -23,6 +23,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
+import warnings
 
 _REPO = pathlib.Path(__file__).resolve().parents[2]
 _DEPLOY = _REPO / "tools" / "ds-deploy"
@@ -152,6 +153,76 @@ class TestDsConfigSecrets(unittest.TestCase):
         mod = self.mod
         self.assertEqual(mod._parse_env_file(
             pathlib.Path("/nonexistent/.env")), {})
+
+
+class TestPreferEnv(unittest.TestCase):
+    """DS_* 优先，DW_DS_* 仅作废弃回退，且告警不含值。"""
+
+    _KEYS = (
+        "DS_BASE", "DW_DS", "DS_ADMIN_USER", "DW_DS_USER",
+        "DS_ADMIN_PASSWORD", "DW_DS_PWD", "DS_PROJECT", "DW_DS_PROJECT",
+        "DS_DUMP", "DW_DS_DUMP",
+    )
+
+    def setUp(self):
+        self._saved = {k: os.environ.pop(k, None) for k in self._KEYS}
+        ds_config._LEGACY_WARNED.clear()
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        ds_config._LEGACY_WARNED.clear()
+
+    def _load(self, filename):
+        spec = importlib.util.spec_from_file_location(
+            "prefer_env_" + filename.replace("-", "_").replace(".", "_"),
+            str(_DEPLOY / filename))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_canonical_wins_and_legacy_warns(self):
+        os.environ["DS_PROJECT"] = "from-ds"
+        os.environ["DW_DS_PROJECT"] = "from-legacy"
+        self.assertEqual(
+            ds_config.prefer_env("DS_PROJECT", "DW_DS_PROJECT", "dw"), "from-ds")
+        os.environ.pop("DS_PROJECT")
+        ds_config._LEGACY_WARNED.clear()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            got = ds_config.prefer_env("DS_PROJECT", "DW_DS_PROJECT", "dw")
+        self.assertEqual(got, "from-legacy")
+        self.assertTrue(any(issubclass(w.category, DeprecationWarning) for w in caught))
+        text = " ".join(str(w.message) for w in caught)
+        self.assertIn("DW_DS_PROJECT", text)
+        self.assertIn("DS_PROJECT", text)
+        self.assertNotIn("from-legacy", text)
+
+    def test_default_when_unset(self):
+        self.assertEqual(
+            ds_config.prefer_env("DS_PROJECT", "DW_DS_PROJECT", "dw"), "dw")
+        self.assertIsNone(ds_config.prefer_env("DS_DUMP", "DW_DS_DUMP"))
+
+    def test_scripts_read_ds_star(self):
+        os.environ["DS_PROJECT"] = "proj-ds"
+        os.environ["DW_DS_PROJECT"] = "proj-old"
+        os.environ["DS_DUMP"] = "dump-ds"
+        os.environ["DS_BASE"] = "http://ds.example/dolphinscheduler"
+        os.environ["DS_ADMIN_USER"] = "admin-ds"
+        os.environ["DS_ADMIN_PASSWORD"] = "not-a-real-secret"
+        sync = self._load("ds-sync-ods-scripts.py")
+        rebuild = self._load("ds-rebuild-from-inventory.py")
+        wf = self._load("ds-deploy-dwd-workflow.py")
+        self.assertEqual(sync.PROJECT, "proj-ds")
+        self.assertEqual(rebuild.PROJECT, "proj-ds")
+        self.assertEqual(rebuild.DUMP, "dump-ds")
+        self.assertEqual(wf.PROJECT, "proj-ds")
+        self.assertEqual(wf.DS, "http://ds.example/dolphinscheduler")
+        self.assertEqual(wf.USER, "admin-ds")
+        self.assertEqual(wf.PWD, "not-a-real-secret")
 
 
 class TestDsTextNewlines(unittest.TestCase):

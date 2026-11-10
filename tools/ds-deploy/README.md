@@ -49,9 +49,9 @@ pip install pyyaml          # ds-check-mount-sources / apply-all-patches 需要
 
 | 环境变量 | 默认 | 含义 |
 |---|---|---|
-| `DW_DS` | `http://localhost:12345/dolphinscheduler` | DS API 基址 |
-| `DW_DS_USER` / `DW_DS_PWD` | `admin` / 无（**必须显式提供**） | 登录 |
-| `DW_DS_PROJECT` | `dw` | 项目名 |
+| `DS_BASE` | `http://localhost:12345/dolphinscheduler` | DS API 基址（旧名 `DW_DS` 仍可读，会告警） |
+| `DS_ADMIN_USER` / `DS_ADMIN_PASSWORD` | `admin` / 无（**必须显式提供**） | 登录（旧名 `DW_DS_USER` / `DW_DS_PWD` 仍可读，会告警） |
+| `DS_PROJECT` | `dw` | 项目名（旧名 `DW_DS_PROJECT` 仍可读，会告警） |
 | `DW_REPO` | 仓库根（由 `dw_paths.py` 位置推导） | 脚本与血缘所在的生成器仓库根 |
 | `DW_DEPCFG` | `tools/ds-deploy/dep-config-proscript` | DWD 依赖配置目录（DWS 用 `dep-config-dws`） |
 | `DW_BACKUP_ROOT` | `tools/.dx-tmp/backup` | 同步/重建前的备份根 |
