@@ -27,8 +27,9 @@ def cmd_lineage(args):
                     df = pd.read_excel(p, sheet_name="表级血缘(扁平)")
                     total += len(df)
                     print(f"       表级 {len(df)} 行")
-                except Exception as e:
-                    print(f"       ⚠ {e}")
+                except (ImportError, OSError, ValueError, KeyError, TypeError) as e:
+                    # 缺 pandas / 文件坏 / 缺 sheet：只影响本系统的行数统计，记失败继续。
+                    print(f"       ⚠ {type(e).__name__}: {e}")
                     rc = 1
         print(f"  DWS 表级血缘合计 {total} 行")
         # ★ 2026-10-26：`scripts/DWS_依赖关系.xlsx` 原来只能手工跑 `tools/dws-dep-report.py`，

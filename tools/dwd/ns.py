@@ -30,26 +30,10 @@ SYS = ('HSFA', 'HSZTA', 'O32')
 GROUPS = SYS + ('主数据',)
 ALIAS = {'01-ZTA': 'HSZTA', '02-O32': 'O32', '03-HSFA': 'HSFA'}
 
-# ★ 2026-10-22（评审 HIGH-10）：系统简称的合法字符集。
-#   sysname 源自 MAPPING 目录下的一级子目录名（**外部输入**），此前原样
-#   拼进输出路径（SCRIPTS / sysname / 'dwd/02_etl'）—— 一个含 `..` 或路径
-#   分隔符的目录名即可把文件写到 SCRIPTS 之外（路径遍历）。
-#   标准简称是字母数字（HSFA / HSZTA / O32），MASTER 与「主数据」为特例。
-_SYS_RE = re.compile(r'^[A-Za-z0-9_]+$')
-
-
-def safe_sysname(name: str) -> str:
-    """校验系统简称可安全用于路径拼接；不合法则抛 ValueError。
-
-    允许的特例：``主数据``（中文，历史目录名）与 ``MASTER``。
-    """
-    if name in ('主数据', 'MASTER'):
-        return name
-    if not _SYS_RE.match(name or ''):
-        raise ValueError(
-            f"非法系统简称 {name!r}：只允许字母/数字/下划线"
-            f"（含 '..'、路径分隔符等一律拒绝）")
-    return name
+# ★ 2026-11-13（评审 L2）：`safe_sysname` 移入 `tools/core/safe_paths.py`。
+#   它原先只在这里定义，导致 `tools/dws/` 为了用它反向依赖 DWD 包。
+#   本模块继续 re-export，历史调用方（含 facade）不需要改。
+from tools.core.safe_paths import safe_sysname  # noqa: E402,F401
 
 
 def etl_dir(sysname):

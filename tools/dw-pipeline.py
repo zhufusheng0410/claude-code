@@ -47,10 +47,25 @@ _PATCHABLE = {
 }
 
 
+_EXPORT_SKIP = (types.ModuleType,)
+
+
 def _export(mod):
+    """把子模块的公开名字导入本 facade。
+
+    ★ 评审 L1：跳过模块对象（`os`/`re`/`json`/`sys`/`argparse`）以及**外部**
+      的函数/类（如 `pathlib.Path`），否则 facade 命名空间会被各模块的 import
+      污染。数据对象（Path 实例、dict、int 等）一律保留 —— 注意不能用
+      `getattr(val, '__module__')` 判断，实例会查到类属性而误判成 pathlib。
+    """
     for key, val in vars(mod).items():
-        if not key.startswith('__'):
-            globals()[key] = val
+        if key.startswith('__') or isinstance(val, _EXPORT_SKIP):
+            continue
+        if isinstance(val, (types.FunctionType, type)):
+            owner = getattr(val, '__module__', '') or ''
+            if not owner.startswith('tools'):
+                continue
+        globals()[key] = val
 
 
 for _mod in (_state, _args, _process, _manifest, _scripts, _ddl,

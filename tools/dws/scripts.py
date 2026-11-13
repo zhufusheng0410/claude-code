@@ -68,79 +68,132 @@ def stage_dws_from_jf(args=None):
     return total, len(planned)
 
 
+def _sync_dwd_scripts(args):
+    """DWD 脚本：jf 走 convert/distribute；gen 跑生成器并把产物同步进仓库。"""
+    if args.source == "jf":
+        rc = run([st.PY, st.DWD_PIPE, "convert"] + _ap(args))[0]
+        rc |= run([st.PY, st.DWD_PIPE, "distribute"] + _ap(args))[0]
+        return rc
+    rc = 0
+    tmp = gen_temp("dw-gen-dwd")
+    # ★ 2026-10-26：原先 `return 1`（生成器 ERROR）落在 rmtree 之前，
+    #   且 dry-run 也真写盘 ⇒ `scripts/.dw-gen-*` 越积越多；
+    #   而残留 .sh 会被血缘→depcfg→deploy 自动识别成作业（AGENTS.md 已警告）。
+    #   改用 try/finally：无论成功/失败/dry-run 都清干净。
+    try:
+        code, out = run([st.PY, st.GEN_MAIN, "--layer", "DWD", "--output", tmp],
+                        capture=True)
+        rc |= code
+        if "[ERROR" in out and not getattr(args, "allow_gen_errors", False):
+            print("  ✗ DWD 生成器有 ERROR 日志；修 MAPPING 后重跑，或加 --allow-gen-errors")
+            return 1
+        for s in st.SYS:
+            src = tmp / s / "dwd"
+            if not src.is_dir():
+                print(f"  ⚠ 生成器未产出 {s}/dwd")
+                rc = 1
+                continue
+            sync_files(src / "02_etl", st.SCRIPTS / s / "dwd/02_etl", args.apply,
+                       backup=True, label=f"{s} DWD ETL")
+            for sub in ("ddl", "lineage", "data_dict"):
+                sync_files(src / sub, st.SCRIPTS / s / "dwd" / sub, args.apply,
+                           pattern="*", label=f"{s} DWD {sub}")
+            sync_files(src, st.SCRIPTS / s / "dwd", args.apply, pattern="01_ddl.sql",
+                       label=f"{s} DWD 01_ddl.sql")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return rc
+
+
+def _sync_dws_scripts(args):
+    """DWS 脚本：jf 只比对甲方原文（不覆盖）；gen 跑生成器并同步。"""
+    if args.source == "jf":
+        try:
+            stage_dws_from_jf(args)
+        except StaleDwsManifest as exc:
+            return fail_stale(exc)
+        n_repo = sum(len(list((st.SCRIPTS / s / "dws/02_etl").glob("*.sh")))
+                     for s in st.SYS)
+        print(f"  DWS 脚本合计（仓库） {n_repo}")
+        if n_repo != st.DWS_EXPECT_SCRIPTS:
+            print(f"  ⚠ 预期 {st.DWS_EXPECT_SCRIPTS} 个 DWS 脚本")
+            return 1
+        return 0
+    rc = 0
+    tmp = gen_temp("dw-gen-dws")
+    try:
+        code, out = run([st.PY, st.GEN_MAIN, "--layer", "DWS", "--output", tmp],
+                        capture=True)
+        rc |= code
+        if "[ERROR" in out and not getattr(args, "allow_gen_errors", False):
+            print("  ✗ DWS 生成器有 ERROR 日志；修 MAPPING 后重跑，或加 --allow-gen-errors")
+            return 1
+        for s in st.SYS:
+            src = tmp / s / "dws"
+            if not src.is_dir():
+                continue
+            sync_files(src / "02_etl", st.SCRIPTS / s / "dws/02_etl", args.apply,
+                       backup=True, label=f"{s} DWS ETL")
+            for sub in ("ddl", "lineage", "data_dict"):
+                sync_files(src / sub, st.SCRIPTS / s / "dws" / sub, args.apply,
+                           pattern="*", label=f"{s} DWS {sub}")
+            sync_files(src, st.SCRIPTS / s / "dws", args.apply, pattern="01_ddl.sql",
+                       label=f"{s} DWS 01_ddl.sql")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return rc
+
+
 def cmd_scripts(args):
     layers = layers_of(args)
     rc = 0
     if "DWD" in layers:
         print("== DWD scripts ==")
-        if args.source == "jf":
-            rc |= run([st.PY, st.DWD_PIPE, "convert"] + _ap(args))[0]
-            rc |= run([st.PY, st.DWD_PIPE, "distribute"] + _ap(args))[0]
-        else:
-            tmp = gen_temp("dw-gen-dwd")
-            # ★ 2026-10-26：原先 `return 1`（生成器 ERROR）落在 rmtree 之前，
-            #   且 dry-run 也真写盘 ⇒ `scripts/.dw-gen-*` 越积越多；
-            #   而残留 .sh 会被血缘→depcfg→deploy 自动识别成作业（AGENTS.md 已警告）。
-            #   改用 try/finally：无论成功/失败/dry-run 都清干净。
-            try:
-                code, out = run([st.PY, st.GEN_MAIN, "--layer", "DWD", "--output", tmp],
-                                capture=True)
-                rc |= code
-                if "[ERROR" in out and not getattr(args, "allow_gen_errors", False):
-                    print("  ✗ DWD 生成器有 ERROR 日志；修 MAPPING 后重跑，或加 --allow-gen-errors")
-                    return 1
-                for s in st.SYS:
-                    src = tmp / s / "dwd"
-                    if not src.is_dir():
-                        print(f"  ⚠ 生成器未产出 {s}/dwd")
-                        rc = 1
-                        continue
-                    sync_files(src / "02_etl", st.SCRIPTS / s / "dwd/02_etl", args.apply,
-                               backup=True, label=f"{s} DWD ETL")
-                    for sub in ("ddl", "lineage", "data_dict"):
-                        sync_files(src / sub, st.SCRIPTS / s / "dwd" / sub, args.apply,
-                                   pattern="*", label=f"{s} DWD {sub}")
-                    sync_files(src, st.SCRIPTS / s / "dwd", args.apply, pattern="01_ddl.sql",
-                               label=f"{s} DWD 01_ddl.sql")
-            finally:
-                shutil.rmtree(tmp, ignore_errors=True)
-
+        rc |= _sync_dwd_scripts(args)
     if "DWS" in layers:
         print("== DWS scripts ==")
-        if args.source == "jf":
-            try:
-                total, _diff = stage_dws_from_jf(args)
-            except StaleDwsManifest as exc:
-                return fail_stale(exc)
-            n_repo = sum(len(list((st.SCRIPTS / s / "dws/02_etl").glob("*.sh")))
-                         for s in st.SYS)
-            print(f"  DWS 脚本合计（仓库） {n_repo}")
-            if n_repo != st.DWS_EXPECT_SCRIPTS:
-                print(f"  ⚠ 预期 {st.DWS_EXPECT_SCRIPTS} 个 DWS 脚本")
-                rc = 1
-        else:
-            tmp = gen_temp("dw-gen-dws")
-            try:
-                code, out = run([st.PY, st.GEN_MAIN, "--layer", "DWS", "--output", tmp],
-                                capture=True)
-                rc |= code
-                if "[ERROR" in out and not getattr(args, "allow_gen_errors", False):
-                    print("  ✗ DWS 生成器有 ERROR 日志；修 MAPPING 后重跑，或加 --allow-gen-errors")
-                    return 1
-                for s in st.SYS:
-                    src = tmp / s / "dws"
-                    if not src.is_dir():
-                        continue
-                    sync_files(src / "02_etl", st.SCRIPTS / s / "dws/02_etl", args.apply,
-                               backup=True, label=f"{s} DWS ETL")
-                    for sub in ("ddl", "lineage", "data_dict"):
-                        sync_files(src / sub, st.SCRIPTS / s / "dws" / sub, args.apply,
-                                   pattern="*", label=f"{s} DWS {sub}")
-                    sync_files(src, st.SCRIPTS / s / "dws", args.apply, pattern="01_ddl.sql",
-                               label=f"{s} DWS 01_ddl.sql")
-            finally:
-                shutil.rmtree(tmp, ignore_errors=True)
+        rc |= _sync_dws_scripts(args)
     return rc
+
+
+def _repair_one(mod, sysname, p, args):
+    """处理单个脚本。返回 ``(是否命中拼接副本, rc 增量)``。"""
+    text = p.read_bytes().decode("utf-8", "replace")
+    n = mod.count_sql_calls(text)
+    if n <= 1:
+        return False, 0
+    new, notes = mod.trim_to_first_copy(text)
+    print(f"  {sysname}/{p.name}: SQL 调用 ×{n}")
+    for x in notes:
+        print(f"    {x}")
+    if mod.DEVIATION_MARK in text:
+        print(f"    已带 {mod.DEVIATION_MARK} 标记，跳过")
+        return True, 0
+    if any("不一致" in x for x in notes):
+        print("    ✗ 副本 SQL 不一致，未落盘；人工确认后再手工处置")
+        return True, 1
+    if new == text:
+        print("    无可落盘改动")
+        return True, 0
+    if not args.apply:
+        print("    (dry-run，未落盘)")
+        return True, 0
+    bak = (st.REPO / "tools/.dx-tmp" /
+           f"backup-repair-{time.strftime('%Y%m%d-%H%M%S')}" / sysname)
+    bak.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(p, bak / p.name)
+    nl = "\r\n" if "\r\n" in new else "\n"
+    mark = (f"# {mod.DEVIATION_MARK}: 甲方原文为两份脚本拼接（done 与 shebang 粘连，"
+            f"while 不闭合），按口径只保留第 1 个 beeline 的完整 SQL；"
+            f"不要用甲方原文覆盖")
+    if new.startswith("#!") and nl in new:
+        i = new.index(nl) + len(nl)
+        new = new[:i] + mark + nl + new[i:]
+    else:
+        new = mark + nl + new
+    p.write_bytes(new.encode("utf-8"))
+    print(f"    已修复 → 备份 {bak / p.name}")
+    return True, 0
 
 
 def cmd_repair(args):
@@ -151,6 +204,7 @@ def cmd_repair(args):
       判定与裁剪逻辑在 `tools/core/sh_repair.py`，这里只负责扫描/备份/落盘/标注。
     ★ 两份 SQL 不一致时**不落盘**（rc=1）：口径优先但不能默默丢内容，需人工确认。
     ★ 落盘后文件带 `DW-DEVIATION` 标记 ⇒ `stage_dws_from_jf` 不会用甲方原文把它覆盖回去。
+    ★ 2026-11-13：单脚本处理拆到 `_repair_one`（原函数 67 行）。
     """
     layers = layers_of(args)
     mod = _sh_repair()
@@ -170,43 +224,10 @@ def cmd_repair(args):
             if not d.is_dir():
                 continue
             for p in sorted(d.glob("*.sh")):
-                text = p.read_bytes().decode("utf-8", "replace")
-                n = mod.count_sql_calls(text)
-                if n <= 1:
-                    continue
-                hits += 1
-                new, notes = mod.trim_to_first_copy(text)
-                print(f"  {s}/{p.name}: SQL 调用 ×{n}")
-                for x in notes:
-                    print(f"    {x}")
-                if mod.DEVIATION_MARK in text:
-                    print(f"    已带 {mod.DEVIATION_MARK} 标记，跳过")
-                    continue
-                if any("不一致" in x for x in notes):
-                    print("    ✗ 副本 SQL 不一致，未落盘；人工确认后再手工处置")
-                    rc = 1
-                    continue
-                if new == text:
-                    print("    无可落盘改动")
-                    continue
-                if not args.apply:
-                    print("    (dry-run，未落盘)")
-                    continue
-                bak = (st.REPO / "tools/.dx-tmp" /
-                       f"backup-repair-{time.strftime('%Y%m%d-%H%M%S')}" / s)
-                bak.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(p, bak / p.name)
-                nl = "\r\n" if "\r\n" in new else "\n"
-                mark = (f"# {mod.DEVIATION_MARK}: 甲方原文为两份脚本拼接（done 与 shebang 粘连，"
-                        f"while 不闭合），按口径只保留第 1 个 beeline 的完整 SQL；"
-                        f"不要用甲方原文覆盖")
-                if new.startswith("#!") and nl in new:
-                    i = new.index(nl) + len(nl)
-                    new = new[:i] + mark + nl + new[i:]
-                else:
-                    new = mark + nl + new
-                p.write_bytes(new.encode("utf-8"))
-                print(f"    已修复 → 备份 {bak / p.name}")
+                hit, delta = _repair_one(mod, s, p, args)
+                if hit:
+                    hits += 1
+                    rc |= delta
     if not hits:
         print("  未发现拼接副本（SQL 调用均 ≤1）")
     return rc

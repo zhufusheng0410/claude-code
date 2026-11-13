@@ -64,7 +64,8 @@ def cmd_verify_ddl(args):
     return rc
 
 
-def verify_dws(use_ds, strict=False):
+def _verify_dws_local(strict=False):
+    """DWS 本地检查：bash -n 语法、拼接副本、脚本/依赖数量。"""
     rc = 0
     print("== DWS 本地 ==")
     total = 0
@@ -107,63 +108,83 @@ def verify_dws(use_ds, strict=False):
     print(f"  依赖配置 {n_dep} 份")
     if n_dep != st.DWS_EXPECT_DEPS:
         rc = 1
+    return rc
+
+
+def _check_dws_workflow(dc, dt, ds, pcode, w):
+    """单个 DWS 工作流：SHELL 脚本一致性 + DEPENDENT 节点是否缺失。返回 0/1。"""
+    g = ds.call("GET", f"/projects/{pcode}/workflow-definition/{w['code']}")
+    tds = dc.task_definitions(g)
+    shells = [t for t in tds if t.get("taskType") == "SHELL"]
+    deps = [t for t in tds if t.get("taskType") == "DEPENDENT"]
+    sysname = st.DWS_WF2SYS.get(w["name"])
+    local = {p.stem: p for p in
+             (st.SCRIPTS / (sysname or "") / "dws/02_etl").glob("*.sh")}
+    bad = []
+    for t in shells:
+        tp = t.get("taskParams") or {}
+        if isinstance(tp, str):
+            tp = json.loads(tp)
+        p = local.get(t["name"])
+        if not p or dt.normalize_newlines(tp.get("rawScript") or "").strip() != \
+                dt.normalize_newlines(p.read_text(encoding="utf-8")).strip():
+            bad.append(t["name"])
+    print(f"  {w['name']}: {w.get('releaseState')} SHELL {len(shells)} DEP {len(deps)} "
+          f"脚本不一致 {len(bad)}")
+    depmap = {t["name"]: t for t in deps}
+    miss_dep = []
+    for t in shells:
+        cfgp = st.DEPCFG_DWS / f"{t['name']}.dep.json"
+        if not cfgp.is_file():
+            continue
+        c = json.loads(cfgp.read_text(encoding="utf-8"))
+        expected = bool(c.get("same_workflow_predecessors") or
+                        c.get("cross_workflow") or c.get("mapping_deps"))
+        node = depmap.get("dep_" + t["name"])
+        if expected and not node:
+            miss_dep.append(t["name"])
+            continue
+        if not node:
+            continue
+        tp = node.get("taskParams") or {}
+        if isinstance(tp, str):
+            tp = json.loads(tp)
+        n = sum(len(g.get("dependItemList", []))
+                for g in (tp.get("dependence") or {}).get("dependTaskList", []))
+        if expected and n == 0:
+            miss_dep.append(t["name"])
+    print(f"       依赖节点缺失/空: {len(miss_dep)}")
+    if miss_dep:
+        print("       ", miss_dep[:8])
+    if w.get("releaseState") != "ONLINE" or bad or miss_dep:
+        return 1
+    return 0
+
+
+def _verify_dws_ds():
+    """DWS 回读 DS：工作流数、rawScript 一致性、依赖节点是否缺失。"""
+    print("== DWS DS ==")
+    try:
+        ds, pcode, wfs = ds_workflows(("DWS_",))
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
+        print(f"  ⚠ DS 连接失败（{type(e).__name__}）: {e}")
+        return 1
+    print(f"  DWS 工作流 {len(wfs)} 个: {sorted(w['name'] for w in wfs)}")
+    rc = 0 if len(wfs) == st.DWS_EXPECT_WORKFLOWS else 1
+    dc, dt = st.ds_deploy()
+    for w in wfs:
+        rc |= _check_dws_workflow(dc, dt, ds, pcode, w)
+    return rc
+
+
+def verify_dws(use_ds, strict=False):
+    """DWS 校验：本地 + （可选）DS 回读。
+
+    ★ 2026-11-13：拆成 `_verify_dws_local` / `_verify_dws_ds`（原函数 101 行）。
+    """
+    rc = _verify_dws_local(strict=strict)
     if use_ds:
-        print("== DWS DS ==")
-        try:
-            ds, _p, wfs = ds_workflows(("DWS_",))
-        except Exception as e:
-            print(f"  ⚠ DS 连接失败: {e}")
-            return 1
-        print(f"  DWS 工作流 {len(wfs)} 个: {sorted(w['name'] for w in wfs)}")
-        if len(wfs) != st.DWS_EXPECT_WORKFLOWS:
-            rc = 1
-        dc, dt = st.ds_deploy()
-        for w in wfs:
-            g = ds.call("GET", f"/projects/{_p}/workflow-definition/{w['code']}")
-            tds = dc.task_definitions(g)
-            shells = [t for t in tds if t.get("taskType") == "SHELL"]
-            deps = [t for t in tds if t.get("taskType") == "DEPENDENT"]
-            sysname = st.DWS_WF2SYS.get(w["name"])
-            local = {p.stem: p for p in
-                     (st.SCRIPTS / (sysname or "") / "dws/02_etl").glob("*.sh")}
-            bad = []
-            for t in shells:
-                tp = t.get("taskParams") or {}
-                if isinstance(tp, str):
-                    tp = json.loads(tp)
-                p = local.get(t["name"])
-                if not p or dt.normalize_newlines(tp.get("rawScript") or "").strip() != \
-                        dt.normalize_newlines(p.read_text(encoding="utf-8")).strip():
-                    bad.append(t["name"])
-            print(f"  {w['name']}: {w.get('releaseState')} SHELL {len(shells)} DEP {len(deps)} "
-                  f"脚本不一致 {len(bad)}")
-            depmap = {t["name"]: t for t in deps}
-            miss_dep = []
-            for t in shells:
-                cfgp = st.DEPCFG_DWS / f"{t['name']}.dep.json"
-                if not cfgp.is_file():
-                    continue
-                c = json.loads(cfgp.read_text(encoding="utf-8"))
-                expected = bool(c.get("same_workflow_predecessors") or
-                                c.get("cross_workflow") or c.get("mapping_deps"))
-                node = depmap.get("dep_" + t["name"])
-                if expected and not node:
-                    miss_dep.append(t["name"])
-                    continue
-                if not node:
-                    continue
-                tp = node.get("taskParams") or {}
-                if isinstance(tp, str):
-                    tp = json.loads(tp)
-                n = sum(len(g.get("dependItemList", []))
-                        for g in (tp.get("dependence") or {}).get("dependTaskList", []))
-                if expected and n == 0:
-                    miss_dep.append(t["name"])
-            print(f"       依赖节点缺失/空: {len(miss_dep)}")
-            if miss_dep:
-                print("       ", miss_dep[:8])
-            if w.get("releaseState") != "ONLINE" or bad or miss_dep:
-                rc = 1
+        rc |= _verify_dws_ds()
     return rc
 
 

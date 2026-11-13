@@ -8,7 +8,7 @@ import hashlib
 import json
 import os
 
-from tools.dwd.ns import safe_sysname
+from tools.core.safe_paths import safe_sysname
 
 from tools.dws import state as st
 
@@ -40,6 +40,45 @@ def _safe_group(group):
         return None
 
 
+def _entry_issues(entry):
+    """校验单个清单条目，返回问题列表（空 = 通过）。
+
+    ★ 2026-11-13：从 `dws_manifest_mismatches` 拆出（原函数 53 行）。
+      判定顺序不能改 —— 类型/路径/group 的检查必须在 sha 之前，
+      否则畸形条目会绕过「可报告」路径（见下）。
+    """
+    if not isinstance(entry, dict):
+        return [f"清单条目不是对象（{type(entry).__name__}）"]
+    name = entry.get("name")
+    if not isinstance(name, str):
+        # ★ 2026-11-10（评审复审）：name 非字符串时 `.endswith` 会抛
+        #   AttributeError，畸形清单直接崩而非被当作不一致上报。
+        return [f"name 不是字符串（{type(name).__name__}）"]
+    name = name or "?"
+    group = entry.get("group")
+    # ★ 放在 sha 校验**之前**：没有校验值的条目同样会被拼进路径，
+    #   只查「有 sha 的」等于给未登记项留后门。
+    if name.endswith(".sh") and os.path.basename(name) != name:
+        return [f"{name}: 文件名含路径分隔，拒绝拼路径"]
+    if name.endswith(".sh") and group and _safe_group(group) is None:
+        return [f"{name}: group 非法（{group!r}），拒绝拼路径"]
+    if "sha256" not in entry and "bytes" not in entry:
+        return []
+    if not name.endswith(".sh") or not group:
+        return [f"{name}: 有校验值但缺 group/文件名，无法核对"]
+    path = st.SCRIPTS / _safe_group(group) / "dws" / "02_etl" / name
+    if not path.is_file():
+        return [f"{name}: 清单有校验值但现盘无此脚本"]
+    blob = path.read_bytes()
+    if "bytes" in entry and entry["bytes"] != len(blob):
+        return [f"{name}: bytes 不符（清单 {entry['bytes']} / 现盘 {len(blob)}）"]
+    if "sha256" in entry:
+        digest = hashlib.sha256(blob).hexdigest()
+        if str(entry["sha256"]).lower() != digest:
+            return [f"{name}: sha256 不符"]
+    return []
+
+
 def dws_manifest_mismatches():
     """核对清单里已登记的 sha256/bytes。没有校验字段的条目不查。
 
@@ -56,42 +95,7 @@ def dws_manifest_mismatches():
         return [f"清单顶层不是 JSON 对象（{type(data).__name__}）"]
     bad = []
     for entry in data.get("files") or []:
-        if not isinstance(entry, dict):
-            bad.append(f"清单条目不是对象（{type(entry).__name__}）")
-            continue
-        name = entry.get("name")
-        if not isinstance(name, str):
-            # ★ 2026-11-10（评审复审）：name 非字符串时 `.endswith` 会抛
-            #   AttributeError，畸形清单直接崩而非被当作不一致上报。
-            bad.append(f"name 不是字符串（{type(name).__name__}）")
-            continue
-        name = name or "?"
-        group = entry.get("group")
-        # ★ 放在 sha 校验**之前**：没有校验值的条目同样会被拼进路径，
-        #   只查「有 sha 的」等于给未登记项留后门。
-        if name.endswith(".sh") and os.path.basename(name) != name:
-            bad.append(f"{name}: 文件名含路径分隔，拒绝拼路径")
-            continue
-        if name.endswith(".sh") and group and _safe_group(group) is None:
-            bad.append(f"{name}: group 非法（{group!r}），拒绝拼路径")
-            continue
-        if "sha256" not in entry and "bytes" not in entry:
-            continue
-        if not name.endswith(".sh") or not group:
-            bad.append(f"{name}: 有校验值但缺 group/文件名，无法核对")
-            continue
-        path = st.SCRIPTS / _safe_group(group) / "dws" / "02_etl" / name
-        if not path.is_file():
-            bad.append(f"{name}: 清单有校验值但现盘无此脚本")
-            continue
-        blob = path.read_bytes()
-        if "bytes" in entry and entry["bytes"] != len(blob):
-            bad.append(f"{name}: bytes 不符（清单 {entry['bytes']} / 现盘 {len(blob)}）")
-            continue
-        if "sha256" in entry:
-            digest = hashlib.sha256(blob).hexdigest()
-            if str(entry["sha256"]).lower() != digest:
-                bad.append(f"{name}: sha256 不符")
+        bad.extend(_entry_issues(entry))
     return bad
 
 

@@ -93,27 +93,8 @@ def parse_jf_ddl(path):
     return stmts
 
 
-def build_dws_ddl_from_jf(apply, strict=True, allow_stale=False):
-    """甲方 `02-DWS建表脚本.sql` → `scripts/{系统}/dws/ddl/*.sql` + `01_ddl.sql`。
-
-    为什么要清洗：甲方脚本是 Inceptor 方言，含 `DEFAULT NULL`（Hive 4.2 不支持）
-    与 `VARCHAR2(n)`；清洗规则与 DWD 共用 `sanitize_ddl`。
-    逐表文件只留 CREATE（DROP 由重建步骤自己拼 `DROP TABLE IF EXISTS`）。
-    ★ 2026-10-28：原先签名没有 `strict`，但落盘后自检失败时打印「加 --no-strict 可忽略继续」
-      —— 那个开关**根本没被接收**，照提示操作依旧 rc=1（提示与行为相反）。
-      现在真正接收 strict：False 时只告警不阻断。
-    """
-    if not st.SRC_DWS_DDL.is_file():
-        # ★ 2026-10-26：原先是 `return 0`（静默跳过）⇒ all 会带着旧 01_ddl.sql 一路走下去，
-        #   而 verify 只查「文件在不在」，不看「内容是否过期」⇒ 假绿。
-        #   甲方交付路径不可达属于环境问题，必须按失败上报（可用 DW_DELIVERY 指定）。
-        print(f"  ✗ {st.SRC_DWS_DDL} 不存在：甲方交付目录不可达（可用 DW_DELIVERY 指定），"
-              f"拒绝静默跳过")
-        return 1
-    stmts = parse_jf_ddl(st.SRC_DWS_DDL)
-    if not stmts:
-        print(f"  {st.SRC_DWS_DDL} 未解析出 CREATE TABLE")
-        return 1
+def _dws_ddl_owner(stmts, allow_stale):
+    """按归属把甲方 DWS 建表语句分到各系统，并打印统计（返回 have）。"""
     owner = dws_table_sys_map(allow_stale=allow_stale)
     have = {t: owner[t] for t in stmts if t in owner}
     miss = sorted(t for t in stmts if t not in owner)
@@ -123,10 +104,11 @@ def build_dws_ddl_from_jf(apply, strict=True, allow_stale=False):
     print(f"  甲方 DWS 建表 {len(stmts)} 张 | 可归属 {len(have)} {by_sys} | 未归属 {len(miss)}")
     if miss:
         print("    未归属（跳过）:", miss)
-    if not apply:
-        print("  (dry-run，未落盘)")
-        return 0
+    return have
 
+
+def _backup_dws_ddl():
+    """落盘前把现有 `ddl/` 与 `01_ddl.sql` 备份到 `tools/.dx-tmp`。"""
     ts = time.strftime("%Y%m%d-%H%M%S")
     bak = st.REPO / "tools/.dx-tmp" / f"backup-dws-ddl-{ts}"
     for s in st.SYS:
@@ -136,6 +118,11 @@ def build_dws_ddl_from_jf(apply, strict=True, allow_stale=False):
         if (d / "01_ddl.sql").is_file():
             (bak / s).mkdir(parents=True, exist_ok=True)
             shutil.copy2(d / "01_ddl.sql", bak / s / "01_ddl.sql")
+    return bak
+
+
+def _write_dws_ddl(have, stmts):
+    """逐表写 `ddl/*.sql`，再按系统重建 `01_ddl.sql`。"""
     for t, sysname in have.items():
         body = ("-- 来源: 甲方 02-DWS建表脚本.sql（dw-pipeline ddl）\n"
                 + stmts[t] + ";\n")
@@ -153,6 +140,38 @@ def build_dws_ddl_from_jf(apply, strict=True, allow_stale=False):
         (st.SCRIPTS / s / "dws/01_ddl.sql").write_text(
             "\n\n".join(parts) + "\n", encoding="utf-8", newline="\n")
         print(f"  {s}: 01_ddl.sql <- {len(parts)} 张表")
+
+
+def build_dws_ddl_from_jf(apply, strict=True, allow_stale=False):
+    """甲方 `02-DWS建表脚本.sql` → `scripts/{系统}/dws/ddl/*.sql` + `01_ddl.sql`。
+
+    为什么要清洗：甲方脚本是 Inceptor 方言，含 `DEFAULT NULL`（Hive 4.2 不支持）
+    与 `VARCHAR2(n)`；清洗规则与 DWD 共用 `sanitize_ddl`。
+    逐表文件只留 CREATE（DROP 由重建步骤自己拼 `DROP TABLE IF EXISTS`）。
+    ★ 2026-10-28：原先签名没有 `strict`，但落盘后自检失败时打印「加 --no-strict 可忽略继续」
+      —— 那个开关**根本没被接收**，照提示操作依旧 rc=1（提示与行为相反）。
+      现在真正接收 strict：False 时只告警不阻断。
+    ★ 2026-11-13：拆出 `_dws_ddl_owner` / `_backup_dws_ddl` / `_write_dws_ddl`，
+      输出顺序与拆分前逐行一致。
+    """
+    if not st.SRC_DWS_DDL.is_file():
+        # ★ 2026-10-26：原先是 `return 0`（静默跳过）⇒ all 会带着旧 01_ddl.sql 一路走下去，
+        #   而 verify 只查「文件在不在」，不看「内容是否过期」⇒ 假绿。
+        #   甲方交付路径不可达属于环境问题，必须按失败上报（可用 DW_DELIVERY 指定）。
+        print(f"  ✗ {st.SRC_DWS_DDL} 不存在：甲方交付目录不可达（可用 DW_DELIVERY 指定），"
+              f"拒绝静默跳过")
+        return 1
+    stmts = parse_jf_ddl(st.SRC_DWS_DDL)
+    if not stmts:
+        print(f"  {st.SRC_DWS_DDL} 未解析出 CREATE TABLE")
+        return 1
+    have = _dws_ddl_owner(stmts, allow_stale)
+    if not apply:
+        print("  (dry-run，未落盘)")
+        return 0
+
+    bak = _backup_dws_ddl()
+    _write_dws_ddl(have, stmts)
     print(f"  备份: {bak}")
     # 落盘后自检（本函数在非 apply 时已提前 return，此处必然 apply）
     rc = verify_ddl_after_write("DWS", have, stmts, st.SRC_DWS_DDL)
@@ -191,6 +210,46 @@ def _print_ddl_diff(diff, indent="    ", limit=5):
         print(f"{indent}- 仅{rl}有列: {', '.join(diff.only_in_right)}")
 
 
+def _write_drift_report(layer, ts, drift_items, lint_hits, jf_source):
+    """把落盘自检的问题写成 Markdown（与 DWS 的 ddl-drift 报告同目录）。"""
+    report = st.REPO / "tools/.dx-tmp" / f"ddl-drift-{layer.lower()}-{ts}.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"# {layer} DDL 与甲方差异报告 ({ts})", "", f"来源: {jf_source}", ""]
+    for table, sysname, diff in drift_items:
+        lines.append(f"## {table} ({sysname})")
+        lines.append(f"- 摘要: {diff.summary()}")
+        if diff.type_mismatch:
+            lines.append("### 类型不一致")
+            for col, lt, rt in diff.type_mismatch:
+                lines.append(f"- {col}: 甲方 `{lt}` / 本地 `{rt}`")
+        if diff.comment_mismatch:
+            lines.append("### 注释不一致")
+            for col, lc, rc in diff.comment_mismatch:
+                lines.append(f"- {col}: 甲方 `{lc}` / 本地 `{rc}`")
+        if diff.partition_mismatch:
+            lines.append("### 分区不一致")
+            lines.append(f"- 甲方: {[(c.name, c.type) for c in diff.left_partitions]}")
+            lines.append(f"- 本地: {[(c.name, c.type) for c in diff.right_partitions]}")
+        if diff.table_comment_mismatch:
+            lines.append("### 表注释不一致")
+            lines.append(f"- 甲方: `{diff.table_comment_mismatch[0]}`")
+            lines.append(f"- 本地: `{diff.table_comment_mismatch[1]}`")
+        if diff.only_in_left:
+            lines.append(f"- 仅甲方有列: {', '.join(diff.only_in_left)}")
+        if diff.only_in_right:
+            lines.append(f"- 仅本地有列: {', '.join(diff.only_in_right)}")
+        lines.append("")
+    if lint_hits:
+        lines.append("## 语句边界问题（beeline 按 `;` 切分会 ParseException）")
+        lines.append("")
+        for table, sysname, probs in lint_hits:
+            for p in probs:
+                lines.append(f"- **{table}** ({sysname}): {p}")
+        lines.append("")
+    report.write_text("\n".join(lines), encoding="utf-8")
+    print(f"  差异报告: {report}")
+
+
 def verify_ddl_after_write(layer: str, have: dict, stmts: dict, jf_source: Path):
     """落盘后把本地 DDL 与甲方原文逐表对比，打印差异并返回非零退出码（如有差异）。
 
@@ -198,6 +257,7 @@ def verify_ddl_after_write(layer: str, have: dict, stmts: dict, jf_source: Path)
       `diff_ddl` 只比列/分区/注释，甲方「DROP 缺分号 + 紧跟 CREATE」这类写法会被
       它判成「一致」而假绿；beeline 按 `;` 切分执行时却必然 ParseException。
       语句边界是**执行层**属性，必须单独一道。
+    ★ 2026-11-13：报告写出拆到 `_write_drift_report`（原函数 75 行）。
     """
     verify = _load_ddl_verify()
     all_ok = True
@@ -227,44 +287,8 @@ def verify_ddl_after_write(layer: str, have: dict, stmts: dict, jf_source: Path)
             print(f"  ✓ {table} ({sysname}) 与甲方一致")
 
     if not all_ok:
-        # 写入报告供后续排查
-        ts = time.strftime("%Y%m%d-%H%M%S")
-        report = st.REPO / "tools/.dx-tmp" / f"ddl-drift-{layer.lower()}-{ts}.md"
-        report.parent.mkdir(parents=True, exist_ok=True)
-        lines = [f"# {layer} DDL 与甲方差异报告 ({ts})", "", f"来源: {jf_source}", ""]
-        for table, sysname, diff in drift_items:
-            lines.append(f"## {table} ({sysname})")
-            lines.append(f"- 摘要: {diff.summary()}")
-            if diff.type_mismatch:
-                lines.append("### 类型不一致")
-                for col, lt, rt in diff.type_mismatch:
-                    lines.append(f"- {col}: 甲方 `{lt}` / 本地 `{rt}`")
-            if diff.comment_mismatch:
-                lines.append("### 注释不一致")
-                for col, lc, rc in diff.comment_mismatch:
-                    lines.append(f"- {col}: 甲方 `{lc}` / 本地 `{rc}`")
-            if diff.partition_mismatch:
-                lines.append("### 分区不一致")
-                lines.append(f"- 甲方: {[(c.name, c.type) for c in diff.left_partitions]}")
-                lines.append(f"- 本地: {[(c.name, c.type) for c in diff.right_partitions]}")
-            if diff.table_comment_mismatch:
-                lines.append("### 表注释不一致")
-                lines.append(f"- 甲方: `{diff.table_comment_mismatch[0]}`")
-                lines.append(f"- 本地: `{diff.table_comment_mismatch[1]}`")
-            if diff.only_in_left:
-                lines.append(f"- 仅甲方有列: {', '.join(diff.only_in_left)}")
-            if diff.only_in_right:
-                lines.append(f"- 仅本地有列: {', '.join(diff.only_in_right)}")
-            lines.append("")
-        if lint_hits:
-            lines.append("## 语句边界问题（beeline 按 `;` 切分会 ParseException）")
-            lines.append("")
-            for table, sysname, probs in lint_hits:
-                for p in probs:
-                    lines.append(f"- **{table}** ({sysname}): {p}")
-            lines.append("")
-        report.write_text("\n".join(lines), encoding="utf-8")
-        print(f"  差异报告: {report}")
+        _write_drift_report(layer, time.strftime("%Y%m%d-%H%M%S"),
+                            drift_items, lint_hits, jf_source)
     return 0 if all_ok else 1
 
 

@@ -61,8 +61,10 @@ def check_dwd_only_preflight(layers, block=True):
     if "DWD" in layers and "DWS" not in layers:
         try:
             ds, pcode, dws = ds_workflows(("DWS_",))
-        except Exception as e:
-            print(f"  ⚠ 无法检查 DWS 工作流: {e}")
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
+            # 连不上 / 会话坏 / 返回结构异常：预检降级为「不阻断」。
+            # 不接编程错误（AttributeError/NameError）—— 那是本模块自己的 bug。
+            print(f"  ⚠ 无法检查 DWS 工作流（{type(e).__name__}）: {e}")
             return True
         if dws:
             allwf = _ds_client().lst_of(ds.call(

@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-from tools.dwd.ns import safe_sysname
+from tools.core.safe_paths import safe_sysname
 
 # 仓库根入 sys.path，才能 import tools.core.loader（按绝对路径缓存，跨脚本同一份）。
 REPO = Path(__file__).resolve().parents[2]

@@ -544,5 +544,37 @@ class TestCmdAllSteps(unittest.TestCase):
         self.assertEqual(calls, ["scripts", "ddl", "lineage", "config", "verify"])
 
 
+class TestPatchBridgeCoverage(unittest.TestCase):
+    """★ 评审 M3：测试里替换的名字必须都在 `_PATCHABLE` 里。
+
+    名单是手工维护的；漏一个就会出现「补丁只改到 facade 副本、子模块仍用旧值」
+    的静默失效（2026-11-10 评审 H1 的同一类坑）。
+    """
+
+    PATCHED = ("REPO", "SCRIPTS", "SYS", "SRC_DWS_EXEC", "_STALE_MANIFEST_WARNED",
+               "cmd_scripts", "cmd_ddl", "cmd_verify_ddl", "cmd_lineage",
+               "cmd_config", "cmd_verify")
+
+    def test_all_patched_names_are_bridged(self):
+        for name in self.PATCHED:
+            self.assertIn(name, WP._PATCHABLE, f"{name} 需要加入 _PATCHABLE")
+
+    def test_assignment_reaches_state(self):
+        from tools.dws import state
+        saved = WP.SCRIPTS
+        self.addCleanup(setattr, WP, 'SCRIPTS', saved)
+        sentinel = Path(tempfile.gettempdir()) / 'dws-patch-probe'
+        WP.SCRIPTS = sentinel
+        self.assertEqual(state.SCRIPTS, sentinel)
+
+    def test_command_assignment_reaches_cli(self):
+        from tools.dws import cli
+        saved = WP.cmd_scripts
+        self.addCleanup(setattr, WP, 'cmd_scripts', saved)
+        sentinel = lambda _args: 7          # noqa: E731
+        WP.cmd_scripts = sentinel
+        self.assertIs(cli.cmd_scripts, sentinel)
+
+
 if __name__ == '__main__':
     unittest.main()
