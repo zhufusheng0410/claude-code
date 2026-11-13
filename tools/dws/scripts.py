@@ -6,7 +6,7 @@ import time
 from tools.core.loader import load as _load_file
 
 from tools.dws import state as st
-from tools.dws.args import _ap, layers_of
+from tools.dws.args import _ap, layers_of, stale_allowed
 from tools.dws.manifest import (StaleDwsManifest, dws_source_map,
                                 fail_stale)
 from tools.dws.process import gen_temp, run, sync_files
@@ -28,27 +28,29 @@ def stage_dws_from_jf(args=None):
     src_exec = st.SRC_DWS_EXEC
     if not src_exec.is_dir():
         print(f"  {src_exec} 不存在，跳过")
-        return 0, 0
+        return
     srcs = sorted(src_exec.glob("*.txt"))
     if not srcs:
         print(f"  {src_exec} 无 *.txt，跳过")
-        return 0, 0
+        return
 
-    allow = getattr(args, "allow_stale_dws_manifest", False)
+    allow = stale_allowed(args)
     mapping = dws_source_map(allow_stale=allow)
+    mod = _sh_repair()          # 循环外取一次：`_load_file` 每次都要算 realpath
     planned, same, deviated = [], [], []
     for p in srcs:
         sysname = mapping.get(p.stem)
         if not sysname:
             continue
-        dst = st.SCRIPTS / sysname / "dws/02_etl" / f"{p.stem}.sh"
-        if dst.is_file() and p.read_bytes() == dst.read_bytes():
-            same.append(p.stem)
-            continue
-        if dst.is_file() and _sh_repair().DEVIATION_MARK in \
-                dst.read_bytes().decode("utf-8", "replace"):
-            deviated.append(p.stem)
-            continue
+        dst = st.dws_etl_dir(sysname) / f"{p.stem}.sh"
+        if dst.is_file():
+            blob = dst.read_bytes()      # 只读一次：比较与 DEVIATION_MARK 共用
+            if p.read_bytes() == blob:
+                same.append(p.stem)
+                continue
+            if mod.DEVIATION_MARK in blob.decode("utf-8", "replace"):
+                deviated.append(p.stem)
+                continue
         planned.append((sysname, p, dst))
 
     total = len(planned) + len(same) + len(deviated)
@@ -65,80 +67,58 @@ def stage_dws_from_jf(args=None):
         print("  ⚠ 与仓库存在差异，只比对不覆盖（仓库版才是可执行基线）")
     elif not deviated:
         print(f"  甲方 DWS {total} 个与仓库完全一致")
-    return total, len(planned)
 
 
-def _sync_dwd_scripts(args):
-    """DWD 脚本：jf 走 convert/distribute；gen 跑生成器并把产物同步进仓库。"""
-    if args.source == "jf":
-        rc = run([st.PY, st.DWD_PIPE, "convert"] + _ap(args))[0]
-        rc |= run([st.PY, st.DWD_PIPE, "distribute"] + _ap(args))[0]
-        return rc
+def _sync_dws_jf(args):
+    """DWS jf 模式：只比对甲方原文（不覆盖），并核对仓库脚本数。"""
+    try:
+        stage_dws_from_jf(args)
+    except StaleDwsManifest as exc:
+        return fail_stale(exc)
+    n_repo = sum(len(list(st.dws_etl_dir(s).glob("*.sh")))
+                 for s in st.SYS)
+    print(f"  DWS 脚本合计（仓库） {n_repo}")
+    if n_repo != st.DWS_EXPECT_SCRIPTS:
+        print(f"  ⚠ 预期 {st.DWS_EXPECT_SCRIPTS} 个 DWS 脚本")
+        return 1
+    return 0
+
+
+def _sync_generated(args, layer, require_output):
+    """gen 模式：跑生成器，把产物同步进 `scripts/{系统}/{layer}/`。
+
+    ``require_output``：生成器没产出该系统目录时是否算失败（DWD 算，DWS 只跳过）。
+    ★ 2026-11-13：原 `_sync_dwd_scripts` / `_sync_dws_scripts` 的 gen 分支逐字相同，
+      只是层名与「缺目录」策略不同 —— 合并成一个。
+    """
     rc = 0
-    tmp = gen_temp("dw-gen-dwd")
+    tmp = gen_temp(f"dw-gen-{layer.lower()}")
     # ★ 2026-10-26：原先 `return 1`（生成器 ERROR）落在 rmtree 之前，
     #   且 dry-run 也真写盘 ⇒ `scripts/.dw-gen-*` 越积越多；
     #   而残留 .sh 会被血缘→depcfg→deploy 自动识别成作业（AGENTS.md 已警告）。
     #   改用 try/finally：无论成功/失败/dry-run 都清干净。
     try:
-        code, out = run([st.PY, st.GEN_MAIN, "--layer", "DWD", "--output", tmp],
+        code, out = run([st.PY, st.GEN_MAIN, "--layer", layer, "--output", tmp],
                         capture=True)
         rc |= code
         if "[ERROR" in out and not getattr(args, "allow_gen_errors", False):
-            print("  ✗ DWD 生成器有 ERROR 日志；修 MAPPING 后重跑，或加 --allow-gen-errors")
+            print(f"  ✗ {layer} 生成器有 ERROR 日志；修 MAPPING 后重跑，或加 --allow-gen-errors")
             return 1
         for s in st.SYS:
-            src = tmp / s / "dwd"
+            src = tmp / s / layer.lower()
             if not src.is_dir():
-                print(f"  ⚠ 生成器未产出 {s}/dwd")
-                rc = 1
+                if require_output:
+                    print(f"  ⚠ 生成器未产出 {s}/{layer.lower()}")
+                    rc = 1
                 continue
-            sync_files(src / "02_etl", st.SCRIPTS / s / "dwd/02_etl", args.apply,
-                       backup=True, label=f"{s} DWD ETL")
+            dst = st.SCRIPTS / s / layer.lower()
+            sync_files(src / "02_etl", dst / "02_etl", args.apply,
+                       backup=True, label=f"{s} {layer} ETL")
             for sub in ("ddl", "lineage", "data_dict"):
-                sync_files(src / sub, st.SCRIPTS / s / "dwd" / sub, args.apply,
-                           pattern="*", label=f"{s} DWD {sub}")
-            sync_files(src, st.SCRIPTS / s / "dwd", args.apply, pattern="01_ddl.sql",
-                       label=f"{s} DWD 01_ddl.sql")
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-    return rc
-
-
-def _sync_dws_scripts(args):
-    """DWS 脚本：jf 只比对甲方原文（不覆盖）；gen 跑生成器并同步。"""
-    if args.source == "jf":
-        try:
-            stage_dws_from_jf(args)
-        except StaleDwsManifest as exc:
-            return fail_stale(exc)
-        n_repo = sum(len(list((st.SCRIPTS / s / "dws/02_etl").glob("*.sh")))
-                     for s in st.SYS)
-        print(f"  DWS 脚本合计（仓库） {n_repo}")
-        if n_repo != st.DWS_EXPECT_SCRIPTS:
-            print(f"  ⚠ 预期 {st.DWS_EXPECT_SCRIPTS} 个 DWS 脚本")
-            return 1
-        return 0
-    rc = 0
-    tmp = gen_temp("dw-gen-dws")
-    try:
-        code, out = run([st.PY, st.GEN_MAIN, "--layer", "DWS", "--output", tmp],
-                        capture=True)
-        rc |= code
-        if "[ERROR" in out and not getattr(args, "allow_gen_errors", False):
-            print("  ✗ DWS 生成器有 ERROR 日志；修 MAPPING 后重跑，或加 --allow-gen-errors")
-            return 1
-        for s in st.SYS:
-            src = tmp / s / "dws"
-            if not src.is_dir():
-                continue
-            sync_files(src / "02_etl", st.SCRIPTS / s / "dws/02_etl", args.apply,
-                       backup=True, label=f"{s} DWS ETL")
-            for sub in ("ddl", "lineage", "data_dict"):
-                sync_files(src / sub, st.SCRIPTS / s / "dws" / sub, args.apply,
-                           pattern="*", label=f"{s} DWS {sub}")
-            sync_files(src, st.SCRIPTS / s / "dws", args.apply, pattern="01_ddl.sql",
-                       label=f"{s} DWS 01_ddl.sql")
+                sync_files(src / sub, dst / sub, args.apply,
+                           pattern="*", label=f"{s} {layer} {sub}")
+            sync_files(src, dst, args.apply, pattern="01_ddl.sql",
+                       label=f"{s} {layer} 01_ddl.sql")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return rc
@@ -149,10 +129,17 @@ def cmd_scripts(args):
     rc = 0
     if "DWD" in layers:
         print("== DWD scripts ==")
-        rc |= _sync_dwd_scripts(args)
+        if args.source == "jf":
+            rc |= run([st.PY, st.DWD_PIPE, "convert"] + _ap(args))[0]
+            rc |= run([st.PY, st.DWD_PIPE, "distribute"] + _ap(args))[0]
+        else:
+            rc |= _sync_generated(args, "DWD", require_output=True)
     if "DWS" in layers:
         print("== DWS scripts ==")
-        rc |= _sync_dws_scripts(args)
+        if args.source == "jf":
+            rc |= _sync_dws_jf(args)
+        else:
+            rc |= _sync_generated(args, "DWS", require_output=False)
     return rc
 
 

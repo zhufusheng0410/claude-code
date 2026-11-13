@@ -25,6 +25,16 @@ def _dry(args):
     return [] if getattr(args, "apply", False) else ["--dry-run"]
 
 
+def stale_allowed(args):
+    """是否放行「清单与现盘不一致」（`--allow-stale-dws-manifest`）。"""
+    return getattr(args, "allow_stale_dws_manifest", False)
+
+
+def strict_of(args):
+    """DDL 校验是否阻断（默认阻断；`--no-strict` 关闭）。"""
+    return not getattr(args, "no_strict", False)
+
+
 def _dwd_ddl_cmd(args):
     """DWD DDL 子命令参数：透传 `--apply` 与 `--no-strict`。
 

@@ -27,13 +27,12 @@ def cmd_all(args):
             return r
     if args.deploy:
         print("\n===== deploy =====")
-        rc |= cmd_deploy(args)
+        rc = cmd_deploy(args)
         if rc:
             return rc
         args.ds = True
     print("\n===== verify =====")
-    rc |= cmd_verify(args)
-    return rc
+    return cmd_verify(args)
 
 
 # --------------------------------------------------------------------------- #
@@ -55,12 +54,11 @@ OPT = {
         action="store_true", help="连 DolphinScheduler 回读（工作流状态、脚本一致性）")),
     "deploy": (("--deploy",), dict(
         action="store_true", help="all 末尾追加删除/重建/排版")),
-    "gen_err": (("--allow-gen-errors",), dict(
+    "allow_gen_errors": (("--allow-gen-errors",), dict(
         action="store_true", help="gen 模式忽略生成器 ERROR 日志（仍会复制产物）")),
-    "stale_manifest": (("--allow-stale-dws-manifest",), dict(
+    "allow_stale_dws_manifest": (("--allow-stale-dws-manifest",), dict(
         action="store_true",
-        help="清单 sha256/bytes 与现盘不一致时仍继续（不刷新清单、不覆盖脚本）")),
-    "no_strict": (("--no-strict",), dict(
+        help="清单 sha256/bytes 与现盘不一致时仍继续（不刷新清单、不覆盖脚本）")),    "no_strict": (("--no-strict",), dict(
         action="store_true", help="DDL 校验发现差异时不阻断（默认阻断）")),
     "strict": (("--strict",), dict(
         action="store_true",
@@ -69,11 +67,14 @@ OPT = {
 
 # 子命令 → (处理函数, 用到的参数, 一行说明)
 SUBCOMMANDS = {
-    "scripts": (cmd_scripts, ("layers", "source", "apply", "gen_err", "stale_manifest"),
+    "scripts": (cmd_scripts, ("layers", "source", "apply", "allow_gen_errors",
+                              "allow_stale_dws_manifest"),
                 "同步/生成脚本（jf 搬甲方 txt；gen 跑生成器）"),
-    "ddl": (cmd_ddl, ("layers", "source", "apply", "no_strict", "stale_manifest"),
+    "ddl": (cmd_ddl, ("layers", "source", "apply", "no_strict",
+                      "allow_stale_dws_manifest"),
             "重建建表语句（含 Inceptor 方言清洗，落盘后自检与甲方一致）"),
-    "verify-ddl": (cmd_verify_ddl, ("layers", "source", "no_strict", "stale_manifest"),
+    "verify-ddl": (cmd_verify_ddl, ("layers", "source", "no_strict",
+                                    "allow_stale_dws_manifest"),
                    "仅校验本地 DDL 与甲方一致性（不落盘）"),
     "lineage": (cmd_lineage, ("layers", "apply"), "重建依赖/血缘工作簿"),
     "config": (cmd_config, ("layers", "apply"), "生成 DS 依赖配置 dep-config-*"),
@@ -83,8 +84,8 @@ SUBCOMMANDS = {
     "repair": (cmd_repair, ("layers", "apply"),
                "拼接副本修复：只保留第 1 个 beeline 的完整 SQL"),
     "verify": (cmd_verify, ("layers", "ds", "strict"), "校验脚本/DDL/依赖配置"),
-    "all": (cmd_all, ("layers", "source", "apply", "ds", "deploy", "gen_err",
-                      "stale_manifest", "no_strict", "strict"),
+    "all": (cmd_all, ("layers", "source", "apply", "ds", "deploy", "allow_gen_errors",
+                      "allow_stale_dws_manifest", "no_strict", "strict"),
             "串跑 scripts→ddl→verify-ddl→lineage→config→(deploy)→verify"),
 }
 

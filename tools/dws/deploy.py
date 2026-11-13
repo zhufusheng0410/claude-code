@@ -88,20 +88,26 @@ def check_dwd_only_preflight(layers, block=True):
     return True
 
 
+def _run_steps(steps, hint=""):
+    """顺序跑子进程步骤；任一失败即返回其 rc（不继续，避免 DS 留半成品）。"""
+    for label, cmd in steps:
+        print(f"== {label} ==")
+        rc = run(cmd)[0]
+        if rc:
+            print(f"  ✗ {label} 失败（rc={rc}）{hint}")
+            return rc
+    return 0
+
+
 def cmd_delete(args):
     layers = layers_of(args)
     if not check_dwd_only_preflight(layers, block=args.apply) and args.apply:
         return 1
     # 顺序固定：先删 DWS 释放对 DWD 的引用，再删 DWD（反过来会被 DS 拒绝）
-    for layer, label in (("DWS", "删除 DWS 工作流"), ("DWD", "删除 DWD 工作流")):
-        if layer in layers:
-            print(f"== {label} ==")
-            rc = run([st.PY, st.DEPLOY_ALL, "--layer", layer, "--delete-only"]
-                     + _dry(args))[0]
-            if rc:
-                print(f"  ✗ {label} 失败（rc={rc}）⇒ 中止（继续往下删会被 DS 拒绝）")
-                return rc
-    return 0
+    steps = [(f"删除 {layer} 工作流",
+              [st.PY, st.DEPLOY_ALL, "--layer", layer, "--delete-only"] + _dry(args))
+             for layer in ("DWS", "DWD") if layer in layers]
+    return _run_steps(steps, " ⇒ 中止（继续往下删会被 DS 拒绝）")
 
 
 def cmd_deploy(args):
@@ -111,19 +117,17 @@ def cmd_deploy(args):
     # 顺序固定：预删 DWS → 删/建 DWD → 建 DWS（跨层引用不会挡删）
     steps = []
     if "DWS" in layers:
-        steps.append(("预删 DWS（释放对 DWD 的引用）", ["--layer", "DWS", "--delete-only"]))
+        steps.append(("预删 DWS（释放对 DWD 的引用）",
+                      [st.PY, st.DEPLOY_ALL, "--layer", "DWS", "--delete-only"] + _dry(args)))
     if "DWD" in layers:
-        steps.append(("删除并重建 DWD", ["--layer", "DWD"]))
+        steps.append(("删除并重建 DWD",
+                      [st.PY, st.DEPLOY_ALL, "--layer", "DWD"] + _dry(args)))
     if "DWS" in layers:
-        steps.append(("创建 DWS", ["--layer", "DWS"]))
-    # ★ 2026-10-26：原先是 `rc |= run(...)` 一路累计 ⇒ DWD 重建失败仍会继续「创建 DWS」，
-    #   把「未部署」变成「DWS 引用缺失上游的半坏状态」。改为失败即中止。
-    for label, extra in steps:
-        print(f"== {label} ==")
-        rc = run([st.PY, st.DEPLOY_ALL] + extra + _dry(args))[0]
-        if rc:
-            print(f"  ✗ {label} 失败（rc={rc}）⇒ 中止后续步骤，避免 DS 留下半成品")
-            return rc
+        steps.append(("创建 DWS",
+                      [st.PY, st.DEPLOY_ALL, "--layer", "DWS"] + _dry(args)))
+    rc = _run_steps(steps, " ⇒ 中止后续步骤，避免 DS 留下半成品")
+    if rc:
+        return rc
     if args.apply:
         for layer in ("DWD", "DWS"):
             if layer in layers:

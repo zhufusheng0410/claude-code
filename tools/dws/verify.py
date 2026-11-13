@@ -3,7 +3,7 @@
 import json
 
 from tools.dws import state as st
-from tools.dws.args import layers_of
+from tools.dws.args import layers_of, stale_allowed, strict_of
 from tools.dws.ddl import (_load_ddl_verify, _print_ddl_diff, dws_table_sys_map,
                            parse_jf_ddl, verify_ddl_vs_jf)
 from tools.dws.deploy import ds_workflows
@@ -15,7 +15,7 @@ from tools.dws.scripts import _sh_repair
 def cmd_verify_ddl(args):
     """仅校验本地 DDL 与甲方一致性（不落盘，不改文件）。"""
     layers = layers_of(args)
-    strict = not getattr(args, "no_strict", False)
+    strict = strict_of(args)
     rc = 0
     if "DWS" in layers:
         print("== DWS DDL 校验 ==")
@@ -24,8 +24,7 @@ def cmd_verify_ddl(args):
             return 1
         stmts = parse_jf_ddl(st.SRC_DWS_DDL)
         try:
-            owner = dws_table_sys_map(
-                allow_stale=getattr(args, "allow_stale_dws_manifest", False))
+            owner = dws_table_sys_map(allow_stale=stale_allowed(args))
         except StaleDwsManifest as exc:
             return fail_stale(exc)
         have = {t: owner[t] for t in stmts if t in owner}
@@ -64,35 +63,53 @@ def cmd_verify_ddl(args):
     return rc
 
 
+def _check_dws_system(s, mod, read_script):
+    """单个系统的 DWS 脚本检查。返回 ``(脚本数, rc, 无法判定数)``。"""
+    b = {p.name: p for p in st.dws_etl_dir(s).glob("*.sh")}
+    bad, skipped = [], 0
+    texts = {}
+    for name, p in sorted(b.items()):
+        try:
+            texts[name] = read_script(p)
+        except OSError:
+            skipped += 1
+            continue
+        r = shell_syntax(p, texts[name])
+        if r == "bad":
+            bad.append(name)
+        elif r == "skip":
+            skipped += 1
+    tail = f" / 无法判定 {skipped}" if skipped else ""
+    print(f"  {s}: scripts {len(b)} / 语法通过 {len(b) - len(bad) - skipped}{tail}")
+    rc = 0
+    if bad:
+        print("    ", bad[:8])
+        rc = 1
+    # 拼接副本（SQL 调用 >1）单独报：它可能语法上是「通」的，但会重复执行 SQL
+    dup = [name for name in sorted(texts) if mod.count_sql_calls(texts[name]) > 1]
+    if dup:
+        print(f"    ⚠ 拼接副本（SQL 调用 >1）→ 跑 repair 子命令: {dup}")
+        rc = 1
+    return len(b), rc, skipped
+
+
 def _verify_dws_local(strict=False):
-    """DWS 本地检查：bash -n 语法、拼接副本、脚本/依赖数量。"""
+    """DWS 本地检查：bash -n 语法、拼接副本、脚本/依赖数量。
+
+    ★ 2026-11-13：每个脚本只读一次（语法检查与拼接副本共用文本），
+      `_sh_repair()` 与 `read_script` 在循环外取一次。
+    """
     rc = 0
     print("== DWS 本地 ==")
+    mod = _sh_repair()
+    read_script = st.ds_deploy()[1].read_script
     total = 0
     skipped_all = 0
     for s in st.SYS:
-        b = {p.name: p for p in (st.SCRIPTS / s / "dws/02_etl").glob("*.sh")}
-        total += len(b)
-        bad, skipped = [], 0
-        for name, p in sorted(b.items()):
-            r = shell_syntax(p)
-            if r == "bad":
-                bad.append(name)
-            elif r == "skip":
-                skipped += 1
+        n, system_rc, skipped = _check_dws_system(s, mod, read_script)
+        total += n
         skipped_all += skipped
-        tail = f" / 无法判定 {skipped}" if skipped else ""
-        print(f"  {s}: scripts {len(b)} / 语法通过 {len(b) - len(bad) - skipped}{tail}")
-        if bad:
-            print("    ", bad[:8])
-            rc = 1
-        # 拼接副本（SQL 调用 >1）单独报：它可能语法上是「通」的，但会重复执行 SQL
-        dup = [name for name, p in sorted(b.items())
-               if _sh_repair().count_sql_calls(
-                   p.read_bytes().decode("utf-8", "replace")) > 1]
-        if dup:
-            print(f"    ⚠ 拼接副本（SQL 调用 >1）→ 跑 repair 子命令: {dup}")
-            rc = 1
+        rc |= system_rc
     if skipped_all:
         print(f"  ⚠ {skipped_all}/{total} 个脚本的 bash -n 未能执行（环境安全策略拦截），"
               f"语法结果不可判定")

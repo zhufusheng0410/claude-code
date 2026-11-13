@@ -40,11 +40,10 @@ _PATCHABLE = {
     'REPO': _state, 'SCRIPTS': _state, 'SYS': _state, 'GROUPS': _state,
     'SRC_DWS_EXEC': _state, 'SRC_DWS_DDL': _state, 'SRC_DWD_DDL': _state,
     '_STALE_MANIFEST_WARNED': _manifest,
-    # ★ 测试会替换 `cmd_*` 来验证 `all` 的编排；`cli.cmd_all` 按名字查自己的全局，
-    #   必须同步写穿，否则补丁只改到 facade 的副本（同 2026-11-10 评审 H1 的坑）。
-    'cmd_scripts': _cli, 'cmd_ddl': _cli, 'cmd_verify_ddl': _cli,
-    'cmd_lineage': _cli, 'cmd_config': _cli, 'cmd_verify': _cli, 'cmd_deploy': _cli,
 }
+# ★ 2026-11-13（简化）：`cmd_*` 交给 `cli.cmd_all` 按名字查全局，测试替换时必须
+#   同步写穿；这里从 cli 自动派生，新增命令不用再手工登记。
+_PATCHABLE.update({n: _cli for n in vars(_cli) if n.startswith('cmd_')})
 
 
 _EXPORT_SKIP = (types.ModuleType,)

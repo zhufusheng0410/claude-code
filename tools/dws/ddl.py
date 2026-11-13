@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """DDL 解析、清洗、落盘与比对（DWS 为主，DWD 侧只做存在性/委托）。"""
-import json
 import re
 import shutil
 import time
@@ -9,7 +8,7 @@ from pathlib import Path
 from tools.core.loader import load as _load_file
 
 from tools.dws import state as st
-from tools.dws.args import _dwd_ddl_cmd, layers_of
+from tools.dws.args import _dwd_ddl_cmd, layers_of, stale_allowed, strict_of
 from tools.dws.manifest import (StaleDwsManifest, _guard_dws_manifest,
                                 _safe_group, fail_stale)
 from tools.dws.process import run
@@ -21,18 +20,13 @@ def _load_ddl_verify():
 
 
 def _dwd_sanitize_mod():
-    """`tools/core/ddl_sanitize.py` **模块对象**（需要 sanitize_ddl 之外的函数时用）。"""
-    return _load_file(st.REPO / "tools/core/ddl_sanitize.py")
-
-
-def _dwd_sanitize():
-    """`tools/core/ddl_sanitize.py::sanitize_ddl`（单一来源，避免两处正则漂移）。
+    """`tools/core/ddl_sanitize.py` **模块对象**（需要 sanitize_ddl 之外的函数时用）。
 
     ★ 2026-10-26：原先 exec 整个 `dwd-pipeline.py`（86KB，模块级 import openpyxl）只为拿
-      这一个函数 ⇒ 缺 openpyxl 时 `ddl --layers DWS` 直接 ModuleNotFoundError。
+      `sanitize_ddl` ⇒ 缺 openpyxl 时 `ddl --layers DWS` 直接 ModuleNotFoundError。
       指向独立小模块（只依赖 re）。
     """
-    return _dwd_sanitize_mod().sanitize_ddl
+    return _load_file(st.REPO / "tools/core/ddl_sanitize.py")
 
 
 def dws_table_sys_map(allow_stale=False):
@@ -42,16 +36,12 @@ def dws_table_sys_map(allow_stale=False):
       只取其一会让 cmd_verify_ddl 静默跳过缺失的表（校验变弱、不报错）。
     ★ 清单带 sha256/bytes 时必须与现盘一致，否则抛 StaleDwsManifest（不改清单）。
     """
-    _guard_dws_manifest(allow_stale)
+    data = _guard_dws_manifest(allow_stale)
     m = {}
     for s in st.SYS:
         for p in (st.SCRIPTS / s / "dws/ddl").glob("*.sql"):
             m[p.stem.upper()] = s
-    manifest = st.SCRIPTS / "_DWS搬移清单.json"
-    if manifest.is_file():
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            data = {}
+    if data is not None:
         for f in data.get("files") or []:
             if not isinstance(f, dict):
                 continue
@@ -79,7 +69,8 @@ def parse_jf_ddl(path):
     ★ 2026-11-09（评审 A1）：剥 DROP 改用 `strip_drop_stmts`，**不再要求 DROP 行
       自带分号**。甲方偶发的不规范写法（见上方注释）此前会被漏剥。
     """
-    sanitize = _dwd_sanitize()
+    mod = _dwd_sanitize_mod()
+    sanitize = mod.sanitize_ddl
     raw = Path(path).read_text(encoding="utf-8", errors="replace")
     stmts = {}
     for chunk in re.split(r";\s*(?:\r?\n)", raw):
@@ -88,7 +79,9 @@ def parse_jf_ddl(path):
         if not m:
             continue
         # 只移除 DROP TABLE IF EXISTS（分号可有可无），中间留 CREATE TABLE
-        body = _dwd_sanitize_mod().strip_drop_stmts(chunk)
+        # ★ 2026-11-13：模块对象在循环外取一次 —— 每次 `_load_file` 都要算
+        #   `realpath`（本机 drvfs 约 15ms），逐 chunk 调用曾占 DWD 建表解析的一半时间。
+        body = mod.strip_drop_stmts(chunk)
         stmts.setdefault(m.group(1).upper(), sanitize(body))
     return stmts
 
@@ -307,7 +300,7 @@ def _stale_warn(src, dst, label):
 
 def cmd_ddl(args):
     layers = layers_of(args)
-    strict = not getattr(args, "no_strict", False)
+    strict = strict_of(args)
     rc = 0
     if "DWD" in layers:
         print("== DWD DDL ==")
@@ -325,8 +318,7 @@ def cmd_ddl(args):
         if args.source == "jf":
             try:
                 rc |= build_dws_ddl_from_jf(
-                    args.apply, strict,
-                    allow_stale=getattr(args, "allow_stale_dws_manifest", False))
+                    args.apply, strict, allow_stale=stale_allowed(args))
             except StaleDwsManifest as exc:
                 return fail_stale(exc)
             if strict:

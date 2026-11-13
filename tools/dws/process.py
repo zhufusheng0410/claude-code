@@ -12,18 +12,18 @@ from pathlib import Path
 from tools.dws import state as st
 
 
-def run(cmd, capture=False, timeout=None):
+def run(cmd, capture=False):
     """跑子进程；返回 (returncode, 输出)。
 
     ★ 捕获输出时固定 UTF-8 + errors=replace：Windows 下子进程的中文日志按
       locale（cp936）解码会抛 UnicodeDecodeError —— 与 `shell_syntax` 里
       已经修过的是同一类坑，只是主执行路径原先没跟上（本机 UTF-8 侥幸不炸）。
-    ★ 显式 timeout（默认 RUN_TIMEOUT）：DS API 挂住时不留无限等待；
+    ★ 统一超时（`DW_RUN_TIMEOUT`，默认 1800s）：DS API 挂住时不留无限等待；
       超时按失败返回 124，不抛异常，调用方统一走 rc 判定。
     """
     cmd = [str(x) for x in cmd]
     print("$", " ".join(cmd), flush=True)
-    timeout = st.RUN_TIMEOUT if timeout is None else timeout
+    timeout = st.RUN_TIMEOUT
     try:
         if capture:
             p = subprocess.run(cmd, cwd=str(st.REPO), text=True, capture_output=True,
@@ -91,8 +91,10 @@ def gen_temp(prefix):
     return p
 
 
-def shell_syntax(p):
+def shell_syntax(p, text=None):
     """`bash -n` 语法检查：'ok' / 'bad' / 'skip'（skip = 环境拦住 bash，无法判定）。
+
+    ``text`` 可传入**已读到的脚本文本**，避免调用方为别的检查再读一次盘。
 
     ★ 四个坑（全部实测过，别退回单一写法）：
       ① 沙箱/安全策略拦住 bash 启动时，stderr 是 UTF-16LE 的「拒绝访问」（含 \\x00），
@@ -107,10 +109,11 @@ def shell_syntax(p):
       ④ stdin 必须传 **bytes**：`text=True` 在 Windows 会把 `\\n` 反向翻译成 `\\r\\n`，
          CRLF 又回来了、照样 `$'\\r'` 报错（这个坑最隐蔽）。
     """
-    try:
-        text = st.ds_deploy()[1].read_script(p)
-    except OSError:
-        return "skip"
+    if text is None:
+        try:
+            text = st.ds_deploy()[1].read_script(p)
+        except OSError:
+            return "skip"
     try:
         r = subprocess.run(["bash", "-n", "-"], input=text.encode("utf-8"),
                            capture_output=True, timeout=60)

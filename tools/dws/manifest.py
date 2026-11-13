@@ -79,67 +79,77 @@ def _entry_issues(entry):
     return []
 
 
+def _print_issues(items, head):
+    """统一打印「前 8 条 + 其余 N 条」（告警与失败两条路径共用）。"""
+    print(head)
+    for line in items[:8]:
+        print(f"    {line}")
+    if len(items) > 8:
+        print(f"    … 其余 {len(items) - 8} 条")
+
+
+def _read_manifest():
+    """读清单并逐条校验，返回 ``(data | None, issues)``。
+
+    ★ 2026-11-13：清单**只解析一次**。此前 `_guard_dws_manifest` 校验一遍、
+      `dws_source_map` 又读一遍，`all` 每条命令都重复 2 次解析 + 24 次
+      sha256（本机实测每次 ~0.45s）。
+    """
+    manifest = st.SCRIPTS / "_DWS搬移清单.json"
+    if not manifest.is_file():
+        return None, []
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return None, [f"清单不是合法 JSON（{type(exc).__name__}: {exc}）"]
+    if not isinstance(data, dict):
+        return None, [f"清单顶层不是 JSON 对象（{type(data).__name__}）"]
+    issues = []
+    for entry in data.get("files") or []:
+        issues.extend(_entry_issues(entry))
+    return data, issues
+
+
 def dws_manifest_mismatches():
     """核对清单里已登记的 sha256/bytes。没有校验字段的条目不查。
 
     只读。不刷新、不重写 `_DWS搬移清单.json`。
     """
-    manifest = st.SCRIPTS / "_DWS搬移清单.json"
-    if not manifest.is_file():
-        return []
-    try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        return [f"清单不是合法 JSON（{type(exc).__name__}: {exc}）"]
-    if not isinstance(data, dict):
-        return [f"清单顶层不是 JSON 对象（{type(data).__name__}）"]
-    bad = []
-    for entry in data.get("files") or []:
-        bad.extend(_entry_issues(entry))
-    return bad
+    return _read_manifest()[1]
 
 
 _STALE_MANIFEST_WARNED = False
 
 
 def _guard_dws_manifest(allow_stale=False):
-    """sha/bytes 不符则抛 StaleDwsManifest；显式放行只告警，仍不改清单。"""
+    """校验清单；返回已解析的 dict（无清单/不可解析 → None），供调用方复用。
+
+    不符时抛 :class:`StaleDwsManifest`；显式放行只告警一次，仍不改清单。
+    """
     global _STALE_MANIFEST_WARNED
-    bad = dws_manifest_mismatches()
+    data, bad = _read_manifest()
     if not bad:
-        return
+        return data
     if allow_stale:
         if not _STALE_MANIFEST_WARNED:
             _STALE_MANIFEST_WARNED = True
-            print(f"  ⚠ _DWS搬移清单.json 与现盘不一致 {len(bad)} 条"
-                  f"（--allow-stale-dws-manifest：仍用 group，不刷新清单）")
-            for line in bad[:8]:
-                print(f"    {line}")
-            if len(bad) > 8:
-                print(f"    … 其余 {len(bad) - 8} 条")
-        return
+            _print_issues(bad, f"  ⚠ _DWS搬移清单.json 与现盘不一致 {len(bad)} 条"
+                               f"（--allow-stale-dws-manifest：仍用 group，不刷新清单）")
+        return data
     raise StaleDwsManifest(bad)
 
 
 def fail_stale(exc):
     """把 StaleDwsManifest 打印成人话并返回退出码 1。"""
-    print(f"  ✗ {exc}")
-    for line in exc.mismatches[:8]:
-        print(f"    {line}")
-    if len(exc.mismatches) > 8:
-        print(f"    … 其余 {len(exc.mismatches) - 8} 条")
+    _print_issues(exc.mismatches, f"  ✗ {exc}")
     print("  加 --allow-stale-dws-manifest 可继续（不刷新清单、不覆盖脚本）")
     return 1
 
 
 def dws_source_map(allow_stale=False):
     """DWS 脚本名（去 .sh）→ 所属系统；清单优先，缺失时回退目录扫描。"""
-    _guard_dws_manifest(allow_stale)
-    manifest = st.SCRIPTS / "_DWS搬移清单.json"
-    if manifest.is_file():
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            data = {}
+    data = _guard_dws_manifest(allow_stale)
+    if data is not None:
         mapping = {}
         for f in data.get("files") or []:
             if not isinstance(f, dict):
@@ -150,4 +160,4 @@ def dws_source_map(allow_stale=False):
                 mapping[name[:-3]] = group
         if mapping:
             return mapping
-    return {p.stem: s for s in st.SYS for p in (st.SCRIPTS / s / "dws/02_etl").glob("*.sh")}
+    return {p.stem: s for s in st.SYS for p in st.dws_etl_dir(s).glob("*.sh")}

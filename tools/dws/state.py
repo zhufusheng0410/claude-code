@@ -99,3 +99,9 @@ def ddl_main(sysname):
     safe_sysname(sysname)
     return (SCRIPTS / "MASTER/dwd/01_ddl.sql") if sysname == "主数据" \
         else (SCRIPTS / sysname / "dwd/01_ddl.sql")
+
+
+def dws_etl_dir(sysname):
+    """DWS 脚本目录 `scripts/<系统>/dws/02_etl`（带路径校验）。"""
+    safe_sysname(sysname)
+    return SCRIPTS / sysname / "dws/02_etl"
