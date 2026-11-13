@@ -330,6 +330,64 @@ class TestManifestGroupTraversal(unittest.TestCase):
             WP.dwd_etl_dir('../evil')
 
 
+class TestApplyForwarding(unittest.TestCase):
+    """★ 阶段 1 行为契约：`--apply` / dry-run 必须原样传给子命令。"""
+
+    def test_apply_flag_forwarded(self):
+        self.assertEqual(WP._ap(argparse.Namespace(apply=True)), ['--apply'])
+        self.assertEqual(WP._ap(argparse.Namespace(apply=False)), [])
+
+    def test_dry_run_flag_only_without_apply(self):
+        self.assertEqual(WP._dry(argparse.Namespace(apply=False)), ['--dry-run'])
+        self.assertEqual(WP._dry(argparse.Namespace(apply=True)), [])
+
+
+class TestCmdAllStopsOnFailure(unittest.TestCase):
+    """★ 阶段 1 行为契约：子步骤失败时后续阶段不得继续。"""
+
+    def test_later_steps_not_run(self):
+        calls = []
+        saved = {n: getattr(WP, n) for n in TestCmdAllSteps._NAMES}
+        self.addCleanup(lambda: [setattr(WP, n, v) for n, v in saved.items()])
+
+        def fake(name, rc):
+            def _f(_args):
+                calls.append(name)
+                return rc
+            return _f
+
+        WP.cmd_scripts = fake("scripts", 0)
+        WP.cmd_ddl = fake("ddl", 1)          # 第二步失败
+        for n in ("cmd_verify_ddl", "cmd_lineage", "cmd_config", "cmd_verify"):
+            setattr(WP, n, fake(n[4:], 0))
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = WP.cmd_all(argparse.Namespace(source="jf", deploy=False, ds=False))
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, ["scripts", "ddl"], "失败后不得继续后续阶段")
+
+
+class TestRepairDryRun(unittest.TestCase):
+    """★ 阶段 1 行为契约：dry-run 不写文件。"""
+
+    def test_dry_run_leaves_script_untouched(self):
+        glued = ('#!/bin/sh\n'
+                 'inceptor_beeline "SELECT 1"\ndone\n'
+                 'inceptor_beeline "SELECT 1"\ndone\n')
+        with tempfile.TemporaryDirectory() as td:
+            scripts = Path(td) / 'scripts'
+            d = scripts / 'HSFA' / 'dwd' / '02_etl'
+            d.mkdir(parents=True)
+            p = d / 'X.sh'
+            p.write_text(glued, encoding='utf-8')
+            saved = WP.SCRIPTS
+            WP.SCRIPTS = scripts
+            self.addCleanup(setattr, WP, 'SCRIPTS', saved)
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = WP.cmd_repair(argparse.Namespace(layers='DWD', apply=False))
+            self.assertEqual(rc, 0)
+            self.assertEqual(p.read_text(encoding='utf-8'), glued)
+
+
 class TestDwdDdlCmd(unittest.TestCase):
     """DWD DDL 子命令参数透传。
 

@@ -4,7 +4,9 @@
 这些点历史上都靠文档/人肉同步，漂移后不会报错、只会在部署时静默用错口径。
 """
 import importlib.util
+import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +42,29 @@ class TestWorkflowOwnership(unittest.TestCase):
         for t in ('DWD_AST_X_PFD', 'DWD_PTY_OPER_FUND_PRVL_PFD', 'DWD_CMM_INTR_PARA_PFD'):
             self.assertEqual(dp._own_workflow(t), own.own_workflow(t))
             self.assertEqual(builder.own_workflow(t), own.own_workflow(t))
+
+
+class TestMasterProtection(unittest.TestCase):
+    """★ 阶段 1 行为契约：生成器必须拒绝 `--sys-name MASTER`。
+
+    `scripts/MASTER/dwd/` 存的是甲方脚本与手工血缘，生成器跑一次就会覆盖，
+    而这部分无法从 MAPPING 复原。护栏在 `parse_args()` 之后立即触发。
+    """
+
+    def test_generator_refuses_master(self):
+        import tools.main as gen_main
+        argv = ['main.py', '--layer', 'DWD', '--sys-name', 'MASTER']
+        with unittest.mock.patch.object(sys, 'argv', argv):
+            with self.assertRaises(SystemExit) as cm:
+                gen_main.main()
+        self.assertIn('拒绝生成 MASTER', str(cm.exception))
+
+    def test_lowercase_master_also_refused(self):
+        import tools.main as gen_main
+        argv = ['main.py', '--layer', 'ALL', '--sys-name', ' master ']
+        with unittest.mock.patch.object(sys, 'argv', argv):
+            with self.assertRaises(SystemExit):
+                gen_main.main()
 
 
 class TestDepcfgDefaults(unittest.TestCase):
