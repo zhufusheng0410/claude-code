@@ -219,6 +219,8 @@ dw/
 │   ├── main.py              # CLI 入口
 │   ├── dwd-pipeline.py      # 甲方 DWD 脚本搬移 + 血缘梳理一体化（默认 dry-run）
 │   ├── dw-pipeline.py       # DWD+DWS 一体化：脚本来源/DDL/血缘/依赖/删除/部署/排版/校验
+│   ├── dwd/                 # dwd-pipeline 的实现（parsing/generation/ddl_check/cli/ns）
+│   ├── dws/                 # dw-pipeline 的实现（state/process/manifest/scripts/ddl/lineage/deploy/verify/cli/args）
 │   ├── core/                # 中间表示 (IR)
 │   │   ├── ir.py           # 数据类定义
 │   │   ├── type_mapper.py  # Oracle→Hive 类型映射
