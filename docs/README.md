@@ -53,3 +53,17 @@ flowchart TD
 
 - [archive/主数据生成说明.md](archive/主数据生成说明.md) — 2026-10-04 主数据 DWD 生成可行性试验记录（当前生产已按甲方交付直接纳管，禁止生成器覆盖）。
 - [archive/DWD-PTY-NUM-MAPP-修复交接.md](archive/DWD-PTY-NUM-MAPP-修复交接.md) — 历史编号映射修复交接记录。
+
+---
+
+## 🤖 工作区自定义技能（`.agents/skills/`）
+
+供 AI 助手按需激活的 5 个专项规程（由 `tools/tests/test_skills_integrity.py` 守护结构与路径完整性）：
+
+| 技能 | 路径 | 职责边界 |
+|------|------|----------|
+| `dw-field-translate` | [../.agents/skills/dw-field-translate/SKILL.md](../.agents/skills/dw-field-translate/SKILL.md) | 按信达澳亚词根库将中文字段名译为英文缩写（内含 `translate.py` 与词根快照） |
+| `dw-generate` | [../.agents/skills/dw-generate/SKILL.md](../.agents/skills/dw-generate/SKILL.md) | 从调研表或 MAPPING 生成 ODS/DWD/DWS（守住 MASTER 禁生成护栏，区分 `main.py` 直接写盘与 `dw-pipeline` dry-run） |
+| `dw-sync` | [../.agents/skills/dw-sync/SKILL.md](../.agents/skills/dw-sync/SKILL.md) | 甲方脚本/DDL 搬移对账、`verify-ddl`、DDL 差异登记豁免、`repair` 拼接副本修复 |
+| `dw-schedule` | [../.agents/skills/dw-schedule/SKILL.md](../.agents/skills/dw-schedule/SKILL.md) | 血缘梳理、依赖配置、DS 跑批预检（`ds-inspect.py running`）、工作流部署/排版/脚本同步 |
+| `dw-code` | [../.agents/skills/dw-code/SKILL.md](../.agents/skills/dw-code/SKILL.md) | 修改 `tools/` Python 代码时的安全护栏与回归门禁 |

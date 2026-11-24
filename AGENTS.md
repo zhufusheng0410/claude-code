@@ -277,6 +277,7 @@ dw/
 │   ├── .dx-tmp/             # 运行报告等临时产物（gitignored）
 │   ├── .archive/            # 归档：退役脚本/历史调试/一次性排查产物（gitignored）
 │   └── tests/               # 单元测试（`unittest discover` 自动发现）
+├── .agents/skills/          # 工作区自定义技能（词根翻译/生成/搬移核对/血缘调度/代码护栏）
 ├── demo/templates/          # ODS ETL Shell 模板
 │   └── etl_ods_template.sh
 ├── scripts/                 # 脚本输出（已纳入版本库；一次性备份见 scripts/.gitignore）
@@ -468,14 +469,16 @@ python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
 | 子命令 | 作用 |
 |--------|------|
 | `scripts` | jf：DWD 调 `dwd-pipeline.py convert/distribute`；DWS 比对甲方 `02-DWS执行脚本` 与 `scripts/*/dws/02_etl`（必然报 23 个差异：仓库版是甲方原文 + Hive 4.2 方言修复；只比对不覆盖）。gen：`tools/main.py --layer DWD\|DWS` 生成到 `scripts/.dw-gen-*`，扫 `[ERROR` 失败即停；DWD 不碰 `scripts/MASTER` |
-| `ddl` | jf：DWD 调 `dwd-pipeline.py ddl`；DWS **从甲方 `01-建表语句/02-DWS建表脚本.sql` 搬移**（清洗 `DEFAULT NULL`/`VARCHAR2`，逐表落 `ddl/*.sql` 并重建 `01_ddl.sql`）。gen：只校验既有产物 |
+| `ddl` | jf：DWD 调 `dwd-pipeline.py ddl`；DWS **从甲方 `01-建表语句/02-DWS建表脚本.sql` 搬移**（清洗 `DEFAULT NULL`/`VARCHAR2`，逐表落 `ddl/*.sql` 并重建 `01_ddl.sql`，落盘后自检与甲方一致）。gen：只校验既有产物 |
+| `verify-ddl` | 仅只读核对本地 DDL 与甲方建表脚本是否一致（不落盘；命中 `tools/dwd_ddl_drift_allowlist.json` 的登记列差异计入豁免） |
 | `lineage` | DWD 调 `dwd-pipeline.py lineage`；DWS 校验 3 份 `DWS_lineage.xlsx`（表级血缘） |
 | `config` | DWD → `dep-config-proscript`（逐表 `.dep.json`，按主题分组）；DWS → `dep-config-dws`（24 表/3 工作流），并刷新 `scripts/DWS_表中文名.json` |
 | `delete` | 先删 `DWS_*` 再删 `DWD_*`；只删 DWD 时若 DWS 仍存在会拒绝 |
 | `deploy` | 预删 DWS → 删/建 DWD → 建 DWS（拓扑 `HSFA→O32→ZTA`）→ relayout |
 | `layout` | `ds-relayout.py dwd\|dws` |
+| `repair` | 拼接副本修复：对多段重复 `beeline` 的脚本只保留第 1 个完整 SQL（两段不一致时拒绝自动修改） |
 | `verify` | DWD 本地/`--ds` 来源审计；DWS 24 脚本、24 依赖配置、3 工作流 ONLINE、DS rawScript 与仓库逐字节一致（CRLF 归一到 LF 后比对） |
-| `all` | `scripts→ddl→lineage→config→verify`；加 `--deploy` 再串 `deploy` |
+| `all` | `scripts→ddl→verify-ddl（仅 jf）→lineage→config→verify`；加 `--deploy` 在最终 `verify` 前串 `deploy` 并启用 `--ds` |
 
 - gen 模式：DWD 生成数量以生成器输出为准（`_INIT`/无 MAPPING 表不生成，不自动删旧脚本）；
   DWS 生成 24 个但 3 张表 MAPPING 有缺口，默认直接失败，需 `--allow-gen-errors` 才复制。

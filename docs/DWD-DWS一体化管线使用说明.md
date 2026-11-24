@@ -68,7 +68,7 @@ python3 tools/dw-pipeline.py <子命令> [参数]
 |------|------|------|-----------|
 | `--layers DWD,DWS` | `DWD,DWS` | 处理层级，可只写 `DWD` 或 `DWS`（拼错会直接报错） | 全部 |
 | `--source jf\|gen` | `jf` | 脚本来源 | `scripts` `ddl` `verify-ddl` `all` |
-| `--apply` | 否 | 真正写文件/操作 DS；不加就是 dry-run | `scripts` `ddl` `lineage` `config` `delete` `deploy` `layout` `all` |
+| `--apply` | 否 | 真正写文件/操作 DS；不加就是 dry-run | `scripts` `ddl` `lineage` `config` `delete` `deploy` `layout` `repair` `all` |
 | `--ds` | 否 | 连接 DolphinScheduler 回读校验 | `verify` `all` |
 | `--deploy` | 否 | 末尾追加 DS 删除/重建/排版 | `all` |
 | `--allow-gen-errors` | 否 | gen 模式忽略 `[ERROR` 日志；生成进程失败仍中止 | `scripts` `all` |
@@ -86,12 +86,14 @@ python3 tools/dw-pipeline.py <子命令> [参数]
 | 子命令 | 作用 |
 |--------|------|
 | `scripts` | 同步/生成脚本；jf DWS 只比对甲方原文与 `scripts/*/dws/02_etl`，不覆盖仓库脚本 |
-| `ddl` | DWD 调 `dwd-pipeline.py ddl`；DWS **从甲方 `05-脚本/01-建表语句/02-DWS建表脚本.sql` 搬移**（清洗 `DEFAULT NULL`/`VARCHAR2`，逐表落 `ddl/*.sql` 并重建 `01_ddl.sql`） |
+| `ddl` | DWD 调 `dwd-pipeline.py ddl`；DWS **从甲方 `05-脚本/01-建表语句/02-DWS建表脚本.sql` 搬移**（清洗 `DEFAULT NULL`/`VARCHAR2`，逐表落 `ddl/*.sql` 并重建 `01_ddl.sql`，落盘后自检） |
+| `verify-ddl` | 仅只读核对本地 DDL 与甲方建表脚本一致性（不落盘；命中 `tools/dwd_ddl_drift_allowlist.json` 的登记列差异计入豁免） |
 | `lineage` | DWD 重建 `scripts/DWD_依赖关系.xlsx`；DWS 校验分系统 `DWS_lineage.xlsx` 并刷新 `scripts/DWS_依赖关系.xlsx`，历史执行结果页沿用已有记录 |
 | `config` | 生成 DWD `dep-config-proscript` 和 DWS `dep-config-dws`（24 表）；DWD 份数以 `depcfg` 运行时打印为准，不写死 |
 | `delete` | 删除 DS 工作流，固定先删 `DWS_*` 再删 `DWD_*` |
 | `deploy` | 先检查各目标层重建计划及运行实例，再预删 DWS → 删/建 DWD → 建 DWS → relayout；任一步失败即中止 |
 | `layout` | 只重排坐标，不改依赖和脚本 |
+| `repair` | 拼接副本修复：对多段重复 `beeline` 的脚本只保留第 1 个完整 SQL（两段 SQL 不一致时拒绝自动修改） |
 | `verify` | DWD 检查 Shell 语法与 DDL 并入完整性；DWS 检查 Shell 语法、拼接副本和脚本/配置数量；加 `--ds` 回读脚本一致性，DWS 同时检查工作流状态与依赖节点缺失/为空；逐条依赖项和连线结构需另行核对 |
 | `all` | `scripts → ddl → verify-ddl（仅 jf）→ lineage → config → verify`；加 `--deploy` 时在最终 `verify` 前部署并回读 DS |
 
@@ -108,10 +110,10 @@ python3 tools/dw-pipeline.py all --source jf --layers DWD,DWS --apply
 执行内容：
 
 1. DWD：甲方 txt → `scripts/*/dwd/02_etl`（含 `scripts/_DWD搬移清单.json`）
-2. DWS：比对甲方 `02-DWS执行脚本` 与 `scripts/*/dws/02_etl`
-3. DWD DDL 重建
-4. DWD 依赖关系 xlsx 重建
-5. DWD/DWS 依赖配置生成
+2. DWS：比对甲方 `02-DWS执行脚本` 与 `scripts/*/dws/02_etl`（只比对不覆盖）
+3. DWD / DWS DDL 清洗落盘 + `verify-ddl` 与甲方建表脚本逐表对账
+4. DWD / DWS 依赖关系 xlsx 刷新
+5. DWD / DWS 依赖配置生成
 6. 本地校验
 
 不会动 DS。
@@ -141,7 +143,8 @@ python3 tools/dw-pipeline.py all --source jf --layers DWS --apply --deploy
 
 只影响 DWS：
 
-- 同步 24 个脚本
+- 比对 24 个仓库脚本与甲方原文（不覆盖仓库脚本）
+- 重建 DWS DDL 并执行 `verify-ddl` 对账
 - 生成 24 份依赖配置
 - 删除/重建 3 个 DWS 工作流
 - 排版并校验
@@ -229,8 +232,8 @@ DWS gen 失败时会打印 `[ERROR` 日志并停止。`--allow-gen-errors` 只�
 | DWS DDL | `scripts/{系统}/dws/01_ddl.sql`、`ddl/*.sql` |
 | DWD 血缘 | `scripts/DWD_依赖关系.xlsx` |
 | DWS 血缘 | `scripts/{系统}/dws/lineage/DWS_lineage.xlsx`、`scripts/DWS_lineage.xlsx`、`scripts/DWS_依赖关系.xlsx`（含「引导页」：各 sheet 内部跳转 + 关联文件相对路径外链） |
-| DWD 依赖配置 | `tools/ds-deploy/dep-config-proscript`（Windows：`tools/ds-deploy/dep-config-proscript`） |
-| DWS 依赖配置 | `tools/ds-deploy/dep-config-dws`（Windows：`tools/ds-deploy/dep-config-dws`） |
+| DWD 依赖配置 | `tools/ds-deploy/dep-config-proscript` |
+| DWS 依赖配置 | `tools/ds-deploy/dep-config-dws` |
 | DWS 中文名 | `scripts/DWS_表中文名.json` |
 | DWD 中文名 | `scripts/DWD_表中文名.json`（供 DS 作业描述读取，**非本管线生成**，缺失时作业描述回退为表名） |
 | 搬移清单 | `scripts/_DWD搬移清单.json`、`scripts/_DWS搬移清单.json` |

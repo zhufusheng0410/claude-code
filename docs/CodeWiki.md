@@ -69,23 +69,27 @@ claude-code/
 ├── AGENTS.md                  # 项目口径全文
 ├── CLAUDE.md                  # 短入口，指向 AGENTS.md
 ├── pyproject.toml             # 包元信息；入口 generate-dw = tools.main:main
-├── requirements.txt           # pandas / openpyxl / python-calamine(可选)
+├── requirements.txt           # pandas / openpyxl / python-calamine(可选)，锁定见 constraints.txt
+├── .agents/skills/            # 工作区自定义技能（词根翻译/生成/搬移核对/血缘调度/代码护栏）
 ├── demo/templates/
 │   └── etl_ods_template.sh    # ODS ETL Shell 模板（${...} 占位符）
-├── docs/                      # 规范文档（功能与规范、DWD-DWS 管线、主数据、依赖体检）
+├── docs/                      # 文档目录（分级导航见 docs/README.md；历史试验见 docs/archive/）
 ├── scripts/                   # ★ 脚本输出（已纳入版本库；一次性备份见 scripts/.gitignore）
-│   ├── {O32|HSFA|HSZTA|WIND|...}/{ods|dws}/...
+│   ├── {O32|HSFA|HSZTA|WIND|...}/{ods|dwd|dws}/...
 │   ├── MASTER/dwd/            # 主数据：甲方脚本 + 手工血缘（不可重生成）
 │   ├── 建表语句/  DWD_依赖关系.xlsx  DWS_*.xlsx  数据字典_汇总.xlsx
 └── tools/                     # ★ 代码核心
     ├── config.py  main.py  dwd-pipeline.py  dw-pipeline.py  dws-dep-report.py
-    ├── core/       # 中间表示 IR + 类型映射 + SQL 表引用工具
+    ├── ci_shell_gate.py  cleanup_tmp.py
+    ├── dwd/        # dwd-pipeline 实现子包（ns / parsing / generation / ddl_check / cli）
+    ├── dws/        # dw-pipeline 实现子包（state / args / process / manifest / scripts / ddl / lineage / deploy / verify / cli）
+    ├── core/       # 中间表示 IR + 类型映射 + SQL 表引用 + DDL 对账 + 路径/归属/补丁桥
     ├── parser/     # Excel 解析（调研表 / MAPPING）
     ├── generator/  # DDL / ETL / 血缘 / 数据字典 生成器
     ├── utils/      # 共享工具（写文件、校验、查找、日志、Excel 读盘）
     ├── ds-deploy/  # DolphinScheduler 部署工具链（唯一权威源，见其 README）
-    ├── tests/      # unittest 单元测试（18 文件 / 347 个 test_* 用例）
-    └── .dx-tmp/    # 运行报告等临时产物（gitignored）
+    ├── tests/      # unittest 单元测试套件（自动发现 test_*.py）
+    └── .dx-tmp/    # 运行报告等临时产物（gitignored，由 cleanup_tmp.py 按策略保留）
 ```
 
 ---
@@ -125,6 +129,14 @@ claude-code/
 `is_subquery()`、`extract_tables_from_subquery()`（带缓存）、`validate_table_ref()`（防注入标识符校验）、
 `qualify_table()`（补 `DWDXDAY.`/`ODS_XDAY_*.` schema）、`qualify_subquery_tables()`、`wrap_subquery()`
 （子查询补别名）、`compat_sql_functions()`（IFNULL→COALESCE）、`normalize_inceptor_sql()`。
+
+**其他 `tools/core/` 共享模块**（轻量无重依赖，供生成层与管线层共用）：
+- `dwd_ownership.py`：DWD 表 → 工作流归属唯一来源（`WORKFLOW_OVERRIDE`、`own_workflow()`）。
+- `delivery_paths.py` / `safe_paths.py`：跨平台甲方交付目录探测（`detect_d_base`、`resolve_delivery`）、主数据目录映射与 `safe_sysname` 路径遍历拦截。
+- `ddl_sanitize.py` / `ddl_compare.py` / `ddl_verify.py`：Inceptor DDL 方言清洗、结构化列比对与 `tools/dwd_ddl_drift_allowlist.json` 差异豁免判定。
+- `sh_repair.py`：拼接副本脚本单 SQL 块提取（供 `repair` 与 `verify` 共用）。
+- `ds_snapshot.py`：部署前 DS 工作流恢复快照校验（目标项目与层覆盖核对）。
+- `facade_bridge.py` / `loader.py` / `reporting.py`：薄入口模块补丁写穿桥（`PatchBridge`）、按路径动态加载（异常回滚不污染 `sys.modules`）与限量打印辅助。
 
 ### 3.3 `tools/parser/` — Excel 解析
 
@@ -181,7 +193,7 @@ claude-code/
 | `validation.py` | `validate_db_identifier()` `validate_output_path()` | SQL 注入防护（表/字段名）与路径遍历防护 |
 | `sys_extractor.py` | `normalize_sys_name()` `extract_sys_name(layer, path)` | 系统名标准化（应用 `SYSTEM_ALIAS_MAP`）与从路径推断系统名 |
 | `mapping_finder.py` | `find_mapping_file(base, names, suffix)` `find_mapping_dir(base, names)` | 单次 scandir 按「原始名+别名+标准名」顺序查找 MAPPING 文件/目录 |
-| `excel_reader.py` | `read_workbook_sheets()` `calamine_available()` `apply_header_row0()` | Excel 快速读盘：python-calamine 快路径 + openpyxl 回退（`DW_NO_CALAMINE=1` 强制回退） |
+| `excel_reader.py` | `read_workbook_sheets()` `read_workbook_rows()` `calamine_available()` `apply_header_row0()` | Excel 快速读盘：python-calamine 快路径 + openpyxl 回退（`DW_NO_CALAMINE=1` 强制回退；`read_workbook_rows` 保留 `NULL`/`NA` 原字面供归属扫描使用） |
 | `pandas_helpers.py` | `safe_str()` `safe_float()` `safe_float_str()` | NaN/None 安全取值 |
 | `logging_setup.py` | `setup_logging()` `get_logger()` | 统一日志格式、第三方库降噪 |
 
@@ -225,23 +237,29 @@ claude-code/
 
 ⚠ `scripts/MASTER` 是甲方交付 + 手工血缘，**禁止** `main.py --layer DWD --sys-name MASTER` 重生成。
 
-### 4.3 `tools/dw-pipeline.py`（DWD+DWS 一体化）
+### 4.3 `tools/dw-pipeline.py`（DWD+DWS 一体化，实现位于 `tools/dws/`）
 
 ```
 python3 tools/dw-pipeline.py <子命令> [--layers DWD,DWS] [--source jf|gen]
-                             [--apply] [--deploy] [--ds] [--allow-gen-errors] [--allow-stale-dws-manifest]
+                             [--apply] [--deploy] [--ds] [--strict] [--no-strict]
+                             [--allow-gen-errors] [--allow-stale-dws-manifest]
 ```
+
+> 入口保留 `PatchBridge` 兼容层，实际职责拆分在 `tools/dws/{state,args,process,manifest,scripts,ddl,lineage,deploy,verify,cli}.py`；参数按子命令裁剪（见 `tools/dws/cli.py::SUBCOMMANDS`）。
 
 | 子命令 | 作用 |
 |---|---|
 | `scripts` | jf：DWD 调 `dwd-pipeline convert/distribute`，DWS 只比对甲方原文，即使加 `--apply` 也不覆盖仓库脚本；gen：调 `main.py` 到临时目录并扫 `[ERROR` 失败即停 |
-| `ddl` / `lineage` | jf 调 `dwd-pipeline`；DWS 校验各系统 `01_ddl.sql`、3 份 `DWS_lineage.xlsx` |
+| `ddl` | jf：DWD 调 `dwd-pipeline ddl`，DWS 从甲方 `02-DWS建表脚本.sql` 清洗落盘并自检；gen：只校验既有产物 |
+| `verify-ddl` | 仅只读核对本地 DDL 与甲方建表脚本一致性（不落盘；登记列差异按 `dwd_ddl_drift_allowlist.json` 豁免） |
+| `lineage` | jf 调 `dwd-pipeline lineage`；DWS 校验 3 份 `DWS_lineage.xlsx` 并刷新 `DWS_依赖关系.xlsx` |
 | `config` | 生成 `dep-config-proscript`（DWD）/ `dep-config-dws`（DWS），刷新 `DWS_表中文名.json` |
 | `delete` | 先删 `DWS_*` 再删 `DWD_*`；`check_dwd_only_preflight()` 拒绝「DWS 仍在却只删 DWD」 |
-| `deploy` | 预删 DWS → 删/建 DWD → 建 DWS（拓扑 `HSFA→O32→ZTA`）→ relayout |
+| `deploy` | 导出恢复快照 → 预删 DWS → 删/建 DWD → 建 DWS（拓扑 `HSFA→O32→ZTA`）→ relayout |
 | `layout` | 调 `ds-relayout.py dwd\|dws` |
-| `verify` | 本地/`--ds` 来源审计（`verify_dws()`：24 脚本、24 dep、3 工作流 ONLINE、逐字节一致） |
-| `all` | `scripts→ddl→lineage→config→verify`（`--deploy` 再串部署） |
+| `repair` | 拼接副本修复：只保留第 1 个 `beeline` 的完整 SQL（不一致时拒绝自动修改） |
+| `verify` | 本地/`--ds` 来源审计（`verify_dws()`：24 脚本、24 dep、3 工作流 ONLINE、逐字节一致；`--strict` 将无法判定视为失败） |
+| `all` | `scripts→ddl→verify-ddl（仅 jf）→lineage→config→verify`（`--deploy` 再串部署并开启 `--ds`） |
 
 辅助函数：`run()`（子进程封装）、`sync_files()`（差异比对 + 备份 `backup_dir()`）、
 `dws_source_map()`/`stage_dws_from_jf()`（甲方 DWS 搬移）、`ds_workflows()`/`dws_refs_into_dwd()`（DS 侧引用处理）。
@@ -254,8 +272,7 @@ DWS 依赖关系报表生成（配合 `scripts/DWS_依赖关系.xlsx` 使用）�
 
 ## 5. `tools/ds-deploy/` — DolphinScheduler 部署工具链
 
-本目录是 DS 工具的**唯一权威源**（详见 [ds-deploy/README.md](../tools/ds-deploy/README.md)，含 8 条铁律）。
-共 22 个现役脚本，按用途分四类：
+本目录是 DS 工具的**唯一权威源**（详见 [ds-deploy/README.md](../tools/ds-deploy/README.md)，含 8 条铁律），现役脚本按用途分类如下：
 
 | 类别 | 脚本 |
 |---|---|
@@ -266,7 +283,7 @@ DWS 依赖关系报表生成（配合 `scripts/DWS_依赖关系.xlsx` 使用）�
 | **运行/跑批** | `ds-run.py`、`ds-run-hive-sql.py`、`run-dwd-etl-direct.py`（绕 DS 直跑 Hive：Kahn 拓扑 + 最长路径分层、内存闸门、行数回采，报告 `tools/.dx-tmp/dwd-etl-run.json`） |
 | **调度** | `ds-schedule.py`（`ensure/create/switch/release`；`LAYERS/DWD_SLOTS` 必须与部署拓扑同序） |
 | **体检/守卫** | `ds-inspect.py`（统一只读巡检 `running/tables/all`）、`ds-check-running.py`（★★ 动 DS 前必跑）、`ds-check-tables-exist.py`、`ds-verify-dwd-layout.py`、`validate-dwd-syntax.py`（Hive `EXPLAIN` 沙箱编译，报告 `tools/.dx-tmp/dwd-syntax-check.json`） |
-| **排版** | `ds-relayout.py dwd\|ods`（DWD 列距 500 / ODS 416，**刻意分层**；导入脚本已内置，本工具为兜底） |
+| **排版** | `ds-relayout.py dwd\|ods\|dws`（DWD/DWS 列距 500 / ODS 416，**刻意分层**；导入脚本已内置，本工具为兜底） |
 | **危险维护** | `ds-wipe-workflows.py`（先 pg_dump） |
 
 ### 5.1 公共基础模块
@@ -330,9 +347,10 @@ ds-deploy/*.py ──────┴── ds_client.py ← ds_config.py / ds_te
 
 | 依赖 | 用途 |
 |---|---|
-| `pandas>=1.3.0` | Excel 解析核心 |
-| `openpyxl>=3.0.0` | Excel 读写（回退路径） |
-| `python-calamine>=0.2.0`（可选） | MAPPING 冷读加速 ~6x，缺失自动回退 |
+| `pandas>=2.2.3,<2.3` | Excel 解析核心（Python >= 3.9，精确锁见 `constraints.txt`） |
+| `openpyxl>=3.1.5,<3.2` | Excel 读写与回退路径 |
+| `python-calamine>=0.2.0,<0.4`（可选） | MAPPING 冷读加速，缺失自动回退 openpyxl |
+| `psycopg2-binary>=2.9.10,<2.10`（可选 `deploy`） | DS 元库直连（`ds-run` / `ds-schedule` 等） |
 | `pyyaml`（可选） | `ds-check-mount-sources` 等维护脚本 |
 | Hive 4.2（docker `hiveserver2`） | SQL 编译校验（`EXPLAIN`）、真实执行（beeline） |
 | DolphinScheduler 3.4.2（`http://localhost:12345/dolphinscheduler`） | 部署目标，项目 `dw` |
@@ -368,27 +386,29 @@ python3 tools/ds-deploy/ds_config.py   # 自检：只报在/缺，不打印值
 ### 7.2 常用命令
 
 ```bash
-# ① 生成（gen 来源）
-python tools/main.py --layer ALL                     # 全层自动发现
-python tools/main.py --layer ODS --sys O32 -v
-python3 tools/dw-pipeline.py all --source gen --layers DWD,DWS   # gen 一体化（失败即停）
+# ① 生成（gen 来源；注意 main.py 直接写盘，无 dry-run）
+/usr/bin/python3 tools/main.py --layer ALL                     # 全层自动发现
+/usr/bin/python3 tools/main.py --layer ODS --sys O32 -v
+/usr/bin/python3 tools/dw-pipeline.py all --source gen --layers DWD,DWS   # gen 一体化预览（失败即停）
 
 # ② 甲方脚本搬移（jf 来源，推荐）
-python3 tools/dwd-pipeline.py all --apply
-python3 tools/dw-pipeline.py all --source jf --layers DWD,DWS --apply
+/usr/bin/python3 tools/dwd-pipeline.py all --apply
+/usr/bin/python3 tools/dw-pipeline.py all --source jf --layers DWD,DWS --apply
 
-# ③ 校验
-python3 -m unittest discover -s tools/tests -p "test_*.py"       # 单元测试
-python3 tools/ds-deploy/validate-dwd-syntax.py [--sys O32|--etl-only|--only 表名]  # Hive 编译
-bash -n scripts/<sys>/dwd/02_etl/*.sh                            # Shell 语法
+# ③ 校验与本地门禁
+/usr/bin/python3 -m compileall -q tools .agents/skills
+/usr/bin/python3 tools/ci_shell_gate.py                                   # 已跟踪 .sh 语法门禁
+/usr/bin/python3 -m unittest discover -s tools/tests -p "test_*.py"       # 全量单元测试
+/usr/bin/python3 tools/dw-pipeline.py verify --layers DWD,DWS --strict    # 离线管线黑盒校验
+/usr/bin/python3 tools/ds-deploy/validate-dwd-syntax.py [--sys O32|--etl-only|--only 表名]  # Hive 编译
 
 # ④ 部署到 DS（先体检！）
-python3 tools/ds-deploy/ds-check-running.py          # ★ 动 DS 前必跑
-python3 tools/dw-pipeline.py deploy --layers DWD,DWS --apply
-python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
+/usr/bin/python3 tools/ds-deploy/ds-inspect.py running                    # ★ 动 DS 前必跑（等价 ds-check-running.py）
+/usr/bin/python3 tools/dw-pipeline.py deploy --layers DWD,DWS --apply
+/usr/bin/python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
 
 # ⑤ 真实执行（落数据，绕开 DS）
-python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 [--dry-run|--skip-ddl|--only A,B]
+/usr/bin/python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 [--dry-run|--skip-ddl|--only A,B]
 ```
 
 ### 7.3 约定速查
@@ -403,34 +423,32 @@ python3 tools/ds-deploy/run-dwd-etl-direct.py --date 20261010 [--dry-run|--skip-
 
 ## 8. 测试与文档
 
-### 8.1 测试（`tools/tests/`，unittest，18 文件 / 347 个 `test_*`）
+### 8.1 测试套件（`tools/tests/`，`unittest` 自动发现）
 
-| 测试文件 | 被测对象 | 用例数 |
+按职责域划分（不硬编码用例条数，以运行时输出为准）：
+
+| 职责域 | 代表测试模块 | 覆盖重点 |
 |---|---|---|
-| `test_ods.py` | ODS 生成器（DDL/ETL/增量列） | 87 |
-| `test_sql_tables.py` | `core/sql_tables.py` 表引用解析 | 42 |
-| `test_ds_deploy_utils.py` | ds-deploy 公共工具 | 32 |
-| `test_generator_grouping.py` | base.py 别名分组/SSYS 归属 | 28 |
-| `test_ddl_common.py` | DDL 共享构建 | 22 |
-| `test_mapping_parse.py` | MAPPING 解析 | 15 |
-| `test_type_mapper.py` | 类型映射 | 13 |
-| `test_table_utils.py` / `test_data_dict.py` | 工具 / 数据字典 | 各 11 |
-| `test_table_survey.py` / `test_validation.py` | 表级解析 / 安全校验 | 各 7 / 7 |
-| `test_excel_reader.py` | calamine/openpyxl 双路径 | 6 |
-| `test_project_consistency.py` | 口径守门（归属字典单一来源、`CLAUDE.md` 只指向 `AGENTS.md`） | 5 |
-| 其余（`test_dwd_pipeline` `test_dw_pipeline` `test_sys_extractor` `test_field_survey`） | 管线与解析 | 3–8 |
+| **生成与解析** | `test_ods.py`、`test_generator_grouping.py`、`test_ddl_common.py`、`test_mapping_parse.py`、`test_table_survey.py`、`test_field_survey.py`、`test_lineage.py`、`test_data_dict.py` | ODS/DWD/DWS DDL 与 ETL 生成、多组 UNION 别名归属、增量列校验、血缘与数据字典 |
+| **中间表示与基础工具** | `test_sql_tables.py`、`test_type_mapper.py`、`test_excel_reader.py`、`test_delivery_paths.py`、`test_mapping_finder.py`、`test_pandas_helpers.py`、`test_table_utils.py`、`test_sys_extractor.py`、`test_validation.py`、`test_loader.py` | SQL 表引用解析、Oracle→Hive 映射、calamine/openpyxl 双路径等价、跨平台交付路径探测、安全写入与防注入 |
+| **一体化管线与对账** | `test_dwd_pipeline.py`、`test_dw_pipeline.py`、`test_dws_package.py`、`test_ddl_drift_allowlist.py`、`test_dws_dep_report.py`、`test_baseline_compare.py` | MAPPING 归属缓存与失效指纹、DDL 方言清洗与漂移豁免、拼接副本检测、`tools/dws/` 子包与失败即停契约 |
+| **DS 部署与运维护栏** | `test_ds_deploy_utils.py`、`test_ds_deploy_ops.py`、`test_ds_recovery.py`、`test_ods_deploy_failures.py`、`test_pipeline_regressions.py`、`test_ds_deploy_import_smoke.py`、`test_cbo_stats.py` | 凭据优先级、v2 恢复快照与回填、ODS/DWD 失败中止、`ds-wipe-workflows` 范围与备份门控、全脚本无凭据导入冒烟 |
+| **工程治理与定制守门** | `test_project_consistency.py`、`test_skills_integrity.py`、`test_cleanup_tmp.py` | MASTER 禁生成护栏、归属单一来源、`pyproject.toml` 子包完整声明、`.dx-tmp` 保留清理、`.agents/skills/` 完整性与词根翻译单测桥接 |
 
 ```bash
-python3 -m unittest discover -s tools/tests -p "test_*.py"
+/usr/bin/python3 -m unittest discover -s tools/tests -p "test_*.py"
 ```
 
 ### 8.2 文档索引
 
+完整 L1–L5 分级导航见 [docs/README.md](README.md)：
+
 | 文档 | 内容 |
 |---|---|
 | [AGENTS.md](../AGENTS.md) | 项目口径全文：命名规范、系统列表、MASTER/DWD/DWS 基线、工作流归属与重启顺序。`CLAUDE.md` 只是短入口 |
-| `docs/功能与规范文档.md` | 生成器功能与规范明细（含 J-xx 条目、§15.3 T-1 免配规则） |
-| `docs/DWD-DWS一体化管线使用说明.md` | `dw-pipeline` 使用手册 |
-| `docs/archive/主数据生成说明.md` | 历史 MAPPING 试验，不是现行操作手册；MASTER 规则见 `AGENTS.md` |
-| `docs/DWD-ODS依赖体检报告.md` | 依赖体检快照（快照不下发口径） |
+| [docs/README.md](README.md) | 全仓文档分级总目录与 `.agents/skills/` 技能速查表 |
+| [docs/功能与规范文档.md](功能与规范文档.md) | 生成器功能与规范明细（含 J-xx 条目、§15.3 T-1 免配规则） |
+| [docs/DWD-DWS一体化管线使用说明.md](DWD-DWS一体化管线使用说明.md) | `dw-pipeline` 实操手册 |
+| [docs/代码优化实施计划.md](代码优化实施计划.md) / [docs/自动化生成需求文档.md](自动化生成需求文档.md) | 代码重构演进路线与端到端自动化需求基线 |
+| [docs/DWD-ODS依赖体检报告.md](DWD-ODS依赖体检报告.md) / [docs/archive/](archive/) | 阶段性依赖体检快照与历史试验归档（快照不下发口径） |
 | [tools/ds-deploy/README.md](../tools/ds-deploy/README.md) | 部署工具链：工具清单、JSON 契约、8 条铁律、踩坑记录 |
