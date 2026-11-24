@@ -1,7 +1,7 @@
 ---
 name: dw-code
 description: >
-  修改 tools/ 下的 Python 时守住已定护栏。用户提到改 tools/、改 CLI、dry-run、--apply、MASTER 护栏、safe_sysname、路径拼接、facade、补丁桥、dw-pipeline.py、不要把口径抄进 CLAUDE.md、不要把条数写进文档时使用。
+  修改 tools/ 下的 Python 时守住已定护栏。用户提到改 tools/、改 CLI、dry-run、--apply、MASTER 护栏、safe_sysname、路径拼接、facade、补丁桥、dw-pipeline.py、cleanup_tmp.py、ds_common.py、ds-inspect.py、ds-sync-scripts.py、不要把口径抄进 CLAUDE.md、不要把条数写进文档时使用。
   改 tools/main.py、tools/parser/、tools/generator/ 时也要使用。不要用于跑生成、甲方搬移、血缘或 DolphinScheduler 部署；那些只是在改代码时才顺便守规则。
 ---
 
@@ -36,10 +36,11 @@ description: >
 改完后跑：
 
 ```
+/usr/bin/python3 -m compileall -q tools .agents/skills
 /usr/bin/python3 -m unittest discover -s tools/tests -p "test_*.py"
 ```
 
-不要改成 pytest。仓库测试就是 unittest。失败就看失败用例，不要为了变绿去削弱 MASTER 护栏或 dry-run 默认。
+若改到 `.sh` 脚本或 `demo/templates/` 下的 Shell 模板，加跑 `/usr/bin/python3 tools/ci_shell_gate.py`。不要把单测改成 pytest。仓库测试就是 unittest。失败就看失败用例，不要为了变绿去削弱 MASTER 护栏或 dry-run 默认。
 
 改 `tools/main.py`、`tools/parser/`、`tools/generator/` 时，生成 skill 里还有 MASTER 拒绝和 dry-run 两条。本 skill 没被一起加载时，仍然守住上面的禁令。
 

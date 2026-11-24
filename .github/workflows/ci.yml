@@ -18,7 +18,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Compile all Python
-        run: python -m compileall -q tools
+        run: python -m compileall -q tools .agents/skills
       - name: Shell syntax check (tracked .sh)
         run: python3 tools/ci_shell_gate.py
       - name: Run unit tests

@@ -42,13 +42,15 @@ description: >
 
 `/usr/bin/python3 tools/dw-pipeline.py scripts --source gen` 和同入口的 `ddl --source gen` 也是生成。它只同步 HSFA、HSZTA、O32，不写 MASTER。用户没明确说走这条入口时，仍用 `tools/main.py`。
 
-写操作默认不加 `--apply`。`--allow-gen-errors` 只有用户当次明确说了才加。
+注意区分两条入口的写盘行为：
+- `tools/main.py` **没有 `--apply` 开关、没有 dry-run，运行即直接写盘覆盖输出目录**；若用户只想预览生成结果，必须加 `--output <临时目录>`，或改走下面的 `dw-pipeline.py --source gen` 预览。
+- `tools/dw-pipeline.py` 的 `scripts/ddl --source gen` 默认 dry-run，只有用户当次明确要求落盘才加 `--apply`；`--allow-gen-errors` 只有用户当次明确说了才加。
 
 ## 停
 
 - 请求生成 MASTER 的 DWD：拒绝，并说明 `scripts --layers DWD` 不会刷新 `scripts/MASTER`。不另写复制命令，不先跑再补救。
 - 甲方交付目录不存在、清单过期、DDL 差异、部署、用甲方原文覆盖 DWS：这不是本 skill 的事。不要代跑 `all`，不要在这里加 `--source jf`。
-- 不把当次条数、实例号、耗时写进 `AGENTS.md` 或 `docs/`。不把口径抄回 `AGENTS.md`。
+- 不把当次条数、实例号、耗时写进 `AGENTS.md` 或 `docs/`。不把口径抄回 `CLAUDE.md`（口径只在 `AGENTS.md` 维护）。
 
 ## 不负责
 

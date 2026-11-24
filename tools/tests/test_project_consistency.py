@@ -103,5 +103,28 @@ class TestDocSync(unittest.TestCase):
         self.assertLess(len(readme), 4000)
 
 
+class TestPyprojectPackages(unittest.TestCase):
+    """防止拆分出新子包（如 tools.dws）后漏写 pyproject.toml 的 packages，导致 wheel 丢包。"""
+
+    def test_all_tools_subpackages_listed_in_pyproject(self):
+        import ast
+        import re
+
+        text = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+        m = re.search(r'^packages\s*=\s*(\[[^\]]*\])', text, re.M)
+        self.assertIsNotNone(m, 'pyproject.toml 缺少 packages = [...] 声明')
+        declared = set(ast.literal_eval(m.group(1)))
+
+        expected = {'tools'}
+        for init_py in (ROOT / 'tools').glob('*/__init__.py'):
+            pkg_dir = init_py.parent.name
+            if pkg_dir in ('tests',) or pkg_dir.startswith('.'):
+                continue
+            expected.add(f'tools.{pkg_dir}')
+
+        missing = expected - declared
+        self.assertEqual(missing, set(), f'pyproject.toml packages 漏列子包: {sorted(missing)}')
+
+
 if __name__ == '__main__':
     unittest.main()

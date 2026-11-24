@@ -171,7 +171,12 @@ def _write_snapshot(dest: Path, roots: tuple[Root, ...]) -> None:
 
 def _first_roots(rows) -> tuple[Root, ...]:
     seen: dict[str, Root] = {}
-    for zh, en, old, source in rows:
+    for row in rows:
+        cells = tuple(row) if row is not None else ()
+        zh = cells[0] if len(cells) > 0 else None
+        en = cells[1] if len(cells) > 1 else None
+        old = cells[2] if len(cells) > 2 else None
+        source = cells[3] if len(cells) > 3 else None
         key = "" if zh is None else str(zh).strip()
         english = "" if en is None else str(en).strip()
         if not key or not english or key in seen:

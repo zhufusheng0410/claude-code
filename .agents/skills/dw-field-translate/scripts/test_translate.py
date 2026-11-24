@@ -53,6 +53,20 @@ class TranslateAlgorithmTest(unittest.TestCase):
         self.assertEqual(diffs["编码"], "CODE")
         self.assertEqual(diffs["产品"], "PRODUCT")
 
+    def test_first_roots_tolerates_short_and_duplicate_rows(self):
+        rows = [
+            (),
+            ("空英文",),
+            ("编码", "NUM"),
+            ("编码", "CODE", "OLD", "后行同名应忽略"),
+            ("日期", "DATE", "DT", "恒生TA", "多余列应忽略"),
+        ]
+        parsed = {item.zh: item for item in translate._first_roots(rows)}
+        self.assertEqual(set(parsed), {"编码", "日期"})
+        self.assertEqual(parsed["编码"].en, "NUM")
+        self.assertEqual(parsed["编码"].old, "")
+        self.assertEqual(parsed["日期"].old, "DT")
+
 
 class GlossaryTest(unittest.TestCase):
     @classmethod

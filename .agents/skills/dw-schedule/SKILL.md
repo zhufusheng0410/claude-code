@@ -1,7 +1,7 @@
 ---
 name: dw-schedule
 description: >
-  梳理血缘、生成依赖配置、部署或删除 DolphinScheduler 工作流、排版、校验脚本与依赖。用户提到血缘、依赖、depcfg、dep-config、DolphinScheduler、DS 部署、上线、排版、工作流、T-1、不配依赖、DWS_HSFA、p_start_dt、p_end_dt 时使用，即使用户没说「部署」。
+  梳理血缘、生成依赖配置、部署或删除 DolphinScheduler 工作流、排版、巡检跑批状态、校验脚本与依赖。用户提到血缘、依赖、depcfg、dep-config、DolphinScheduler、DS 部署、ds-inspect、ds-check-running、ds-sync-scripts、上线、排版、工作流、T-1、不配依赖、DWS_HSFA、p_start_dt、p_end_dt 时使用，即使用户没说「部署」。
   不要用于从调研表生成，不要用于甲方脚本搬移、清单 sha256、verify-ddl，也不要用于只改 tools/ 里的 Python。
 ---
 
@@ -12,6 +12,7 @@ description: >
 ## 禁令
 
 - 没有用户当次明确要求落盘或动 DS 时，不加 `--apply`。
+- **动 DS 前必做跑批预检**：任何带 `--apply` 修改 DS 的操作（`deploy`、`delete`、`layout`、脚本同步等）执行前，必须先跑 `/usr/bin/python3 tools/ds-deploy/ds-inspect.py running`（或 `ds-check-running.py`）；返回非 0（存在未结束实例）时立即停止，不得继续。
 - T-1 只认 `AGENTS.md` 写明的字面形态。`${P_BATCH_DT}` 变体只报不删，不扩大成「含 `DATE_SUB` 就算」。
 - 触发 `DWS_HSFA` 时传 `p_start_dt=<批次日>`、`p_end_dt=<批次日+1>`。`DWS_O32` 与 `DWS_ZTA` 仍是 `p_start_dt = p_end_dt = <批次日>`。这 7 个 HSFA 脚本的 `while` 仍是 `-lt`。不按 `tools/dws-dep-report.py` 里「已改为 `-le`」的注释去改脚本。
 - `--source gen` 的 DWS 不部署。`AGENTS.md` 写明有表的 MAPPING 未修完。用户当次明确要求部署 gen 版 DWS 时也先停，指出该节，不静默继续。
@@ -33,6 +34,8 @@ description: >
 
 | 要做的事 | 命令 |
 |---|---|
+| 动 DS 前巡检未结束实例 | `/usr/bin/python3 tools/ds-deploy/ds-inspect.py running` |
+| 核查集群目标表与源表存在性 | `/usr/bin/python3 tools/ds-deploy/ds-inspect.py tables` |
 | 重建血缘 / 依赖工作簿 | `/usr/bin/python3 tools/dw-pipeline.py lineage --layers DWD,DWS` |
 | 主数据血缘 | `/usr/bin/python3 tools/dwd-pipeline.py lineage` |
 | 生成 DS 依赖配置 | `/usr/bin/python3 tools/dw-pipeline.py config --layers DWD,DWS` |
@@ -41,7 +44,7 @@ description: >
 | 只排版 | `/usr/bin/python3 tools/dw-pipeline.py layout --layers DWD,DWS` |
 | 校验脚本与依赖 | `/usr/bin/python3 tools/dw-pipeline.py verify --layers DWD,DWS` |
 
-DWS 部署入口以 `AGENTS.md` 为准，收窄为 `--layers DWS`。脚本同步到 DS 用已有的 `tools/ds-deploy/ds-sync-dwd-scripts.py`，`--layer DWS` 时指向它，不在这里重写同步步骤。
+DWS 部署入口以 `AGENTS.md` 为准，收窄为 `--layers DWS`。脚本差异同步到 DS 走统一入口 `/usr/bin/python3 tools/ds-deploy/ds-sync-scripts.py --layer ODS|DWD|DWS`（底层路由 `ds-sync-ods-scripts.py` / `ds-sync-dwd-scripts.py`，默认 dry-run），不在这里重写同步步骤。
 
 不要跑 `all`。它会串起搬移、DDL、血缘和可选部署。用户要整条链时按归属拆开，第一步失败就停。
 
