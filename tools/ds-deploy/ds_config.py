@@ -131,9 +131,9 @@ def _parse_env_file(path: pathlib.Path) -> dict:
 
 
 def _file_secrets() -> dict:
-    """按优先级读取两个凭据文件（靠前者不被后者覆盖）。"""
+    """按优先级读取两个凭据文件（.env.local 优先于 ~/.dw-secrets.env，靠前者不被后者覆盖）。"""
     merged = {}
-    for path in (HOME_ENV_FILE, LOCAL_ENV_FILE):
+    for path in (LOCAL_ENV_FILE, HOME_ENV_FILE):
         if path.exists():
             for key, value in _parse_env_file(path).items():
                 merged.setdefault(key, value)

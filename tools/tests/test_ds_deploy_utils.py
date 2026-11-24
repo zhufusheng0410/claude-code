@@ -139,6 +139,23 @@ class TestDsConfigSecrets(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_local_env_file_overrides_home_env_file(self):
+        """仓库内 .env.local 优先级必须高于用户级 ~/.dw-secrets.env（与 AGENTS.md 一致）。"""
+        mod = self.mod
+        with tempfile.TemporaryDirectory() as td:
+            local_f = pathlib.Path(td) / ".env.local"
+            home_f = pathlib.Path(td) / ".dw-secrets.env"
+            local_f.write_text("DS_PASSWORD=from_local\n", encoding="utf-8")
+            home_f.write_text(
+                "DS_PASSWORD=from_home\nDS_PG_PASSWORD=pg_from_home\n",
+                encoding="utf-8",
+            )
+            mod.LOCAL_ENV_FILE = local_f
+            mod.HOME_ENV_FILE = home_f
+            mod._FILE_CACHE = None
+            self.assertEqual(mod.require_secret("DS_PASSWORD"), "from_local")
+            self.assertEqual(mod.require_secret("DS_PG_PASSWORD"), "pg_from_home")
+
     def test_env_file_value_may_contain_equals(self):
         """口令里含 `=` 时只按第一个 `=` 切分。"""
         mod = self.mod

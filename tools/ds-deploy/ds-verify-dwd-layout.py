@@ -30,7 +30,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_client import dependence_of, task_definitions  # noqa: E402
-from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 from ds_load import load as _load_file  # noqa: E402
@@ -40,7 +40,7 @@ def _load(name):
     """按**文件路径**导入（文件名带连字符 ⇒ 不能 `import ds-deploy-...`）。"""
     return _load_file(os.path.join(HERE, name + ".py"), name)
 
-DS = "http://localhost:12345/dolphinscheduler"
+DS = ds_base()
 USER = ds_admin_user()
 PWD = ds_admin_password()
 SID = None

@@ -15,9 +15,9 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_client import legacy_client  # noqa: E402
 from ds_common import DS_CALL_ERRORS  # noqa: E402
-from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base  # noqa: E402
 
-BASE = "http://127.0.0.1:12345/dolphinscheduler"
+BASE = ds_base()
 USER = ds_admin_user()
 PWD = ds_admin_password()
 # 本集群里租户 default 是禁用的，用真实租户

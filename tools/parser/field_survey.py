@@ -69,9 +69,9 @@ def _read_excel_safely(filepath: str) -> pd.DataFrame:
 
     # 尝试直接读取
     try:
-        xls = pd.ExcelFile(filepath, engine='openpyxl')
-        sheet_name = xls.sheet_names[0]
-        df = pd.read_excel(xls, sheet_name=sheet_name, dtype=str)
+        with pd.ExcelFile(filepath, engine='openpyxl') as xls:
+            sheet_name = xls.sheet_names[0]
+            df = pd.read_excel(xls, sheet_name=sheet_name, dtype=str)
         return df
     except _EXCEL_READ_ERRORS as e:
         logger.warning(
@@ -112,9 +112,9 @@ def _read_excel_safely(filepath: str) -> pd.DataFrame:
                     zf.write(full_path, arc_name)
 
         # 读取修复后的文件
-        xls = pd.ExcelFile(fixed_zip, engine='openpyxl')
-        sheet_name = xls.sheet_names[0]
-        df = pd.read_excel(xls, sheet_name=sheet_name, dtype=str)
+        with pd.ExcelFile(fixed_zip, engine='openpyxl') as xls:
+            sheet_name = xls.sheet_names[0]
+            df = pd.read_excel(xls, sheet_name=sheet_name, dtype=str)
 
         logger.debug(f"  autoFilter 修复成功")
         return df

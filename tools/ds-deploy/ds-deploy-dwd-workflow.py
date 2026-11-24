@@ -129,7 +129,8 @@ def cn_name(table):
         if LAYER == "DWS":
             p = os.path.join(REPO, "scripts", "DWS_表中文名.json")
         try:
-            _CN_CACHE.update(json.load(open(p, encoding="utf-8")))
+            with open(p, encoding="utf-8") as fh:
+                _CN_CACHE.update(json.load(fh))
         except (OSError, json.JSONDecodeError, ValueError):
             pass
     return _CN_CACHE.get(table) or f"{LAYER} 加工 {table}"
@@ -376,7 +377,8 @@ def load_cfgs(dep_dir):
     out = {}
     for f in sorted(os.listdir(dep_dir)):
         if f.endswith(".dep.json"):
-            c = json.load(open(os.path.join(dep_dir, f), encoding="utf-8"))
+            with open(os.path.join(dep_dir, f), encoding="utf-8") as fh:
+                c = json.load(fh)
             out[c["target"]] = c
     return out
 

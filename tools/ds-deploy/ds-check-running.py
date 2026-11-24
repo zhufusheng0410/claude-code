@@ -15,11 +15,11 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base  # noqa: E402
 from ds_client import legacy_client, lst_of  # noqa: E402
 from ds_common import DS_CALL_ERRORS  # noqa: E402
 
-DS = "http://localhost:12345/dolphinscheduler"
+DS = ds_base()
 USER = ds_admin_user()
 PWD = ds_admin_password()
 

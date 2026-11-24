@@ -35,12 +35,12 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base  # noqa: E402
 from ds_client import legacy_client  # noqa: E402
 from ds_common import DS_CALL_ERRORS  # noqa: E402
 from ds_text import read_script  # noqa: E402
 
-DS = "http://127.0.0.1:12345/dolphinscheduler"
+DS = ds_base()
 USER = ds_admin_user()
 PWD = ds_admin_password()
 DEFAULT_PROJECT = "dw"

@@ -26,7 +26,8 @@ def main() -> int:
     failed, checked = [], 0
     for f in files:
         checked += 1
-        data = open(REPO + "/" + f.decode("utf-8"), "rb").read().replace(b"\r\n", b"\n")
+        with open(REPO + "/" + f.decode("utf-8"), "rb") as fh:
+            data = fh.read().replace(b"\r\n", b"\n")
         r = subprocess.run(["bash", "-n", "-"], input=data,
                            capture_output=True, timeout=120)
         if r.returncode != 0:

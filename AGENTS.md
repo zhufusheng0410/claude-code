@@ -234,6 +234,8 @@ dw/
 │   ├── main.py              # CLI 入口
 │   ├── dwd-pipeline.py      # 甲方 DWD 脚本搬移 + 血缘梳理一体化（默认 dry-run）
 │   ├── dw-pipeline.py       # DWD+DWS 一体化：脚本来源/DDL/血缘/依赖/删除/部署/排版/校验
+│   ├── ci_shell_gate.py     # CI 门禁：已跟踪 .sh 的 CRLF 归一 + bash -n 语法校验
+│   ├── cleanup_tmp.py       # tools/.dx-tmp 过期运行产物清理（默认 dry-run，跳过保护目录）
 │   ├── dwd/                 # dwd-pipeline 的实现（parsing/generation/ddl_check/cli/ns）
 │   ├── dws/                 # dw-pipeline 的实现（state/process/manifest/scripts/ddl/lineage/deploy/verify/cli/args）
 │   ├── core/                # 中间表示 (IR)
@@ -262,11 +264,13 @@ dw/
 │   ├── ds-deploy/           # DS 部署 / 排布 / SQL 校验（详见其 README）
 │   │   ├── README.md                # 部署工具说明
 │   │   ├── ds_client.py             # DS API 客户端（含响应取值助手）
+│   │   ├── ds_common.py             # 共享底座（Docker 探测、JSON 列表解析、调度快照与外部异常分类）
 │   │   ├── ds_config.py             # 凭据集中读取（无明文缺省值）
 │   │   ├── ds_text.py               # 文本规范化（CRLF→LF）
 │   │   ├── validate-dwd-syntax.py   # DWD 脚本 SQL 编译校验（Hive EXPLAIN）
+│   │   ├── ds-inspect.py            # DS 统一只读巡检入口（running/tables/all）
 │   │   ├── ds-deploy-*.py           # 作业/工作流部署（ODS/DWD/DWS）
-│   │   ├── ds-sync-*.py             # 脚本差异同步到 DS
+│   │   ├── ds-sync-*.py             # 脚本差异同步到 DS（含统一入口 ds-sync-scripts.py）
 │   │   ├── ds-relayout.py           # 工作流坐标重排（dwd/ods/dws 三用）
 │   │   ├── ds-build-dependent-from-lineage.py      # DWD 血缘→依赖配置
 │   │   └── ds-build-dws-dependent-from-lineage.py  # DWS 血缘→依赖配置
@@ -457,7 +461,7 @@ python3 tools/dw-pipeline.py deploy --layers DWD,DWS --apply
 python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
 ```
 
-> 参数按子命令裁剪：`verify` 只有 `--layers/--ds`，`deploy|delete|layout` 只有 `--layers/--apply`，
+> 参数按子命令裁剪：`verify` 只有 `--layers/--ds/--strict`，`deploy|delete|layout` 只有 `--layers/--apply`，
 > `--allow-gen-errors` 只挂在 `scripts` 上；`--allow-stale-dws-manifest` 挂在会读
 > `_DWS搬移清单.json` 的 `scripts`/`ddl`/`verify-ddl`/`all` 上。参数必须写在子命令**之后**（`verify --layers DWS`）。
 

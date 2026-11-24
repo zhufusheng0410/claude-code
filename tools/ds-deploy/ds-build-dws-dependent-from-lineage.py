@@ -105,7 +105,8 @@ def main():
     # ---- ★ 剔除「只读前一日分区」的边（与 DWD 版同口径）----
     if args.exclude_prev_day:
         try:
-            pdoc = json.load(open(args.exclude_prev_day, encoding="utf-8"))
+            with open(args.exclude_prev_day, encoding="utf-8") as fh:
+                pdoc = json.load(fh)
         except (OSError, json.JSONDecodeError, ValueError) as e:
             sys.exit(f"读上一日依赖清单失败: {args.exclude_prev_day} ({e})")
         pset = {(a.upper(), b.upper()) for a, b, *_ in pdoc.get("edges", [])}

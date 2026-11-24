@@ -85,7 +85,8 @@ def load_cfg(table):
     for f in sorted(os.listdir(D.DEPCFG)):
         if not f.endswith(".dep.json"):
             continue
-        c = json.load(open(os.path.join(D.DEPCFG, f), encoding="utf-8"))
+        with open(os.path.join(D.DEPCFG, f), encoding="utf-8") as fh:
+            c = json.load(fh)
         if c.get("target") == table:
             return c
     return None

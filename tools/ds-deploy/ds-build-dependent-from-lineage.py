@@ -337,7 +337,8 @@ def main():
     if args.exclude_prev_day:
         pf = args.exclude_prev_day
         try:
-            pdoc = json.load(open(pf, encoding="utf-8"))
+            with open(pf, encoding="utf-8") as fh:
+                pdoc = json.load(fh)
         except (OSError, json.JSONDecodeError, ValueError) as e:
             sys.exit(f"读上一日依赖清单失败: {pf} ({e})")
         pset = {(a.upper(), b.upper()) for a, b, *_ in pdoc.get("edges", [])}

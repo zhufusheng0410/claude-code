@@ -10,7 +10,6 @@
 只读，不改任何东西。用法: python tools/ds-check-tables-exist.py
 """
 import collections
-import json
 import os
 import re
 import subprocess

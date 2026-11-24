@@ -9,7 +9,6 @@ from tools.core.delivery_paths import (
     _DELIVERY_SENTINEL,
     _MASTER_DIR,
     _MASTER_SYSNAME,
-    _PROJECT_REL,
     detect_d_base,
     dwd_ddl_dir,
     dwd_ddl_main,

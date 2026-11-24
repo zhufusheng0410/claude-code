@@ -518,7 +518,8 @@ def _topo_order(available):
         for f in sorted(os.listdir(DEPCFG)):
             if not f.endswith(".dep.json"):
                 continue
-            c = json.load(open(os.path.join(DEPCFG, f), encoding="utf-8"))
+            with open(os.path.join(DEPCFG, f), encoding="utf-8") as fh:
+                c = json.load(fh)
             wf = c.get("own_workflow")
             if wf not in wfs:
                 continue

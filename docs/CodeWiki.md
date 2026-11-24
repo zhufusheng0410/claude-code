@@ -261,15 +261,17 @@ DWS 依赖关系报表生成（配合 `scripts/DWS_依赖关系.xlsx` 使用）�
 |---|---|
 | **部署/落库** | `ds-deploy-api.py`（`plan` 生成 v1 计划，`export` 导出 v2 恢复快照，`import` 兼容两版，按名幂等更新）、`ds-deploy-all-dwd.py`（逆拓扑全删→正拓扑重建，`--layer DWD\|DWS`）、`ds-deploy-ods-all.py`、`ds-deploy-dwd-workflow.py`（单工作流，公共 HTTP 库）、`ds-add-dwd-table.py`、`ds-rebuild-from-inventory.py`（灾后重建，两阶段提交） |
 | **一键管线** | `tools/dw-pipeline.py`（现役唯一入口；原 `ds-dwd-pipeline.py` 已退役归档 `tools/.archive/retired/`） |
-| **脚本同步** | `ds-sync-dwd-scripts.py`、`ds-sync-ods-scripts.py`（逐字节比对，只推 sha1 变更，先 OFFLINE 再 PUT） |
+| **脚本同步** | `ds-sync-scripts.py`（统一路由入口 `--layer ODS\|DWD\|DWS`）、`ds-sync-dwd-scripts.py`、`ds-sync-ods-scripts.py`（逐字节比对，只推 sha1 变更，先 OFFLINE 再 PUT） |
 | **依赖构建** | `ds-build-dependent-from-lineage.py`（★DWD，读 `scripts/*/dwd/lineage/DWD_lineage.xlsx` → `dep-config-proscript`；`own_workflow()`/`WORKFLOW_OVERRIDE` 委托自 `tools/core/dwd_ownership.py`）、`ds-build-dws-dependent-from-lineage.py`（DWS → `dep-config-dws`） |
 | **运行/跑批** | `ds-run.py`、`ds-run-hive-sql.py`、`run-dwd-etl-direct.py`（绕 DS 直跑 Hive：Kahn 拓扑 + 最长路径分层、内存闸门、行数回采，报告 `tools/.dx-tmp/dwd-etl-run.json`） |
 | **调度** | `ds-schedule.py`（`ensure/create/switch/release`；`LAYERS/DWD_SLOTS` 必须与部署拓扑同序） |
-| **体检/守卫** | `ds-check-running.py`（★★ 动 DS 前必跑）、`ds-check-tables-exist.py`、`ds-verify-dwd-layout.py`、`validate-dwd-syntax.py`（Hive `EXPLAIN` 沙箱编译，报告 `tools/.dx-tmp/dwd-syntax-check.json`） |
+| **体检/守卫** | `ds-inspect.py`（统一只读巡检 `running/tables/all`）、`ds-check-running.py`（★★ 动 DS 前必跑）、`ds-check-tables-exist.py`、`ds-verify-dwd-layout.py`、`validate-dwd-syntax.py`（Hive `EXPLAIN` 沙箱编译，报告 `tools/.dx-tmp/dwd-syntax-check.json`） |
 | **排版** | `ds-relayout.py dwd\|ods`（DWD 列距 500 / ODS 416，**刻意分层**；导入脚本已内置，本工具为兜底） |
 | **危险维护** | `ds-wipe-workflows.py`（先 pg_dump） |
 
 ### 5.1 公共基础模块
+
+**[ds_common.py](../tools/ds-deploy/ds_common.py)** —— 共享底座：`docker_bin()`、`parse_json_list()`、`snapshot_online_schedules()`、`set_schedule_state()`（强校验整型防 SQL 注入），以及统一的外部异常分类常量 `DS_CALL_ERRORS` / `SUBPROCESS_ERRORS`。
 
 **[ds_client.py](../tools/ds-deploy/ds_client.py)** —— DS API 客户端（被 12+ 脚本 import）：
 - `class DSClient`：唯一 HTTP 入口 `call(method, path, params/form/body, _retry=True)`（**没有 get()/post()**）；

@@ -16,7 +16,6 @@
 ``needs_schedule_dep`` / ``GROUPS`` / ``WORKFLOW_OVERRIDE`` 等名字。
 """
 import sys
-import types
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]

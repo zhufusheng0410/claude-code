@@ -256,7 +256,8 @@ def cmd_plan(args):
     cfgs = {}
     for f in sorted(os.listdir(D.DEPCFG)):
         if f.endswith(".dep.json"):
-            c = json.load(open(os.path.join(D.DEPCFG, f), encoding="utf-8"))
+            with open(os.path.join(D.DEPCFG, f), encoding="utf-8") as fh:
+                c = json.load(fh)
             cfgs[c.get("target")] = c
 
     # 脚本位置：REPO/scripts/<系统>/dwd/<表>.sh（与 ds-sync-dwd-scripts.py 口径一致）
