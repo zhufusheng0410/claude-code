@@ -116,10 +116,17 @@ def _parse_sheet_df(df: pd.DataFrame, sheet_name: str = "") -> MappingSheet:
         if len(keyword_rows) == len(_KEYWORDS):
             break
 
+    current_row_idx = -1
+    current_row = None
+
     def cell(row_idx: int, col_idx: int) -> str:
+        nonlocal current_row_idx, current_row
         if row_idx < 0 or row_idx >= len(df) or col_idx < 0 or col_idx >= len(df.columns):
             return ""
-        return safe_str(df.iloc[row_idx], col_idx)
+        if current_row_idx != row_idx:
+            current_row_idx = row_idx
+            current_row = df.iloc[row_idx]
+        return safe_str(current_row, col_idx)
 
     def meta(keyword: str, default: str = "") -> str:
         row = keyword_rows.get(keyword, -1)
@@ -321,17 +328,22 @@ def _sheets_to_json(sheets: list) -> list:
 def _sheets_from_json(rows: list) -> list:
     """纯 dict 列表 → dataclass 列表（忽略未知字段，容忍版本差异）。"""
     import dataclasses
+    if not isinstance(rows, list):
+        raise ValueError("缓存 sheets 必须为列表")
     out = []
     for row in rows:
         if not isinstance(row, dict):
-            continue
+            raise ValueError("缓存 sheet 必须为对象")
         kwargs = {f.name: row[f.name] for f in dataclasses.fields(MappingSheet)
                   if f.name in row}
         sheet = MappingSheet(**kwargs)
         rules = []
-        for mr in (kwargs.get("mappings") or []):
+        mappings = kwargs.get("mappings", [])
+        if not isinstance(mappings, list):
+            raise ValueError("缓存 mappings 必须为列表")
+        for mr in mappings:
             if not isinstance(mr, dict):
-                continue
+                raise ValueError("缓存 mapping 必须为对象")
             rkw = {f.name: mr.get(f.name) for f in dataclasses.fields(MappingRule)
                    if f.name in mr}
             rules.append(MappingRule(**rkw))
@@ -341,19 +353,21 @@ def _sheets_from_json(rows: list) -> list:
 
 
 def _try_load_cached_sheets(filepath: str):
-    """命中返回 [MappingSheet]；禁用/未命中/缓存损坏返回 None。任何异常不外抛。"""
+    """命中返回 [MappingSheet]；禁用、未命中或缓存结构损坏返回 None。"""
     if _cache_disabled():
         return None
     try:
         st = os.stat(filepath)
         with open(_cache_file_path(filepath), "r", encoding="utf-8") as fh:
             payload = json.load(fh)
+        if not isinstance(payload, dict):
+            return None
         if (payload.get("fingerprint") == _cache_fingerprint()
                 and payload.get("mtime_ns") == st.st_mtime_ns
                 and payload.get("size") == st.st_size):
             logger.debug("mapping cache hit: %s", os.path.basename(filepath))
             return _sheets_from_json(payload["sheets"])
-    except Exception:
+    except (OSError, ValueError, KeyError, TypeError):
         return None
     return None
 
@@ -375,7 +389,7 @@ def _try_save_cached_sheets(filepath: str, sheets: list) -> None:
                 "sheets": _sheets_to_json(sheets),
             }, fh, ensure_ascii=False)
         os.replace(tmp, cache_path)
-    except Exception as e:
+    except OSError as e:
         logger.debug("mapping cache save skipped: %s", e)
 
 
@@ -409,7 +423,7 @@ def _parse_xlsx_sheets_uncached(filepath: str) -> list:
                 continue
             try:
                 results.append(_parse_sheet_df(df, sn))
-            except Exception as e:
+            except (ValueError, LookupError, OSError) as e:
                 logger.warning(f"  WARN: skip {fname}/{sn}: {e}")
         return results
     with pd.ExcelFile(filepath) as xls:
@@ -419,7 +433,7 @@ def _parse_xlsx_sheets_uncached(filepath: str) -> list:
             try:
                 df = pd.read_excel(xls, sheet_name=sn, header=None)
                 results.append(_parse_sheet_df(df, sn))
-            except Exception as e:
+            except (ValueError, LookupError, OSError) as e:
                 logger.warning(f"  WARN: skip {fname}/{sn}: {e}")
     return results
 

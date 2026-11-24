@@ -5,12 +5,11 @@ from typing import List, Dict
 from ..core.ir import TableMeta, FieldMeta
 from ..core.sql_tables import validate_table_ref
 from ..config import ODS_SCHEMA_TMPL, HIVE_DYNAMIC_PARTITION_SETTINGS, SYS_FIELDS_ODS
-from ..core.type_mapper import oracle_to_hive
 from ..generator.ddl_common import (generate_ddl_body, build_field_defs,
-                                    escape_sql_comment, quote_hive_column,
+                                    escape_sql_comment,
                                     quote_hive_column_sh,
                                     ORACLE_NUMERIC_PREFIXES, ORACLE_DATE_PREFIXES, ORACLE_CHAR_PREFIXES)
-from tools.utils.table_utils import write_file, iter_ods_tables, write_file_safe
+from tools.utils.table_utils import iter_ods_tables, write_file_safe
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
 
@@ -342,16 +341,13 @@ def _escape_sql_for_json(sql: str) -> str:
       ⇒ **只需转义一层**，不必double-escape。
 
     ★ 顺序：先转义反斜杠再转义引号，否则会把刚加上的反斜杠二次转义。
-    ★ 2026-10-26（评审）：**控制字符也必须转义**。querySql 由多行 SQL 拼成
-      （`_build_query_sql` 用 `"\n".join`），此前只转义 `\` 和 `"` ⇒ 换行原样留在
-      JSON 字符串里 ⇒ 按 RFC 8259 属**非法 JSON**（实测 12/12 个 ODS 脚本
-      `json.loads` 报 `Invalid control character`）。DataX 的解析器较宽松，目前
-      "碰巧能跑"，但任何严格解析（校验脚本/其它工具链）都会失败。
-      ⇒ 换行/回车/制表符一律转成 JSON 转义序列，解码后取值与原 SQL 完全一致。
+    DataX 交付脚本保留 querySql 内的实际换行；因此不能用严格的 RFC 8259
+    JSON 解析器验收这个含多行 SQL 的模板。
     """
     s = sql.replace("\\", "\\\\").replace('"', '\\"')
-    # 反斜杠已转义完，此处新增的 `\n` 等是**期望的单层 JSON 转义**，不能再被加倍
-    return s.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+    # 2026-11-18：用户要求 querySql 保留多行格式，不再转义 \r/\n/\t。
+    # 注意：这会让 JSON 含未转义控制字符（RFC 8259 非法），但 DataX 宽容能跑。
+    return s
 
 
 def generate_ods_ddl(table: TableMeta, fields: list, sys_name: str) -> str:

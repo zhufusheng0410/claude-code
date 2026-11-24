@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """tools/dwd-pipeline.py 纯函数回归测试（不触碰 /mnt/d 与 DS）。"""
+import collections
 import contextlib
 import importlib.util
 import io
+import os
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -247,6 +250,269 @@ class TestPathPatchPropagation(unittest.TestCase):
                          Path('/tmp/dw-probe-repo/tools/ds-deploy/dep-config-proscript'))
         self.assertEqual(ns.PREVDAY_OUT,
                          Path('/tmp/dw-probe-repo/tools/_prev_day_deps.json'))
+
+
+def _mapping_xlsx(path):
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws['A1'] = '目标表英文名称'
+    ws['C1'] = 'DWD_AST_CRSE_INFO_PFD'
+    ws['A2'] = '实体英文名称'
+    ws['A3'] = 'DWD_CMM_FOO_PFD'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
+    wb.close()
+
+
+def _scan_both(parsing, path):
+    fast = collections.defaultdict(list)
+    slow = collections.defaultdict(list)
+    saved = os.environ.get('DW_NO_CALAMINE')
+    try:
+        os.environ.pop('DW_NO_CALAMINE', None)
+        parsing._scan_mapping_xlsx(path, fast)
+        os.environ['DW_NO_CALAMINE'] = '1'
+        parsing._scan_mapping_xlsx(path, slow)
+    finally:
+        if saved is None:
+            os.environ.pop('DW_NO_CALAMINE', None)
+        else:
+            os.environ['DW_NO_CALAMINE'] = saved
+    return fast, slow
+
+
+def _patch_scan(parsing, calls):
+    real = parsing._scan_mapping_xlsx
+
+    def wrapped(p, out):
+        calls.append(p.name)
+        return real(p, out)
+
+    parsing._scan_mapping_xlsx = wrapped
+    return real
+
+
+class TestMappingScan(unittest.TestCase):
+    """空单元格不能截断表名查找。calamine 与 openpyxl 回退必须看到同一张表。"""
+
+    def test_blank_between_label_and_name(self):
+        from tools.dwd import parsing
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'a.xlsx'
+            _mapping_xlsx(path)
+            out_fast, out_slow = _scan_both(parsing, path)
+        self.assertEqual({k: sorted(v) for k, v in out_fast.items()},
+                         {k: sorted(v) for k, v in out_slow.items()})
+        self.assertIn('DWD_AST_CRSE_INFO_PFD', out_fast)
+        self.assertIn('DWD_CMM_FOO_PFD', out_fast)
+
+    def test_na_placeholder_stops_both_engines(self):
+        from tools.utils.excel_reader import CalamineWorkbook
+        from openpyxl import Workbook
+        if CalamineWorkbook is None:
+            self.skipTest('python-calamine 未安装')
+        from tools.dwd import parsing
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'na.xlsx'
+            wb = Workbook()
+            ws = wb.active
+            ws['A1'] = '目标表英文名称'
+            ws['B1'] = 'NULL'
+            ws['C1'] = 'DWD_OTHER_SRC_PFD'
+            wb.save(path)
+            wb.close()
+            out_fast, out_slow = _scan_both(parsing, path)
+        self.assertEqual(list(out_fast), [])
+        self.assertEqual(list(out_slow), [])
+
+    def test_nan_does_not_hide_table_name(self):
+        from tools.dwd import parsing
+        out = collections.defaultdict(list)
+        parsing._consume_mapping_rows(
+            [('目标表英文名称', float('nan'), 'DWD_AST_CRSE_INFO_PFD')],
+            'a.xlsx', out)
+        self.assertEqual(out['DWD_AST_CRSE_INFO_PFD'], ['a.xlsx'])
+
+
+class TestOwnerCache(unittest.TestCase):
+    """归属缓存不看 --apply，但指纹不符必须重扫。"""
+
+    def setUp(self):
+        from tools.dwd import ns, parsing
+        self.parsing = parsing
+        self.ns = ns
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.map_root = root / 'map'
+        self.xlsx = self.map_root / '03-HSFA' / 'a.xlsx'
+        _mapping_xlsx(self.xlsx)
+        jf = root / 'jf'
+        jf.mkdir()
+        (jf / 'DWD_AST_CRSE_INFO_PFD.txt').write_text('x', encoding='utf-8')
+        (jf / 'DWD_CMM_FOO_PFD.txt').write_text('x', encoding='utf-8')
+        self.saved = (parsing.MAP_ROOT, parsing.JF, ns.REPO, ns.SCRIPTS,
+                      parsing._OWNER_MEM)
+        parsing.MAP_ROOT = self.map_root
+        parsing.JF = jf
+        ns.REPO = root / 'repo'
+        ns.SCRIPTS = root / 'scripts'
+        parsing._OWNER_MEM = None
+        (ns.SCRIPTS / 'MASTER/dwd/02_etl').mkdir(parents=True)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        (self.parsing.MAP_ROOT, self.parsing.JF, self.ns.REPO, self.ns.SCRIPTS,
+         self.parsing._OWNER_MEM) = self.saved
+
+    def test_dry_run_writes_cache_and_hit_skips_scan(self):
+        parsing = self.parsing
+        calls = []
+        real = _patch_scan(parsing, calls)
+        self.addCleanup(setattr, parsing, '_scan_mapping_xlsx', real)
+        with contextlib.redirect_stdout(io.StringIO()):
+            data = parsing.load_owner()
+        cache_path = self.ns.REPO / 'tools/.dx-tmp/dwd_owner_map.json'
+        self.assertTrue(cache_path.is_file())
+        self.assertEqual(str(parsing._ns.OWNER_JSON), str(cache_path))
+        self.assertEqual(data['assign']['DWD_AST_CRSE_INFO_PFD'], 'HSFA')
+        self.assertTrue(data['fingerprint'])
+        self.assertEqual(data['version'], parsing.OWNER_CACHE_VERSION)
+        n = len(calls)
+        self.assertGreater(n, 0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            again = parsing.load_owner()
+        self.assertEqual(len(calls), n)
+        self.assertEqual(again['assign'], data['assign'])
+
+    def test_mapping_content_change_rescans(self):
+        """内存命中不重扫；只有 force_rescan=True 才强制重扫并拾取新文件。"""
+        parsing = self.parsing
+        with contextlib.redirect_stdout(io.StringIO()):
+            parsing.load_owner()
+        calls = []
+        real = _patch_scan(parsing, calls)
+        self.addCleanup(setattr, parsing, '_scan_mapping_xlsx', real)
+        _mapping_xlsx(self.map_root / '03-HSFA' / 'b.xlsx')
+        with contextlib.redirect_stdout(io.StringIO()):
+            parsing.load_owner()
+        self.assertEqual(calls, [], '内存命中不得重新扫描')
+        with contextlib.redirect_stdout(io.StringIO()):
+            parsing.load_owner(force_rescan=True)
+        self.assertEqual(sorted(calls), ['a.xlsx', 'b.xlsx'])
+
+    def test_cache_without_fingerprint_is_stale(self):
+        parsing = self.parsing
+        path = self.ns.REPO / 'tools/.dx-tmp/dwd_owner_map.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"assign": {}, "version": 1}', encoding='utf-8')
+        with contextlib.redirect_stdout(io.StringIO()):
+            data = parsing.load_owner()
+        self.assertIn('DWD_AST_CRSE_INFO_PFD', data['assign'])
+        self.assertIn('fingerprint', data)
+
+    def test_new_jf_txt_after_cache_hit(self):
+        parsing = self.parsing
+        with contextlib.redirect_stdout(io.StringIO()):
+            first = parsing.load_owner()
+        self.assertEqual(set(first['stems']), {'DWD_AST_CRSE_INFO_PFD', 'DWD_CMM_FOO_PFD'})
+        (parsing.JF / 'DWD_EVT_FOO_PFD.txt').write_text('x', encoding='utf-8')
+        with contextlib.redirect_stdout(io.StringIO()):
+            second = parsing.load_owner()
+        self.assertIn('DWD_EVT_FOO_PFD', second['stems'])
+        self.assertIn('DWD_EVT_FOO_PFD', second.get('none') or [])
+
+    def test_failed_mapping_scan_is_not_cached(self):
+        bad = self.map_root / '03-HSFA' / 'bad.xlsx'
+        bad.write_bytes(b'not-a-zip')
+        cache = self.ns.REPO / 'tools/.dx-tmp/dwd_owner_map.json'
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.parsing.load_owner()
+        self.assertIn('! bad.xlsx:', buf.getvalue())
+        self.assertFalse(cache.is_file())
+        self.assertIsNone(self.parsing._OWNER_MEM)
+        calls = []
+        real = _patch_scan(self.parsing, calls)
+        self.addCleanup(setattr, self.parsing, '_scan_mapping_xlsx', real)
+        buf2 = io.StringIO()
+        with contextlib.redirect_stdout(buf2):
+            self.parsing.load_owner()
+        self.assertEqual(sorted(calls), ['a.xlsx', 'bad.xlsx'])
+        self.assertNotIn('归属缓存命中', buf2.getvalue())
+        self.assertFalse(cache.is_file())
+
+    def test_force_rescan_scans_once_for_cmd_all(self):
+        import tools.dwd.cli as cli
+        parsing = self.parsing
+        calls = []
+        real = _patch_scan(parsing, calls)
+        self.addCleanup(setattr, parsing, '_scan_mapping_xlsx', real)
+        saved = {}
+        for name in ('cmd_convert', 'cmd_distribute', 'cmd_ddl', 'cmd_lineage',
+                     'cmd_depcfg', 'cmd_verify'):
+            saved[name] = getattr(cli, name)
+
+            def _step(args, _name=name):
+                if _name in ('cmd_convert', 'cmd_distribute', 'cmd_ddl', 'cmd_lineage'):
+                    parsing.load_owner(force_rescan=getattr(args, 'force_rescan', False))
+                return 0
+
+            setattr(cli, name, _step)
+            self.addCleanup(setattr, cli, name, saved[name])
+        args = types.SimpleNamespace(apply=False, force_rescan=True, force_sys='')
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = cli.cmd_all(args)
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, ['a.xlsx'])
+
+    def test_failed_forced_scan_stops_before_using_old_cache(self):
+        from unittest.mock import patch
+        from tools.dwd import cli
+
+        self.parsing.load_owner()
+        args = types.SimpleNamespace(apply=False, force_rescan=True, force_sys='')
+        with patch.object(self.parsing, '_scan_mapping_xlsx', return_value=False), \
+                patch.object(cli, 'cmd_convert', return_value=1) as convert:
+            self.assertEqual(cli.cmd_all(args), 1)
+            convert.assert_not_called()
+
+    def test_concurrent_cache_writers_publish_complete_json(self):
+        import json
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from unittest.mock import patch
+
+        payloads = [{'owner': {name: ['HSFA']}} for name in ('A', 'B')]
+        ready = Barrier(2)
+        replace = self.parsing.os.replace
+
+        def replace_together(src, dst):
+            ready.wait(timeout=10)
+            return replace(src, dst)
+
+        with patch.object(self.parsing.os, 'replace', replace_together), ThreadPoolExecutor(2) as pool:
+            list(pool.map(self.parsing._write_owner_cache, payloads))
+        self.assertIn(json.loads(self.ns.OWNER_JSON.read_text(encoding='utf-8')), payloads)
+        self.assertEqual(list(self.ns.OWNER_JSON.parent.iterdir()), [self.ns.OWNER_JSON])
+
+    def test_cache_hit_owner_prints_summary(self):
+        parsing = self.parsing
+        with contextlib.redirect_stdout(io.StringIO()):
+            parsing.load_owner()
+        parsing._OWNER_MEM = None
+        calls = []
+        real = _patch_scan(parsing, calls)
+        self.addCleanup(setattr, parsing, '_scan_mapping_xlsx', real)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = parsing.cmd_owner(types.SimpleNamespace(force_rescan=False))
+        text = buf.getvalue()
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [])
+        self.assertIn('归属缓存命中', text)
+        self.assertIn('唯一归属 2 | 多系统 0 | 未命中 0', text)
 
 
 if __name__ == '__main__':

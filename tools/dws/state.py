@@ -11,12 +11,15 @@ import os
 import sys
 from pathlib import Path
 
-from tools.core.safe_paths import safe_sysname
-
 # 仓库根入 sys.path，才能 import tools.core.loader（按绝对路径缓存，跨脚本同一份）。
 REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
+
+# ★ 交付目录定位与 scripts/ 子目录拼装的唯一来源（DWD / DWS 共用）。
+#   原先本文件与 `tools/dwd/ns.py` 各存一份，两份口径漂移就会让两层
+#   指向不同交付源 ⇒ 统一到 `tools/core/delivery_paths.py`。
+from tools.core import delivery_paths
 
 SCRIPTS = REPO / "scripts"
 SYS = ("HSFA", "HSZTA", "O32")
@@ -28,6 +31,7 @@ GROUPS = SYS + ("主数据",)
 DWD_PIPE = REPO / "tools/dwd-pipeline.py"
 GEN_MAIN = REPO / "tools/main.py"
 DEPLOY_ALL = REPO / "tools/ds-deploy/ds-deploy-all-dwd.py"
+DEPLOY_API = REPO / "tools/ds-deploy/ds-deploy-api.py"
 DWS_DEPS = REPO / "tools/ds-deploy/ds-build-dws-dependent-from-lineage.py"
 DWS_DEP_REPORT = REPO / "tools/dws-dep-report.py"
 RELAYOUT = REPO / "tools/ds-deploy/ds-relayout.py"
@@ -40,13 +44,8 @@ PY = sys.executable
 # ★ 2026-10-26：原来写死 WSL 路径 /mnt/d，Windows 原生跑会判「不存在→跳过」。
 #   注意不能只用 exists() 回退：Windows 会把 /mnt/d 解析成 `\mnt\d`（当前盘符下），
 #   历史运行留下的镜像目录会让 exists() 假真 ⇒ 按哨兵子目录 `05-脚本` 判定。
-_CAND_DELIVERY = [
-    Path(os.environ["DW_DELIVERY"]) if os.environ.get("DW_DELIVERY") else None,
-    Path("/mnt/d/项目/信达澳亚数仓/信达澳亚投研数据集市交付文档"),
-    Path(r"D:\项目\信达澳亚数仓\信达澳亚投研数据集市交付文档"),
-]
-DELIVERY = next((p for p in _CAND_DELIVERY if p and (p / "05-脚本").is_dir()),
-                _CAND_DELIVERY[-1])
+#   候选顺序与判定规则见 `tools/core/delivery_paths.py`（DWD / DWS 共用一份）。
+DELIVERY = delivery_paths.resolve_delivery()
 SRC_DWS_EXEC = DELIVERY / "05-脚本/02-脚本/02-DWS执行脚本"
 SRC_DWS_DDL = DELIVERY / "05-脚本/01-建表语句/02-DWS建表脚本.sql"
 SRC_DWD_DDL = DELIVERY / "05-脚本/01-建表语句/01-DWD建表脚本.sql"
@@ -86,22 +85,18 @@ def ds_deploy():
 def dwd_etl_dir(sysname):
     """DWD 脚本目录（主数据归 scripts/MASTER，不是 scripts/主数据）。
 
-    ★ 2026-11-10（评审 H2）：补 `safe_sysname` 校验。本函数是 `dwd.ns.etl_dir`
-      的同规则副本，但此前漏了路径校验 —— 与 ns 那份不一致就等于没有防线。
+    ★ 2026-11-10（评审 H2）：补 `safe_sysname` 校验。本函数原先是
+      `dwd.ns.etl_dir` 的同规则副本，但漏了路径校验 ⇒ 现在两者共用
+      `tools/core/delivery_paths.py`，校验与目录映射都只有一份。
     """
-    safe_sysname(sysname)
-    return (SCRIPTS / "MASTER/dwd/02_etl") if sysname == "主数据" \
-        else (SCRIPTS / sysname / "dwd/02_etl")
+    return delivery_paths.dwd_etl_dir(SCRIPTS, sysname)
 
 
 def ddl_main(sysname):
     """DWD 合并 DDL 路径（主数据归 scripts/MASTER/dwd/01_ddl.sql）。"""
-    safe_sysname(sysname)
-    return (SCRIPTS / "MASTER/dwd/01_ddl.sql") if sysname == "主数据" \
-        else (SCRIPTS / sysname / "dwd/01_ddl.sql")
+    return delivery_paths.dwd_ddl_main(SCRIPTS, sysname)
 
 
 def dws_etl_dir(sysname):
     """DWS 脚本目录 `scripts/<系统>/dws/02_etl`（带路径校验）。"""
-    safe_sysname(sysname)
-    return SCRIPTS / sysname / "dws/02_etl"
+    return delivery_paths.dws_etl_dir(SCRIPTS, sysname)

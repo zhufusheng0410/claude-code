@@ -20,22 +20,23 @@ def cmd_verify(args):
     report = {}
     print('== Shell 语法 (bash -n)')
     bad_all = []
-    total = 0
+    total = skipped = 0
     for g in GROUPS:
-        n, bad, _sk = _shell_check(etl_dir(g))
+        n, bad, sk = _shell_check(etl_dir(g))
         total += n
+        skipped += sk
         bad_all += [(g, *b) for b in bad]
-        print(f'  {g}: {n - len(bad)}/{n}')
+        print(f'  {g}: 通过 {n - len(bad) - sk}/{n}，未执行 {sk}')
     for x in bad_all[:10]:
         print('  BAD', x)
-    report['shell'] = {'total': total, 'bad': bad_all}
+    report['shell'] = {'total': total, 'bad': bad_all, 'skipped': skipped}
 
     print('== DDL 完整性（scripts/{系统}/dwd）')
     ddl_bad = {}
     for s in GROUPS:
-        d = _ns.SCRIPTS / ('MASTER/dwd' if s == '主数据' else f'{s}/dwd')
-        per = {p.name: p for p in (d / 'ddl').glob('*.sql')} if (d / 'ddl').is_dir() else {}
-        f1 = d / '01_ddl.sql'
+        f1 = ddl_main(s)
+        d = ddl_dir(s)
+        per = {p.name: p for p in d.glob('*.sql')} if d.is_dir() else {}
         diff = []
         if not f1.is_file():
             diff.append('01_ddl.sql 缺失')
@@ -127,14 +128,23 @@ def cmd_verify(args):
         print('报告:', out)
     else:
         print('（dry-run：未写报告文件，加 --apply 才落盘）')
-    if bad_all or any(ddl_bad.values()):
+    if skipped:
+        print(f'⚠ {skipped} 个脚本未执行语法校验')
+    if bad_all or any(ddl_bad.values()) or (skipped and getattr(args, 'strict', False)):
         return 1
-    print('校验通过')
+    print('校验完成（存在未执行项）' if skipped else '校验通过')
     return 0
 
 
 # --------------------------------------------------------------------------- #
 def cmd_all(args):
+    # `--force-rescan` 在管线边界消费：先触发一次重扫填满进程缓存，
+    # 后续步骤沿用，不再每步都读这个开关。
+    if getattr(args, 'force_rescan', False):
+        if load_owner(force_rescan=True) is None:
+            print('✗ 强制扫描 MAPPING 失败，已停止，不使用旧缓存')
+            return 1
+        args = argparse.Namespace(**{**vars(args), 'force_rescan': False})
     steps = [
         ('owner', cmd_owner),
         ('convert', cmd_convert),
@@ -176,6 +186,9 @@ def main():
                            help='DDL 落盘自检发现差异时不阻断（默认阻断）')
         if name in ('owner', 'convert', 'distribute', 'ddl', 'lineage', 'all'):
             p.add_argument('--force-sys', default='', help='归属歧义时强制归到该系统')
+        if name in ('owner', 'all'):
+            p.add_argument('--force-rescan', action='store_true',
+                           help='忽略归属缓存，全量重扫 MAPPING')
         if name in ('depcfg', 'all'):
             p.add_argument('--out', default=str(_ns.DEPCFG_OUT), help='依赖配置输出目录')
         if name == 'prevday':
@@ -183,6 +196,8 @@ def main():
                            help='上一日依赖清单输出路径')
         if name in ('verify', 'all'):
             p.add_argument('--ds', action='store_true', help='连 DS 审计脚本来源')
+            p.add_argument('--strict', action='store_true',
+                           help='存在未执行的语法检查时返回失败')
     args = ap.parse_args()
     fn = {
         'owner': cmd_owner, 'convert': cmd_convert, 'distribute': cmd_distribute,

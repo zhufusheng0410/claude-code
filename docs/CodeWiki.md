@@ -192,8 +192,7 @@ claude-code/
 ### 4.1 `tools/main.py`（生成器 CLI）
 
 ```
-python tools/main.py --layer ALL|ODS|DWD|DWS [--sys O32] [--output DIR]
-                     [--dwd-mapping-dir DIR --sys-name MASTER] [--verbose]
+/usr/bin/python3 tools/main.py --layer ODS --sys O32
 ```
 
 执行流程：
@@ -201,7 +200,7 @@ python tools/main.py --layer ALL|ODS|DWD|DWS [--sys O32] [--output DIR]
 2. **ODS**：`_generate_ods_for_sys()` → 表级+字段级解析 → 过滤 → DDL/按表 DDL/ETL/字典；
 3. **DWD/DWS**：`_all_sys_names()` 展开别名 → `find_mapping_dir/file()` 找 MAPPING →
    `_generate_dwd_dws()` → `create_generator()` → DDL/ETL/血缘/字典；
-4. `write_combined_dict()` 汇总字典（`--dwd-mapping-dir` 模式**刻意跳过**，避免覆盖全量汇总）。
+4. 只在全系统、全层生成时写入全局汇总字典；局部生成不会覆盖已有汇总。
 
 ### 4.2 `tools/dwd-pipeline.py`（甲方脚本搬移）
 
@@ -235,7 +234,7 @@ python3 tools/dw-pipeline.py <子命令> [--layers DWD,DWS] [--source jf|gen]
 
 | 子命令 | 作用 |
 |---|---|
-| `scripts` | jf：DWD 调 `dwd-pipeline convert/distribute`，DWS 比对甲方 25 个 txt（默认不覆盖已修复版）；gen：调 `main.py` 到临时目录并扫 `[ERROR` 失败即停 |
+| `scripts` | jf：DWD 调 `dwd-pipeline convert/distribute`，DWS 只比对甲方原文，即使加 `--apply` 也不覆盖仓库脚本；gen：调 `main.py` 到临时目录并扫 `[ERROR` 失败即停 |
 | `ddl` / `lineage` | jf 调 `dwd-pipeline`；DWS 校验各系统 `01_ddl.sql`、3 份 `DWS_lineage.xlsx` |
 | `config` | 生成 `dep-config-proscript`（DWD）/ `dep-config-dws`（DWS），刷新 `DWS_表中文名.json` |
 | `delete` | 先删 `DWS_*` 再删 `DWD_*`；`check_dwd_only_preflight()` 拒绝「DWS 仍在却只删 DWD」 |
@@ -260,7 +259,7 @@ DWS 依赖关系报表生成（配合 `scripts/DWS_依赖关系.xlsx` 使用）�
 
 | 类别 | 脚本 |
 |---|---|
-| **部署/落库** | `ds-deploy-api.py`（★JSON 契约 `dw-ds-deploy/v1`：`export/plan/import`，幂等 upsert）、`ds-deploy-all-dwd.py`（逆拓扑全删→正拓扑重建，`--layer DWD\|DWS`）、`ds-deploy-ods-all.py`、`ds-deploy-dwd-workflow.py`（单工作流，公共 HTTP 库）、`ds-add-dwd-table.py`、`ds-rebuild-from-inventory.py`（灾后重建，两阶段提交） |
+| **部署/落库** | `ds-deploy-api.py`（`plan` 生成 v1 计划，`export` 导出 v2 恢复快照，`import` 兼容两版，按名幂等更新）、`ds-deploy-all-dwd.py`（逆拓扑全删→正拓扑重建，`--layer DWD\|DWS`）、`ds-deploy-ods-all.py`、`ds-deploy-dwd-workflow.py`（单工作流，公共 HTTP 库）、`ds-add-dwd-table.py`、`ds-rebuild-from-inventory.py`（灾后重建，两阶段提交） |
 | **一键管线** | `tools/dw-pipeline.py`（现役唯一入口；原 `ds-dwd-pipeline.py` 已退役归档 `tools/.archive/retired/`） |
 | **脚本同步** | `ds-sync-dwd-scripts.py`、`ds-sync-ods-scripts.py`（逐字节比对，只推 sha1 变更，先 OFFLINE 再 PUT） |
 | **依赖构建** | `ds-build-dependent-from-lineage.py`（★DWD，读 `scripts/*/dwd/lineage/DWD_lineage.xlsx` → `dep-config-proscript`；`own_workflow()`/`WORKFLOW_OVERRIDE` 委托自 `tools/core/dwd_ownership.py`）、`ds-build-dws-dependent-from-lineage.py`（DWS → `dep-config-dws`） |
@@ -430,6 +429,6 @@ python3 -m unittest discover -s tools/tests -p "test_*.py"
 | [AGENTS.md](../AGENTS.md) | 项目口径全文：命名规范、系统列表、MASTER/DWD/DWS 基线、工作流归属与重启顺序。`CLAUDE.md` 只是短入口 |
 | `docs/功能与规范文档.md` | 生成器功能与规范明细（含 J-xx 条目、§15.3 T-1 免配规则） |
 | `docs/DWD-DWS一体化管线使用说明.md` | `dw-pipeline` 使用手册 |
-| `docs/主数据生成说明.md` | MASTER 层口径（甲方脚本 + 手工血缘） |
+| `docs/archive/主数据生成说明.md` | 历史 MAPPING 试验，不是现行操作手册；MASTER 规则见 `AGENTS.md` |
 | `docs/DWD-ODS依赖体检报告.md` | 依赖体检快照（快照不下发口径） |
 | [tools/ds-deploy/README.md](../tools/ds-deploy/README.md) | 部署工具链：工具清单、JSON 契约、8 条铁律、踩坑记录 |

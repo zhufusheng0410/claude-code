@@ -4,9 +4,11 @@
 这些点历史上都靠文档/人肉同步，漂移后不会报错、只会在部署时静默用错口径。
 """
 import importlib.util
+import io
 import sys
 import unittest
 import unittest.mock
+from contextlib import redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +19,16 @@ def _load(name, rel):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+class TestReporting(unittest.TestCase):
+    def test_print_limited_preserves_tail_count_and_unit(self):
+        reporting = _load("reporting", "tools/core/reporting.py")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            reporting.print_limited(("A", "B", "C"), limit=2, unit="个")
+        self.assertEqual(out.getvalue(),
+                         "    A\n    B\n    … 其余 1 个\n")
 
 
 class TestWorkflowOwnership(unittest.TestCase):

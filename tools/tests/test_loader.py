@@ -101,7 +101,7 @@ class TestConfigPaths(unittest.TestCase):
     def test_detect_d_base_returns_path_string(self):
         # 行为级断言（不耦合内部候选列表实现）：
         # 探测结果必须是可直接参与 os.path.join 的字符串。
-        base = config._detect_d_base()
+        base = config.detect_d_base()
         self.assertIsInstance(base, str)
         self.assertTrue(base)
         self.assertTrue(os.path.join(base, "x"))

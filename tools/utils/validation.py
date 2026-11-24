@@ -41,7 +41,12 @@ def validate_db_identifier(name: str, identifier_type: str = "identifier") -> No
 
 def validate_output_path(user_path: str, base_dir: str) -> str:
     """
-    验证输出路径在基础目录内，防止路径遍历攻击
+    验证输出路径在基础目录内，防止路径遍历攻击。
+
+    这里使用 commonpath 而不是字符串前缀比较，能更稳妥地处理：
+    - 基础目录是根目录 /、C:\\ 等边界场景
+    - 目录名相似但并不在同一层级（例如 /tmp/project 与 /tmp/project2）
+    - 路径中带符号链接导致的真实路径差异
 
     Args:
         user_path: 用户提供的路径
@@ -53,12 +58,15 @@ def validate_output_path(user_path: str, base_dir: str) -> str:
     Raises:
         ValueError: 如果路径超出允许范围
     """
-    # 获取绝对路径并解析符号链接
     real_base = os.path.realpath(base_dir)
     real_path = os.path.realpath(user_path)
 
-    # 确保路径在基础目录内
-    if not real_path.startswith(real_base + os.sep) and real_path != real_base:
+    try:
+        inside = os.path.commonpath([real_base, real_path]) == real_base
+    except ValueError:
+        # 不同盘符（Windows）时 commonpath 抛 ValueError，同样视为越界
+        inside = False
+    if not inside:
         raise ValueError(
             f"Output path '{user_path}' is outside allowed directory '{base_dir}'"
         )

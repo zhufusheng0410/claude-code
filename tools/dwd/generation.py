@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """DWD 管线生成：方言转换、依赖工作簿、DS 依赖配置。"""
-# -*- coding: utf-8 -*-
 import collections
-import difflib
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -17,6 +14,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.hyperlink import Hyperlink
 
 from tools.core.loader import load as _load_file
+from tools.core.reporting import print_limited
 
 from tools.dwd import export_ns
 from tools.dwd import ns as _ns
@@ -295,7 +293,9 @@ def new_stats():
 
 
 def cmd_convert(args):
-    data = load_owner(write=args.apply)
+    data = take_owner(args)
+    if data is None:
+        return 1
     assign = resolved_assign(data, args.force_sys)
     stats = new_stats()
     init_src = sorted(p.stem for p in JF.glob('*_INIT.txt'))
@@ -340,10 +340,11 @@ def cmd_convert(args):
     print(f'\n转换 {wrote} 个（甲方缺 txt：{missing or "无"}）')
     if failed:
         print(f'⚠ {len(failed)} 个转换失败（已跳过，其余正常处理）：')
-        for t, e in failed[:10]:
-            print(f'    {t}: {e}')
-        if len(failed) > 10:
-            print(f'    … 其余 {len(failed) - 10} 个')
+        print_limited(
+            (f"{t}: {e}" for t, e in failed),
+            limit=10,
+            unit="个",
+        )
     print('变换计数:', stats)
     ok, bad = 0, []
     master_shs = sorted(_ns.MASTER.glob('*.sh'))
@@ -369,7 +370,8 @@ def cmd_convert(args):
               '历史漂移需按 J-33 口径处置（--master-placeholder 可回滚占位）')
     if not args.apply:
         print('(dry-run，未落盘)')
-    return 0
+    # 不完整的转换结果不能交给 distribute 写入搬移清单。
+    return 1 if failed or missing else 0
 
 
 def cmd_distribute(args):
@@ -379,7 +381,10 @@ def cmd_distribute(args):
     n_master = len(list(_ns.MASTER.glob('*.sh')))
     if sum(dist.values()) + n_master == 0:
         sys.exit('scripts/ 下没有任何 DWD 脚本 ⇒ 先跑 dwd-pipeline.py convert --apply')
-    assign = resolved_assign(load_owner(write=args.apply), args.force_sys)
+    data = take_owner(args)
+    if data is None:
+        return 1
+    assign = resolved_assign(data, args.force_sys)
     ddl = {s: len(list(ddl_dir(s).glob('*.sql'))) for s in GROUPS}
     manifest = {'dist': dist, 'master': n_master, 'ddl': ddl, 'assign': assign,
                 'scripts_root': str(_ns.SCRIPTS)}
@@ -534,7 +539,10 @@ def build_cover(wb, title, subtitle, notes, links=None, sheets=None):
 def cmd_lineage(args):
     if not any(etl_dir(g).is_dir() for g in GROUPS):
         sys.exit('缺 scripts/{系统}/dwd/02_etl ⇒ 先跑 dwd-pipeline.py convert --apply')
-    assign = resolved_assign(load_owner(write=args.apply), args.force_sys)
+    data = take_owner(args)
+    if data is None:
+        return 1
+    assign = resolved_assign(data, args.force_sys)
     all_stems = {p.stem: g for g in GROUPS for p in etl_dir(g).glob('*.sh')}
     rows = []
     for g in GROUPS:
@@ -703,7 +711,7 @@ def cmd_lineage(args):
         per[g], total, bad = n, total + n, bad + b
         skipped += sk
     # ★ 全被拦截时不能写成「109/109 通过」——那是把"没跑"伪装成"通过"。
-    shell_res = (f'{total - len(bad)}/{total} 通过' if skipped < total
+    shell_res = (f'{total - len(bad) - skipped}/{total} 通过，未执行 {skipped}' if skipped < total
                  else f'未执行（{skipped}/{total} 被环境安全策略拦截）')
     ws6.append(['Shell 语法 (bash -n)', shell_res,
                 ' / '.join(f'{g} {per[g]}' for g in GROUPS)])

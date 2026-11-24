@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """数仓代码自动生成工具 — CLI 入口
 
-用法:
-  python tools/main.py --layer ALL
-  python tools/main.py --layer ODS --sys O32
-  python tools/main.py --layer DWD --sys O32 --dwd-mapping-dir /path/to/mapping/
-  python tools/main.py --layer DWS --sys O32 --dws-mapping /path/to/mapping.xlsx
+用法（直接写入生成文件；不是管线的 dry-run）:
+  /usr/bin/python3 tools/main.py --layer ODS --sys O32
+  /usr/bin/python3 tools/main.py --layer DWS --sys O32
+  /usr/bin/python3 tools/main.py --layer DWD --dwd-mapping-dir /path/to/mapping/ --sys-name O32
 """
 
 import argparse
@@ -132,12 +131,13 @@ def _generate_ods_for_sys(sys_key, survey_dir, out, logger):
 def _generate_dwd_dws(layer_name, parser_func, input_path, out, logger, sys_override=None):
     """生成 DWD/DWS 层代码
 
-    sys_override: 显式指定输出系统名。用于「00-主数据」这类**不在 SURVEY_DIR 里**的
-                  独立 MAPPING 目录 —— 从路径推断会得到中文名（`00-主数据` → `主数据`），
-                  必须覆盖成 ASCII 名（如 MASTER）才能落到 scripts/<名>/ 下。
+    sys_override: 为独立 MAPPING 目录显式指定业务系统输出名。
+                  最终系统名为 MASTER 时拒绝生成。
     """
     raw_sys = sys_override or extract_sys_name(layer_name, input_path)
     sys_name = normalize_sys_name(raw_sys)
+    if layer_name == "DWD" and (sys_name or "").strip().upper() == "MASTER":
+        sys.exit("拒绝生成 MASTER：生成器会覆盖甲方脚本与手工血缘。")
 
     input_desc = os.path.basename(os.path.normpath(input_path))
     if sys_name != raw_sys:
@@ -305,8 +305,11 @@ def main():
             else:
                 logger.info(f"  [{sys_name}] 无 DWS MAPPING，跳过")
 
-    # 汇总数据字典（跨系统跨层级）
-    write_combined_dict(dict_by_layer, out)
+    # 局部生成只更新分系统字典，不能用本次子集覆盖跨系统、跨层汇总。
+    if layer == "ALL" and not args.sys:
+        write_combined_dict(dict_by_layer, out)
+    else:
+        logger.info("局部生成：保留已有汇总数据字典")
 
     elapsed = time.time() - t_start
     logger.info(f"─────────────────────────────────────────────")

@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """DS 工作流操作：删除、重建、排版，以及 DWD 单独重建的前置检查。"""
+import datetime as dt
+import json
+
 from tools.dws import state as st
+from tools.core.ds_snapshot import SNAPSHOT_SCHEMA, dependency_items
 from tools.dws.args import _ap, _dry, layers_of
 from tools.dws.process import run
 
@@ -17,8 +21,7 @@ def _ds_client():
 def ds_workflows(prefixes):
     dc = _ds_client()
     ds = dc.get_client()
-    pcode = dc.project_code(
-        ds.call("GET", "/projects", params={"pageNo": 1, "pageSize": 100}), "dw")
+    pcode = dc.project_code_of(ds)
     wf = dc.lst_of(ds.call("GET", f"/projects/{pcode}/workflow-definition",
                            params={"pageNo": 1, "pageSize": 500}))
     return ds, pcode, [w for w in wf if str(w["name"]).startswith(prefixes)]
@@ -99,6 +102,81 @@ def _run_steps(steps, hint=""):
     return 0
 
 
+def _create_recovery_snapshot(layers):
+    """在 apply 部署的首次删除前导出目标层工作流，失败时阻止破坏性步骤。"""
+    prefixes = []
+    if "DWD" in layers:
+        prefixes.extend(("DWD_", "MASTER_"))
+    if "DWS" in layers:
+        prefixes.append("DWS_")
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    path = st.REPO / "tools/.dx-tmp/ds-recovery" / f"deploy-{stamp}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rc, _ = run([st.PY, st.DEPLOY_API, "export", "--match",
+                 ",".join(prefixes), "--out", path])
+    if rc:
+        print(f"✗ DS 恢复快照导出失败（rc={rc}），为保护现有工作流，取消部署")
+        return None
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        workflows = doc["workflows"]
+        names = [wf["name"] for wf in workflows]
+        if (doc.get("schema") != SNAPSHOT_SCHEMA
+                or not isinstance(workflows, list)
+                or len(names) != len(set(names))
+                or any(not name.startswith(tuple(prefixes)) for name in names)):
+            raise ValueError("快照结构或工作流范围无效")
+        _, project, current = ds_workflows(tuple(prefixes))
+        if doc.get("source", {}).get("projectCode") != project:
+            raise ValueError("快照项目与部署目标项目不一致")
+        if set(names) != {wf["name"] for wf in current}:
+            raise ValueError("快照未覆盖部署目标的全部工作流")
+        doc["workflows"] = _order_recovery_workflows(workflows)
+        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8")
+    except (OSError, UnicodeError, json.JSONDecodeError, KeyError,
+            TypeError, ValueError, RuntimeError) as e:
+        print(f"✗ DS 恢复快照校验失败：{e}；为保护现有工作流，取消部署")
+        return None
+    print(f"✓ DS 恢复快照已保存：{path}（{len(names)} 个现有工作流）")
+    return path
+
+
+def _order_recovery_workflows(workflows):
+    """恢复导入按上游优先排序；循环依赖的剩余项按名称稳定排序。"""
+    by_name = {wf["name"]: wf for wf in workflows}
+    deps = {name: set() for name in by_name}
+    for name, wf in by_name.items():
+        for task in wf.get("tasks", []):
+            for item in dependency_items(task):
+                upstream = item.get("dependWorkflow")
+                if upstream in by_name and upstream != name:
+                    deps[name].add(upstream)
+    remaining = {name: set(upstreams) for name, upstreams in deps.items()}
+    ordered = []
+    while remaining:
+        ready = sorted(name for name, upstreams in remaining.items() if not upstreams)
+        if not ready:
+            ordered.extend(by_name[name] for name in sorted(remaining))
+            break
+        for name in ready:
+            ordered.append(by_name[name])
+            remaining.pop(name)
+        for upstreams in remaining.values():
+            upstreams.difference_update(ready)
+    return ordered
+
+
+def _report_recovery(snapshot):
+    """部署失败后打印快照位置和人工恢复入口。"""
+    print("\n部署未完成。恢复前请先确认 DS 实例已停止，并审阅快照内容：")
+    print(f"  快照：{snapshot}")
+    print(f"  预览：{st.PY} {st.DEPLOY_API} import --input {snapshot} --restore --dry-run")
+    print(f"  导入：{st.PY} {st.DEPLOY_API} import --input {snapshot} --restore")
+    print("  恢复按快照替换目标工作流的任务、关系和全局参数。")
+    print("  上线状态与调度需按原运行状态核验后手工处理；请检查目标层是否有多余工作流。")
+
+
 def cmd_delete(args):
     layers = layers_of(args)
     if not check_dwd_only_preflight(layers, block=args.apply) and args.apply:
@@ -114,6 +192,18 @@ def cmd_deploy(args):
     layers = layers_of(args)
     if not check_dwd_only_preflight(layers, block=args.apply) and args.apply:
         return 1
+    # 所有目标层均通过只读检查后，才能开始跨层删除。
+    for layer in ("DWD", "DWS"):
+        if layer in layers:
+            check = "--check-only" if args.apply else "--dry-run"
+            rc = run([st.PY, st.DEPLOY_ALL, "--layer", layer, check])[0]
+            if rc:
+                return rc
+    snapshot = None
+    if args.apply:
+        snapshot = _create_recovery_snapshot(layers)
+        if snapshot is None:
+            return 1
     # 顺序固定：预删 DWS → 删/建 DWD → 建 DWS（跨层引用不会挡删）
     steps = []
     if "DWS" in layers:
@@ -127,6 +217,8 @@ def cmd_deploy(args):
                       [st.PY, st.DEPLOY_ALL, "--layer", "DWS"] + _dry(args)))
     rc = _run_steps(steps, " ⇒ 中止后续步骤，避免 DS 留下半成品")
     if rc:
+        if snapshot:
+            _report_recovery(snapshot)
         return rc
     if args.apply:
         for layer in ("DWD", "DWS"):
@@ -135,6 +227,8 @@ def cmd_deploy(args):
                 rc = run([st.PY, st.RELAYOUT, layer.lower(), "--apply"])[0]
                 if rc:
                     print(f"  ✗ 排版 {layer} 失败（rc={rc}）")
+                    if snapshot:
+                        _report_recovery(snapshot)
                     return rc
     return 0
 

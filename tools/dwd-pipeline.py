@@ -23,6 +23,7 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+from tools.core.facade_bridge import executing_module, PatchBridge
 from tools.dwd import cli, ddl_check, generation, ns, parsing  # noqa: E402
 
 
@@ -37,41 +38,12 @@ for _mod in (ns, parsing, generation, ddl_check, cli):
     _export(_mod)
 
 
-class _PatchBridge(types.ModuleType):
-    """按路径加载后，测试会改本模块的 ``REPO`` / ``SCRIPTS``；写穿到 ns。
-
-    ★ 2026-11-10（评审 H1/M6）：本模块是**唯一的补丁入口**。各子模块不再
-      自带 `REPO`/`SCRIPTS` 快照（见 ``tools/dwd/__init__.py::export_ns``），
-      一律读 ``ns.REPO`` / ``ns.SCRIPTS``，所以只要在这里写穿一次，
-      parsing / generation / ddl_check / cli 全部立刻生效。
-    """
-
-    def __setattr__(self, name, value):
-        if name in ('REPO', 'SCRIPTS'):
-            setattr(ns, name, value)
-        super().__setattr__(name, value)
+class _PatchBridge(PatchBridge):
+    """按路径加载后，测试会改本模块的 ``REPO`` / ``SCRIPTS``；写穿到 ns。"""
+    _PATCHABLE = {'REPO': ns, 'SCRIPTS': ns}
 
 
-def _executing_module():
-    """正在执行本文件的模块对象。
-
-    ``loader.load`` 会先登记 ``sys.modules``；单测则只 ``exec_module``、不登记。
-    两种都要把补丁桥装到**调用方持有的那个对象**上。
-    """
-    g = globals()
-    registered = sys.modules.get(__name__)
-    if registered is not None and getattr(registered, '__dict__', None) is g:
-        return registered
-    frame = sys._getframe()
-    while frame is not None:
-        for val in frame.f_locals.values():
-            if getattr(val, '__dict__', None) is g:
-                return val
-        frame = frame.f_back
-    return None
-
-
-_self = _executing_module()
+_self = executing_module(globals(), __name__)
 if _self is not None:
     _self.__class__ = _PatchBridge
 

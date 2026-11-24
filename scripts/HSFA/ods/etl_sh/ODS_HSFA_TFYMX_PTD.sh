@@ -82,7 +82,7 @@ json_obj=$(cat <<'EOF'
                                    , VC_BZ
                                    , EN_ZDGHF
                                    , EN_WBHL
-                                   , EN_XTSYF
+                                   , NULL AS EN_XTSYF
                                    , EN_CHJZF
                                    , L_JCHJZF
                                    , L_YJJSXF
@@ -122,9 +122,9 @@ json_obj=$(cat <<'EOF'
 EOF
 )
 
-sudo -u ${ds_user} echo $json_obj>${json_path}ods_hsfa_tfymx_ptd_tmp.json
+printf '%s' "$json_obj" > "${json_path}ods_hsfa_tfymx_ptd_tmp.json"
 
-sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" ${json_path}ods_hsfa_tfymx_ptd_tmp.json
+sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" "${json_path}ods_hsfa_tfymx_ptd_tmp.json"
 
 if [ $? -ne 0 ]; then
    echo "导入到ODS_HSFA_TFYMX_PTD_TMP表失败"

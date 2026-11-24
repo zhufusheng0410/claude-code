@@ -11,22 +11,9 @@ import os
 _PROJECT_REL = os.path.join("项目", "信达澳亚数仓", "信达澳亚投研数据集市交付文档")
 
 
-def _detect_d_base():
-    """探测 D 盘根：显式环境变量优先，否则取首个能命中交付文档目录的候选。
+from tools.core.delivery_paths import detect_d_base
 
-    全都不命中时返回首选候选，由 missing_inputs() 给出可读报错。
-    """
-    env = os.environ.get("DW_D_BASE")
-    if env:
-        return env          # 用户显式指定，不再猜测
-    cands = ["D:/", "E:/"] if os.name == "nt" else ["/mnt/d", "/d", "/data"]
-    for c in cands:
-        if os.path.isdir(os.path.join(c, _PROJECT_REL)):
-            return c
-    return cands[0]
-
-
-D_BASE = _detect_d_base()
+D_BASE = detect_d_base()
 PROJECT_BASE = os.path.normpath(
     os.environ.get("DW_PROJECT_BASE") or os.path.join(D_BASE, _PROJECT_REL))
 

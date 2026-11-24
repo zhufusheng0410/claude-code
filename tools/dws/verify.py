@@ -2,9 +2,11 @@
 """脚本 / DDL / DS 校验。"""
 import json
 
+from tools.core.ddl_compare import compare_local_ddl
+
 from tools.dws import state as st
 from tools.dws.args import layers_of, stale_allowed, strict_of
-from tools.dws.ddl import (_load_ddl_verify, _print_ddl_diff, dws_table_sys_map,
+from tools.dws.ddl import (_print_ddl_diff, dws_table_sys_map,
                            parse_jf_ddl, verify_ddl_vs_jf)
 from tools.dws.deploy import ds_workflows
 from tools.dws.manifest import StaleDwsManifest, fail_stale
@@ -28,21 +30,20 @@ def cmd_verify_ddl(args):
         except StaleDwsManifest as exc:
             return fail_stale(exc)
         have = {t: owner[t] for t in stmts if t in owner}
-        verify = _load_ddl_verify()
+        if not have:
+            print(f"  ✗ DWS 无可比对的表（甲方解析 {len(stmts)} 张，归属 {len(owner)} 张），校验未完成")
+            return 1
         drift_count = 0
         for table, sysname in have.items():
             local_path = st.SCRIPTS / sysname / f"dws/ddl/{table}.sql"
-            if not local_path.is_file():
+            diff, probs = compare_local_ddl(local_path, stmts[table])
+            if diff is None:
                 print(f"  ⚠ {table} ({sysname}): 本地文件不存在")
                 drift_count += 1
                 continue
-            jf_text = stmts[table] + ";"
-            local_text = local_path.read_text(encoding="utf-8", errors="replace")
-            diff = verify.diff_ddl(jf_text, local_text, "甲方", "本地")
-            probs = verify.lint_statements(local_text)
             if probs:
                 drift_count += 1
-                print(f"  ✗ {table} ({sysname}) 语句边界: {probs[0]}")
+                print(f"  ✗ {table} ({sysname}) DDL 文件检查: {probs[0]}")
             if not diff.empty():
                 drift_count += 1
                 print(f"  ✗ {table} ({sysname}) 差异: {diff.summary()}")
@@ -54,10 +55,11 @@ def cmd_verify_ddl(args):
             rc = 1
     if "DWD" in layers:
         print("== DWD DDL 校验 ==")
-        n, drift = verify_ddl_vs_jf("DWD", st.SRC_DWD_DDL)
+        n, drift, ignored = verify_ddl_vs_jf("DWD", st.SRC_DWD_DDL)
         if drift < 0:
             return 1
-        print(f"  校验完成：{n} 张表，{drift} 张有差异")
+        tail = f"，{ignored} 张已登记豁免" if ignored else ""
+        print(f"  校验完成：{n} 张表，{drift} 张有差异{tail}")
         if drift and strict:
             rc = 1
     return rc
@@ -138,6 +140,10 @@ def _check_dws_workflow(dc, dt, ds, pcode, w):
     local = {p.stem: p for p in
              (st.SCRIPTS / (sysname or "") / "dws/02_etl").glob("*.sh")}
     bad = []
+    actual = {t["name"] for t in shells}
+    missing = sorted(set(local) - actual)
+    if missing:
+        print(f"  ✗ {w['name']} 缺少 SHELL 作业: {missing}")
     for t in shells:
         tp = t.get("taskParams") or {}
         if isinstance(tp, str):
@@ -173,7 +179,8 @@ def _check_dws_workflow(dc, dt, ds, pcode, w):
     print(f"       依赖节点缺失/空: {len(miss_dep)}")
     if miss_dep:
         print("       ", miss_dep[:8])
-    if w.get("releaseState") != "ONLINE" or bad or miss_dep:
+    if (w["name"] not in st.DWS_WF2SYS or not local or
+            w.get("releaseState") != "ONLINE" or bad or miss_dep or missing):
         return 1
     return 0
 
@@ -211,6 +218,8 @@ def cmd_verify(args):
     if "DWD" in layers:
         print("== DWD 校验 ==")
         cmd = [st.PY, st.DWD_PIPE, "verify"] + (["--ds"] if args.ds else [])
+        if getattr(args, "strict", False):
+            cmd.append("--strict")
         rc |= run(cmd)[0]
     if "DWS" in layers:
         rc |= verify_dws(args.ds, strict=getattr(args, "strict", False))

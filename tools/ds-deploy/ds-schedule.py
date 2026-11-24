@@ -33,7 +33,8 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from ds_client import DSClient, project_code_of, task_definitions  # noqa: E402
-from ds_config import ds_admin_password, ds_admin_user, pg_conn  # noqa: E402
+from ds_common import DS_CALL_ERRORS  # noqa: E402
+from ds_config import pg_conn  # noqa: E402
 
 PROJECT_CODE = None   # ★ 2026-11-10：运行时由 _resolve_project(ds) 解析，不再硬编码
 TENANT = "dolphinscheduler"
@@ -156,7 +157,7 @@ def cmd_create(args):
         try:
             r = ds.call("POST", "/projects/%d/schedules" % PROJECT_CODE,
                         form={param: code, "schedule": json.dumps(schedule)})
-        except Exception as e:
+        except DS_CALL_ERRORS as e:
             last = "%s: %s" % (param, e)
             continue
         if r.get("code") == 0:
@@ -220,7 +221,7 @@ def _jloads(x):
     if isinstance(x, str):
         try:
             return json.loads(x)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             return x
     return x
 

@@ -55,6 +55,13 @@ class TestValidateOutputPath(unittest.TestCase):
         resolved = validate_output_path(base, base)
         self.assertEqual(resolved, os.path.realpath(base))
 
+    def test_same_prefix_not_allowed(self):
+        base = os.path.join(tempfile.gettempdir(), "dw-path-check-keep")
+        os.makedirs(base, exist_ok=True)
+        sibling = base + "-other"
+        with self.assertRaises(ValueError):
+            validate_output_path(sibling, base)
+
 
 if __name__ == "__main__":
     unittest.main()

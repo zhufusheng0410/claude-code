@@ -179,9 +179,9 @@ json_obj=$(cat <<'EOF'
 EOF
 )
 
-sudo -u ${ds_user} echo $json_obj>${json_path}ods_oa_trd_saletran_pfd_tmp.json
+printf '%s' "$json_obj" > "${json_path}ods_oa_trd_saletran_pfd_tmp.json"
 
-sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" ${json_path}ods_oa_trd_saletran_pfd_tmp.json
+sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" "${json_path}ods_oa_trd_saletran_pfd_tmp.json"
 
 if [ $? -ne 0 ]; then
    echo "导入到ODS_OA_TRD_SALETRAN_PFD_TMP表失败"

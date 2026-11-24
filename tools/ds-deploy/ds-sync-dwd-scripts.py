@@ -45,10 +45,16 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dw_paths  # noqa: E402
 from ds_text import normalize_newlines  # noqa: E402
-from ds_client import DSClient, project_code_of, task_definitions  # noqa: E402
+from ds_client import DSClient, lst_of, project_code_of, task_definitions  # noqa: E402
+from ds_common import (  # noqa: E402
+    docker_bin,
+    parse_json_list,
+    set_schedule_state,
+    snapshot_online_schedules as _snapshot_schedules,
+)
 
 PCODE = None   # ★ 2026-11-10：运行时由 project_code_of(ds) 解析，不再硬编码
-DOCKER = r"C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+DOCKER = docker_bin()
 
 
 def _p(p: str) -> str:
@@ -72,24 +78,16 @@ RE_FORBIDDEN_SET = re.compile(r"^\s*set\s+inceptor\.cross\.join\.enabled\b", re.
 #   （18 条 INSERT 全绿、TMP1/TMP2 实际存在），并已同步 DS 转正 ⇒ 占位集合清空。
 #   执行期失败的表仍可由 `--empty-tables` 追加（逗号分隔，大小写不敏感）。
 DEFAULT_EMPTY = set()
-if os.name == "posix":
-    DOCKER = os.environ.get("DOCKER", "docker")   # WSL 下用 PATH 里的 docker
 
 
 def total_list(res):
-    """回读接口的分页结果可能是 dict 也可能是 list"""
-    d = res.get("data") if isinstance(res, dict) else res
-    return d.get("totalList") if isinstance(d, dict) else (d or [])
+    """回读接口的分页结果可能是 dict 也可能是 list（委托 ds_client.lst_of）。"""
+    return lst_of(res)
 
 
 def j(x):
-    """DS 回读的字段有时是 JSON 字符串，统一反序列化"""
-    if isinstance(x, str):
-        try:
-            return json.loads(x)
-        except Exception:
-            return []
-    return x or []
+    """DS 回读的字段有时是 JSON 字符串，统一反序列化（委托 ds_common.parse_json_list）。"""
+    return parse_json_list(x)
 
 
 def sha(s):
@@ -118,27 +116,11 @@ def load_local(layer="DWD"):
 
 def snapshot_online_schedules():
     """快照当前 ONLINE 的调度 id（改工作流会把调度级联下线，提交后要恢复）。"""
-    try:
-        r = subprocess.run(
-            [DOCKER, "exec", "hive-metastore-db", "psql", "-U", "dolphinscheduler",
-             "-d", "dolphinscheduler", "-tAc",
-             "select id from t_ds_schedules where release_state=1"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
-        return {x.strip() for x in (r.stdout or "").splitlines() if x.strip()}
-    except Exception as e:
-        print(f"  ⚠ 快照调度失败（继续）：{e}")
-        return set()
+    return _snapshot_schedules(docker=DOCKER, as_int=False)
 
 
 def set_schedule(sid, state):
-    try:
-        subprocess.run(
-            [DOCKER, "exec", "hive-metastore-db", "psql", "-U", "dolphinscheduler",
-             "-d", "dolphinscheduler", "-tAc",
-             f"update t_ds_schedules set release_state={state} where id={sid}"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
-    except Exception as e:
-        print(f"  ⚠ 恢复调度 {sid} 失败：{e}")
+    set_schedule_state(sid, state, docker=DOCKER)
 
 
 def main():

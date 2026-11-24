@@ -58,7 +58,8 @@ OPT = {
         action="store_true", help="gen 模式忽略生成器 ERROR 日志（仍会复制产物）")),
     "allow_stale_dws_manifest": (("--allow-stale-dws-manifest",), dict(
         action="store_true",
-        help="清单 sha256/bytes 与现盘不一致时仍继续（不刷新清单、不覆盖脚本）")),    "no_strict": (("--no-strict",), dict(
+        help="清单 sha256/bytes 与现盘不一致时仍继续（不刷新清单、不覆盖脚本）")),
+    "no_strict": (("--no-strict",), dict(
         action="store_true", help="DDL 校验发现差异时不阻断（默认阻断）")),
     "strict": (("--strict",), dict(
         action="store_true",

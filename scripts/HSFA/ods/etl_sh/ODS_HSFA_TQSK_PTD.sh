@@ -222,7 +222,7 @@ json_obj=$(cat <<'EOF'
                                    , L_TQBZ
                                    , EN_MRZDGHF
                                    , EN_MCZDGHF
-                                   , L_SFJZSY
+                                   , NULL AS L_SFJZSY
                                    , D_JSRQ
                                    , EN_MRFXJ
                                    , EN_MCFXJ
@@ -247,23 +247,23 @@ json_obj=$(cat <<'EOF'
                                    , VC_QSBZ
                                    , EN_QSHL
                                    , VC_SJLY
-                                   , L_YTHWHGLBH
-                                   , EN_MCJTFYJ
-                                   , EN_YFDTFXYYJE
+                                   , NULL AS L_YTHWHGLBH
+                                   , NULL AS EN_MCJTFYJ
+                                   , NULL AS EN_YFDTFXYYJE
                                    , VC_CBKM
                                    , L_JSJG
-                                   , EN_MRXTSYF
-                                   , EN_MCXTSYF
+                                   , NULL AS EN_MRXTSYF
+                                   , NULL AS EN_MCXTSYF
                                    , L_XSQBZ
                                    , L_SHLX
-                                   , L_XQSBFS
-                                   , L_CJLX
-                                   , D_MODIFY
-                                   , VC_XYZJZH
-                                   , L_SFZJLT
-                                   , L_CEJYS
+                                   , NULL AS L_XQSBFS
+                                   , NULL AS L_CJLX
+                                   , NULL AS D_MODIFY
+                                   , NULL AS VC_XYZJZH
+                                   , NULL AS L_SFZJLT
+                                   , NULL AS L_CEJYS
                                    , EN_CJJG
-                                   , D_CJSJ
+                                   , NULL AS D_CJSJ
                                    , EN_MRCHJZF
                                    , EN_MCCHJZF
                                 FROM ${hsfa_src_schema}.T_H_QSK
@@ -300,9 +300,9 @@ json_obj=$(cat <<'EOF'
 EOF
 )
 
-sudo -u ${ds_user} echo $json_obj>${json_path}ods_hsfa_tqsk_ptd_tmp.json
+printf '%s' "$json_obj" > "${json_path}ods_hsfa_tqsk_ptd_tmp.json"
 
-sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" ${json_path}ods_hsfa_tqsk_ptd_tmp.json
+sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" "${json_path}ods_hsfa_tqsk_ptd_tmp.json"
 
 if [ $? -ne 0 ]; then
    echo "导入到ODS_HSFA_TQSK_PTD_TMP表失败"

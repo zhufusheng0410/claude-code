@@ -23,7 +23,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ds_client import project_code, task_definitions  # noqa: E402
+from ds_client import task_definitions  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 from ds_load import load as _load_file  # noqa: E402
@@ -37,19 +37,12 @@ D = _load("DWDDEPLOY", "ds-deploy-dwd-workflow.py")
 SYNC = _load("DS_SYNC", "ds-sync-dwd-scripts.py")
 
 
-def j(x):
-    if isinstance(x, str):
-        try:
-            return json.loads(x)
-        except Exception:
-            return []
-    return x or []
+from ds_common import parse_json_list as j  # noqa: E402
 
 
 def pcode():
     if not hasattr(pcode, "_c"):
-        res = D.call("GET", "/projects", params={"pageNo": 1, "pageSize": 100})
-        pcode._c = project_code(res, "dw")
+        pcode._c = D.resolve_project(D.call)
     return pcode._c
 
 

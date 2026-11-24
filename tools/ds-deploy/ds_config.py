@@ -175,7 +175,7 @@ def require_secret(key: str) -> str:
 
 def ds_base() -> str:
     """DS 服务地址（非敏感，有默认）。"""
-    return DS_BASE.rstrip("/")
+    return prefer_env("DS_BASE", "DW_DS", DS_BASE).rstrip("/")
 
 
 def ds_project() -> str:

@@ -51,7 +51,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import dw_paths  # noqa: E402
 from ds_client import DSClient  # noqa: E402
-from ds_config import ds_admin_password, ds_admin_user, pg_conn, prefer_env  # noqa: E402
+from ds_common import DS_CALL_ERRORS  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, prefer_env  # noqa: E402
 from ds_text import read_script  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -132,7 +133,7 @@ def load_inventory(dump_path):
             continue
         try:
             tp = json.loads(task_params.get(tcode) or "{}")
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             continue
         dep = tp.get("dependence") or {}
         items = []
@@ -596,7 +597,7 @@ def main():
         rank = {n: i for i, n in enumerate(order)}
         dwd_plan.sort(key=lambda p: rank.get(p["name"], 0))
         print("\nDWD 拓扑序: " + " → ".join(order))
-    except Exception as e:
+    except (graphlib.CycleError, ValueError) as e:
         print(f"\n!! DWD 拓扑排序失败（{e}），退回按名字排序")
         dwd_plan.sort(key=lambda p: p["name"])
     plan = ods_plan + dwd_plan
@@ -643,7 +644,7 @@ def main():
         wf = p["name"]
         try:
             drop_wf(ds, pcode, wf)
-        except Exception as e:
+        except DS_CALL_ERRORS as e:   # drop_wf 删除失败抛 RuntimeError，记失败继续下一个
             print(f"  !! {wf} 预删除失败：{e}")
             fail += 1
             continue

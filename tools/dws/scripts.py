@@ -4,6 +4,7 @@ import shutil
 import time
 
 from tools.core.loader import load as _load_file
+from tools.core.reporting import print_limited
 
 from tools.dws import state as st
 from tools.dws.args import _ap, layers_of, stale_allowed
@@ -60,10 +61,10 @@ def stage_dws_from_jf(args=None):
     if planned:
         print(f"  甲方 DWS {src_exec} -> {st.SCRIPTS}/{{系统}}/dws/02_etl: "
               f"共 {total} 个，其中与仓库不同 {len(planned)} 个")
-        for sysname, p, _d in planned[:8]:
-            print(f"    差异: {sysname}/{p.name}")
-        if len(planned) > 8:
-            print(f"    … 其余 {len(planned) - 8} 个")
+        print_limited(
+            (f"差异: {sysname}/{p.name}" for sysname, p, _d in planned),
+            unit="个",
+        )
         print("  ⚠ 与仓库存在差异，只比对不覆盖（仓库版才是可执行基线）")
     elif not deviated:
         print(f"  甲方 DWS {total} 个与仓库完全一致")
@@ -84,14 +85,11 @@ def _sync_dws_jf(args):
     return 0
 
 
-def _sync_generated(args, layer, require_output):
+def _sync_generated(args, layer):
     """gen 模式：跑生成器，把产物同步进 `scripts/{系统}/{layer}/`。
 
-    ``require_output``：生成器没产出该系统目录时是否算失败（DWD 算，DWS 只跳过）。
-    ★ 2026-11-13：原 `_sync_dwd_scripts` / `_sync_dws_scripts` 的 gen 分支逐字相同，
-      只是层名与「缺目录」策略不同 —— 合并成一个。
+    全部目标系统的脚本齐全后才开始同步。
     """
-    rc = 0
     tmp = gen_temp(f"dw-gen-{layer.lower()}")
     # ★ 2026-10-26：原先 `return 1`（生成器 ERROR）落在 rmtree 之前，
     #   且 dry-run 也真写盘 ⇒ `scripts/.dw-gen-*` 越积越多；
@@ -100,17 +98,19 @@ def _sync_generated(args, layer, require_output):
     try:
         code, out = run([st.PY, st.GEN_MAIN, "--layer", layer, "--output", tmp],
                         capture=True)
-        rc |= code
+        if code:
+            return code
         if "[ERROR" in out and not getattr(args, "allow_gen_errors", False):
             print(f"  ✗ {layer} 生成器有 ERROR 日志；修 MAPPING 后重跑，或加 --allow-gen-errors")
             return 1
+        missing = [s for s in st.SYS
+                   if not (tmp / s / layer.lower() / "02_etl").is_dir()
+                   or not any((tmp / s / layer.lower() / "02_etl").glob("*.sh"))]
+        if missing:
+            print(f"  ✗ {layer} 缺少生成脚本: {missing}")
+            return 1
         for s in st.SYS:
             src = tmp / s / layer.lower()
-            if not src.is_dir():
-                if require_output:
-                    print(f"  ⚠ 生成器未产出 {s}/{layer.lower()}")
-                    rc = 1
-                continue
             dst = st.SCRIPTS / s / layer.lower()
             sync_files(src / "02_etl", dst / "02_etl", args.apply,
                        backup=True, label=f"{s} {layer} ETL")
@@ -121,7 +121,7 @@ def _sync_generated(args, layer, require_output):
                        label=f"{s} {layer} 01_ddl.sql")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    return rc
+    return 0
 
 
 def cmd_scripts(args):
@@ -130,16 +130,21 @@ def cmd_scripts(args):
     if "DWD" in layers:
         print("== DWD scripts ==")
         if args.source == "jf":
-            rc |= run([st.PY, st.DWD_PIPE, "convert"] + _ap(args))[0]
-            rc |= run([st.PY, st.DWD_PIPE, "distribute"] + _ap(args))[0]
+            for step in ("convert", "distribute"):
+                rc, _ = run([st.PY, st.DWD_PIPE, step] + _ap(args))
+                if rc:
+                    print(f"  ✗ DWD {step} 失败（rc={rc}），停止后续步骤")
+                    return rc
         else:
-            rc |= _sync_generated(args, "DWD", require_output=True)
+            rc = _sync_generated(args, "DWD")
+            if rc:
+                return rc
     if "DWS" in layers:
         print("== DWS scripts ==")
         if args.source == "jf":
             rc |= _sync_dws_jf(args)
         else:
-            rc |= _sync_generated(args, "DWS", require_output=False)
+            rc |= _sync_generated(args, "DWS")
     return rc
 
 
@@ -207,7 +212,7 @@ def cmd_repair(args):
         #     不是 scripts/主数据。
         for s in (st.GROUPS if layer == "DWD" else st.SYS):
             d = (st.dwd_etl_dir(s) if layer == "DWD"
-                 else st.SCRIPTS / s / "dws" / "02_etl")
+                 else st.dws_etl_dir(s))
             if not d.is_dir():
                 continue
             for p in sorted(d.glob("*.sh")):

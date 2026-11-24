@@ -18,10 +18,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_client import project_code, task_definitions  # noqa: E402
+from ds_common import docker_bin, parse_json_list as j  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 from ds_load import load as _load_file  # noqa: E402
-DOCKER = os.environ.get("DOCKER", "docker")   # WSL：用 PATH 里的 docker（原 C:\...\docker.exe 仅 Windows 可用）
+DOCKER = docker_bin()
 JDBC = ("jdbc:hive2://hiveserver2:10000/default;principal=hive/hiveserver2@DATAX.COM")
 
 D = _load_file(os.path.join(HERE, "ds-deploy-dwd-workflow.py"), "DWDDEPLOY")
@@ -47,15 +48,6 @@ def tables_in(db):
         if m and m.group(1).lower() not in ("tab_name",):
             ts.add(m.group(1).upper())
     return ts
-
-
-def j(x):
-    if isinstance(x, str):
-        try:
-            return json.loads(x)
-        except Exception:
-            return []
-    return x or []
 
 
 def main():

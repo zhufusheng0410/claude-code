@@ -31,7 +31,7 @@ cd /mnt/c/Users/84148/Desktop/trae/claude-code   # WSL
 | 层级 | 来源 | 说明 |
 |------|------|------|
 | DWD | `05-脚本/02-脚本/01-DWD执行脚本/*.txt` | 调用 `tools/dwd-pipeline.py convert/distribute` |
-| DWS | `scripts/{HSFA,HSZTA,O32}/dws/02_etl/*.sh` | 24 个**甲方原文**脚本（逐字节一致），权威源 |
+| DWS | `scripts/{HSFA,HSZTA,O32}/dws/02_etl/*.sh` | 仓库脚本是含 Hive 4.2 方言修复的执行基线，甲方原文仅用于比对 |
 
 DWS 比对方向固定为：
 
@@ -39,8 +39,7 @@ DWS 比对方向固定为：
 甲方 05-脚本/02-脚本/02-DWS执行脚本/*.txt  ->  scripts/{系统}/dws/02_etl/*.sh
 ```
 
-仓库内 DWS 脚本是甲方原文加上 Hive 4.2 方言修复，不是逐字节一致。
-管线仍保留「甲方 → 仓库」的比对，只报告差异、不覆盖。
+上述箭头表示比对方向，不是复制方向。jf 模式只报告 DWS 脚本差异，即使加 `--apply` 也不覆盖仓库 `.sh`。
 清单 sha256/bytes 与现盘不符时，读清单的步骤默认失败；`--allow-stale-dws-manifest` 才继续（不刷新清单）。
 （旧文档说的「已修复版 / `baseline=repaired-current`」已过期。）
 
@@ -68,11 +67,13 @@ python3 tools/dw-pipeline.py <子命令> [参数]
 | 参数 | 默认 | 作用 | 可用子命令 |
 |------|------|------|-----------|
 | `--layers DWD,DWS` | `DWD,DWS` | 处理层级，可只写 `DWD` 或 `DWS`（拼错会直接报错） | 全部 |
-| `--source jf\|gen` | `jf` | 脚本来源 | `scripts` `ddl` `all` |
+| `--source jf\|gen` | `jf` | 脚本来源 | `scripts` `ddl` `verify-ddl` `all` |
 | `--apply` | 否 | 真正写文件/操作 DS；不加就是 dry-run | `scripts` `ddl` `lineage` `config` `delete` `deploy` `layout` `all` |
 | `--ds` | 否 | 连接 DolphinScheduler 回读校验 | `verify` `all` |
 | `--deploy` | 否 | 末尾追加 DS 删除/重建/排版 | `all` |
-| `--allow-gen-errors` | 否 | gen 模式忽略 `[ERROR` 并继续复制，不推荐 | `scripts` |
+| `--allow-gen-errors` | 否 | gen 模式忽略 `[ERROR` 日志；生成进程失败仍中止 | `scripts` `all` |
+| `--strict` | 否 | DWD/DWS 语法检查存在未执行项时返回失败 | `verify` `all` |
+| `--no-strict` | 否 | DDL 差异仅告警，无法完成校验仍返回失败 | `ddl` `verify-ddl` `all` |
 | `--allow-stale-dws-manifest` | 否 | 清单 sha 与现盘不符时仍继续（不刷新、不覆盖脚本） | `scripts` `ddl` `verify-ddl` `all` |
 
 > 默认 dry-run。确认输出无误后再加 `--apply`。
@@ -84,15 +85,15 @@ python3 tools/dw-pipeline.py <子命令> [参数]
 
 | 子命令 | 作用 |
 |--------|------|
-| `scripts` | 同步/生成脚本；jf DWS 比对甲方原文与 `scripts/*/dws/02_etl`（默认不覆盖） |
+| `scripts` | 同步/生成脚本；jf DWS 只比对甲方原文与 `scripts/*/dws/02_etl`，不覆盖仓库脚本 |
 | `ddl` | DWD 调 `dwd-pipeline.py ddl`；DWS **从甲方 `05-脚本/01-建表语句/02-DWS建表脚本.sql` 搬移**（清洗 `DEFAULT NULL`/`VARCHAR2`，逐表落 `ddl/*.sql` 并重建 `01_ddl.sql`） |
-| `lineage` | DWD 重建 `scripts/DWD_依赖关系.xlsx`；DWS 校验 3 份 `DWS_lineage.xlsx` |
+| `lineage` | DWD 重建 `scripts/DWD_依赖关系.xlsx`；DWS 校验分系统 `DWS_lineage.xlsx` 并刷新 `scripts/DWS_依赖关系.xlsx`，历史执行结果页沿用已有记录 |
 | `config` | 生成 DWD `dep-config-proscript` 和 DWS `dep-config-dws`（24 表）；DWD 份数以 `depcfg` 运行时打印为准，不写死 |
 | `delete` | 删除 DS 工作流，固定先删 `DWS_*` 再删 `DWD_*` |
-| `deploy` | 预删 DWS → 删/建 DWD → 建 DWS → relayout |
+| `deploy` | 先检查各目标层重建计划及运行实例，再预删 DWS → 删/建 DWD → 建 DWS → relayout；任一步失败即中止 |
 | `layout` | 只重排坐标，不改依赖和脚本 |
-| `verify` | 本地脚本/血缘/配置校验；加 `--ds` 后回读 DS |
-| `all` | `scripts → ddl → lineage → config → verify`；加 `--deploy` 再串 `deploy` |
+| `verify` | DWD 检查 Shell 语法与 DDL 并入完整性；DWS 检查 Shell 语法、拼接副本和脚本/配置数量；加 `--ds` 回读脚本一致性，DWS 同时检查工作流状态与依赖节点缺失/为空；逐条依赖项和连线结构需另行核对 |
+| `all` | `scripts → ddl → verify-ddl（仅 jf）→ lineage → config → verify`；加 `--deploy` 时在最终 `verify` 前部署并回读 DS |
 
 ---
 
@@ -158,6 +159,16 @@ python3 tools/dw-pipeline.py layout --layers DWS --apply
 ```
 
 `deploy` 默认使用已经生成的脚本和 `dep-config-*`，不会重新生成它们。
+
+`deploy --apply` 在首次删除前会把目标层现有工作流导出到
+`tools/.dx-tmp/ds-recovery/`。快照导出或结构校验失败时部署会停止；部署步骤或排版失败时，
+终端会打印快照位置和 `ds-deploy-api.py import --restore` 的预览/恢复命令；快照按上游优先排序，
+供依赖回填使用。v2 快照保留工作流超时、任务执行参数及依赖组内、组间的 AND/OR 关系。
+恢复前先停止相关实例，用 `import --restore --dry-run` 审阅待移除任务和依赖边，再执行 `import --restore`。
+恢复模式按 v2 快照替换目标工作流的任务、关系和全局参数；范围外工作流引用待移除任务时预检失败。
+恢复模式在首次写入前校验全部工作流的任务脚本、参数结构、依赖分组、关系、坐标与超时字段，dry-run 使用同一预检。
+更新已有定义时，工具在依赖回填成功并回读核对实际任务成员后恢复其导入前的上线状态与在线调度。
+删除后重新创建的工作流保持 OFFLINE，需人工核对成员和依赖，再恢复上线与调度。失败部署期间额外创建的工作流也需人工核对。
 
 ### 5.5 删除工作流
 

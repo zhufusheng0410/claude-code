@@ -12,6 +12,10 @@ ${tmp_field_defs}
 )
 COMMENT '${table_cn}'
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '\\u0001';"
+if [ $? -ne 0 ]; then
+    echo "准备临时表${tmp_table}失败"
+    exit 1
+fi
 
 json_obj=$(cat <<'EOF'
 {
@@ -67,6 +71,10 @@ EOF
 )
 
 printf '%s' "$json_obj" > "${json_path}${tmp_table_name}.json"
+if [ $? -ne 0 ]; then
+    echo "写入DataX配置失败"
+    exit 1
+fi
 
 sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" "${json_path}${tmp_table_name}.json"
 

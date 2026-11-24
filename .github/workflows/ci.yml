@@ -20,18 +20,12 @@ jobs:
       - name: Compile all Python
         run: python -m compileall -q tools
       - name: Shell syntax check (tracked .sh)
-        shell: bash
-        run: |
-          set -euo pipefail
-          found=0
-          while IFS= read -r -d '' f; do
-            found=1
-            echo "bash -n $f"
-            bash -n "$f"
-          done < <(git ls-files -z '*.sh')
-          if [ "$found" -eq 0 ]; then echo "no tracked .sh files"; fi
+        run: python3 tools/ci_shell_gate.py
       - name: Run unit tests
         run: python -m unittest discover -s tools/tests -p "test_*.py"
       - name: ds-deploy import smoke
         # 不安装 psycopg2（可选组 deploy）。缺该包时测试必须 skip，不能让 CI 失败。
         run: python -m unittest tools.tests.test_ds_deploy_import_smoke
+      - name: Local pipeline black-box verify (DWD, DWS)
+        # 仅依赖仓库内脚本/DDL/依赖配置，不连 DS/Hive、不依赖 /mnt/d 交付盘。
+        run: python3 tools/dw-pipeline.py verify --layers DWD,DWS --strict

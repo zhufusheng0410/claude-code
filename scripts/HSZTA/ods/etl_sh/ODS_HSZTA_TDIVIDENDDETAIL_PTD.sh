@@ -178,9 +178,9 @@ json_obj=$(cat <<'EOF'
 EOF
 )
 
-sudo -u ${ds_user} echo $json_obj>${json_path}ods_hszta_tdividenddetail_ptd_tmp.json
+printf '%s' "$json_obj" > "${json_path}ods_hszta_tdividenddetail_ptd_tmp.json"
 
-sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" ${json_path}ods_hszta_tdividenddetail_ptd_tmp.json
+sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" "${json_path}ods_hszta_tdividenddetail_ptd_tmp.json"
 
 if [ $? -ne 0 ]; then
    echo "导入到ODS_HSZTA_TDIVIDENDDETAIL_PTD_TMP表失败"

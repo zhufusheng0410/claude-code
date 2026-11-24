@@ -2,13 +2,14 @@
 """DDL 结构化解析与对比（只依赖 re，供 dw-pipeline.py 落盘后自检用）。
 
 对比维度：
+- 目标表名（大小写不敏感）
 - 列名、类型、注释（顺序不敏感，按名匹配）
 - 分区列（顺序敏感）
 - 表级 COMMENT
 """
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Tuple
 
 __all__ = ["DDLStruct", "parse_ddl", "diff_ddl", "DDLDiff",
            "split_statements", "lint_statements"]
@@ -62,16 +63,21 @@ class DDLDiff:
     #   ⇒ 换场景对比时摘要仍写「甲方/本地」，属误导性输出。
     left_label: str = "甲方"
     right_label: str = "本地"
+    table_name_mismatch: Optional[Tuple[str, str]] = None
 
     def empty(self) -> bool:
         return (not self.only_in_left and not self.only_in_right and
                 not self.type_mismatch and not self.comment_mismatch and
-                not self.partition_mismatch and self.table_comment_mismatch is None)
+                not self.partition_mismatch and self.table_comment_mismatch is None and
+                self.table_name_mismatch is None)
 
     def summary(self) -> str:
         if self.empty():
             return "无差异"
         parts = []
+        if self.table_name_mismatch:
+            parts.append(f"表名不一致: {self.left_label}={self.table_name_mismatch[0]} "
+                         f"{self.right_label}={self.table_name_mismatch[1]}")
         if self.only_in_left:
             parts.append(f"仅{self.left_label}有列: {', '.join(self.only_in_left)}")
         if self.only_in_right:
@@ -263,6 +269,8 @@ def diff_ddl(left_text: str, right_text: str,
     diff.table = right.table_name
     diff.left_label = left_label
     diff.right_label = right_label
+    if left.table_name.upper() != right.table_name.upper():
+        diff.table_name_mismatch = (left.table_name, right.table_name)
 
     # 分区对比（顺序敏感，转为字符串比对）
     lpart = [(c.name, c.type) for c in left.partitions]

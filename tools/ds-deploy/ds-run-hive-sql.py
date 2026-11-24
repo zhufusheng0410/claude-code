@@ -14,6 +14,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_client import legacy_client  # noqa: E402
+from ds_common import DS_CALL_ERRORS  # noqa: E402
 from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
 
 BASE = "http://127.0.0.1:12345/dolphinscheduler"
@@ -62,10 +63,13 @@ def call(method, path, form=None, body=None, params=None, _retry=True):
 def cleanup_workflow(project_code, pd_code):
     """跑完即删：先下线（ONLINE 才能删）再 DELETE，失败仅告警不中断。"""
     print(f"清理临时工作流 code={pd_code} ...")
-    call("POST", f"/projects/{project_code}/workflow-definition/{pd_code}/release",
-         form={"releaseState": "OFFLINE"})
-    r = call("DELETE", f"/projects/{project_code}/workflow-definition/{pd_code}")
-    print(f"  {'✓ 已删除' if r.get('code') == 0 else '⚠ 删除返回 ' + str(r.get('msg'))}")
+    try:
+        call("POST", f"/projects/{project_code}/workflow-definition/{pd_code}/release",
+             form={"releaseState": "OFFLINE"})
+        r = call("DELETE", f"/projects/{project_code}/workflow-definition/{pd_code}")
+        print(f"  {'✓ 已删除' if r.get('code') == 0 else '⚠ 删除返回 ' + str(r.get('msg'))}")
+    except DS_CALL_ERRORS as e:
+        print(f"  ⚠ 清理临时工作流失败（已忽略，不影响主结果）：{e}")
 
 
 def main():
@@ -90,7 +94,10 @@ def main():
     else:
         # 注意：/projects 用的是 form 参数（@RequestParam），且字段叫 projectName
         res = call("POST", "/projects", form={"projectName": pname, "description": "数据源中心 Hive Kerberos 端到端验证"})
-        project_code = res["data"]["code"]
+        project_code = (res.get("data") or {}).get("code")
+        if not project_code:
+            print("新建项目失败，响应：", json.dumps(res, ensure_ascii=False)[:600])
+            return 2
         print(f"新建项目 {pname} code={project_code}")
 
     # 2) 数据源 id
@@ -100,7 +107,7 @@ def main():
         if d.get("name") == args.datasource:
             ds_id = d["id"]
     if not ds_id:
-        print("找不到数据源 hive_krb，先跑 ds-create-hive-datasource.py")
+        print(f"找不到数据源 {args.datasource}，先跑 ds-create-hive-datasource.py")
         return 2
     print(f"数据源 id={ds_id}")
 
@@ -221,7 +228,7 @@ def main():
         try:
             info = call("GET", f"/projects/{project_code}/workflow-instances/{inst_id}")
             st = (info.get("data") or {}).get("state")
-        except Exception:
+        except DS_CALL_ERRORS:
             continue
         print(f"    [{i*5}s] state={st}")
         if st in ("SUCCESS", "FAILURE", "STOP", "CANCELED"):

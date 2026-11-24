@@ -96,7 +96,9 @@ def iter_ods_tables(tables: list, fields_by_table: dict):
         tbl_fields = find_fields_by_table(table.src_table, fields_by_table)
         if not tbl_fields:
             continue
-        yield table, filter_ods_fields(tbl_fields)
+        ods_fields = filter_ods_fields(tbl_fields)
+        if ods_fields:
+            yield table, ods_fields
 
 
 def filter_valid_ods_tables(tables: list, fields_by_table: dict) -> list:

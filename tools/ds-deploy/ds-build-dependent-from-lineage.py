@@ -41,6 +41,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import dw_paths  # noqa: E402
 
+from ds_graph import find_all_cycles  # noqa: E402
 from ds_load import load as _load_file  # noqa: E402
 
 
@@ -180,29 +181,6 @@ def dep_params():
 # --------------------------------------------------------------------------- #
 # ★★ 最小破环（2026-10-10 定型）：取代「一律切掉映射表边」
 # --------------------------------------------------------------------------- #
-def find_all_cycles(adj, maxlen=10):
-    """枚举全部简单环（限制长度，避免组合爆炸）。"""
-    cycles, seen = [], set()
-
-    def dfs(path, inpath):
-        for nxt in sorted(adj.get(path[-1], ())):
-            if nxt == path[0]:
-                key = tuple(sorted(path))
-                if key not in seen:
-                    seen.add(key)
-                    cycles.append(list(path))
-            elif nxt not in inpath and len(path) < maxlen:
-                inpath.add(nxt)
-                path.append(nxt)
-                dfs(path, inpath)
-                path.pop()
-                inpath.discard(nxt)
-
-    for s in sorted(adj):
-        dfs([s], {s})
-    return cycles
-
-
 def break_wf_cycles(edge_info, meta, verbose=True):
     """在「工作流级」依赖图上求**最小反馈弧集**（贪心）。
 
@@ -360,7 +338,7 @@ def main():
         pf = args.exclude_prev_day
         try:
             pdoc = json.load(open(pf, encoding="utf-8"))
-        except Exception as e:
+        except (OSError, json.JSONDecodeError, ValueError) as e:
             sys.exit(f"读上一日依赖清单失败: {pf} ({e})")
         pset = {(a.upper(), b.upper()) for a, b, *_ in pdoc.get("edges", [])}
         before = len(edges)

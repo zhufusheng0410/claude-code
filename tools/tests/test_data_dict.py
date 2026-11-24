@@ -108,6 +108,23 @@ class TestWriteCombinedDict(unittest.TestCase):
             self.assertTrue(os.path.exists(path))
             self.assertTrue(path.endswith("数据字典_汇总.xlsx"))
 
+    def test_only_unfiltered_full_generation_writes_global_summary(self):
+        from unittest.mock import patch
+        from tools import main as generator
+
+        for args, expected in ((['--layer', 'ODS'], 0),
+                               (['--layer', 'ALL', '--sys', 'HSFA'], 0),
+                               (['--layer', 'ALL'], 1)):
+            with self.subTest(args=args), patch('sys.argv', ['main', *args]), \
+                    patch.object(generator, 'missing_inputs', return_value=[]), \
+                    patch.object(generator, '_discover_systems', return_value=[('HSFA', '.')]), \
+                    patch.object(generator, '_generate_ods_for_sys', return_value=[]), \
+                    patch.object(generator, 'find_mapping_dir', return_value=None), \
+                    patch.object(generator, 'find_mapping_file', return_value=None), \
+                    patch.object(generator, 'write_combined_dict') as writer:
+                generator.main()
+                self.assertEqual(writer.call_count, expected)
+
     def test_empty_returns_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = write_combined_dict({"ODS": [], "DWD": [], "DWS": []}, tmp)

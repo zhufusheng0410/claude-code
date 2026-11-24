@@ -4,7 +4,6 @@
 ``REPO`` / ``SCRIPTS`` 是可变状态：``tools/dwd-pipeline.py`` 被按路径加载后，
 测试会改这两个属性；入口把赋值写穿到本模块，路径函数才看得到补丁。
 """
-import os
 import re
 import sys
 from pathlib import Path
@@ -14,13 +13,12 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-_CAND_DELIVERY = [
-    Path(os.environ["DW_DELIVERY"]) if os.environ.get("DW_DELIVERY") else None,
-    Path('/mnt/d/项目/信达澳亚数仓/信达澳亚投研数据集市交付文档'),
-    Path(r'D:\项目\信达澳亚数仓\信达澳亚投研数据集市交付文档'),
-]
-DELIVERY = next((p for p in _CAND_DELIVERY if p and (p / '05-脚本').is_dir()),
-                _CAND_DELIVERY[-1])
+# ★ 交付目录定位与 scripts/ 子目录拼装的唯一来源（DWD / DWS 共用）。
+#   原先本文件与 `tools/dws/state.py` 各存一份，两份口径漂移就会让两层
+#   指向不同交付源 ⇒ 统一到 `tools/core/delivery_paths.py`。
+from tools.core import delivery_paths  # noqa: E402
+
+DELIVERY = delivery_paths.resolve_delivery()
 JF = DELIVERY / '05-脚本/02-脚本/01-DWD执行脚本'
 JF_DDL = DELIVERY / '05-脚本/01-建表语句/01-DWD建表脚本.sql'
 MAP_ROOT = DELIVERY / '04-源与目标映射MAPPING/01-DWD'
@@ -38,28 +36,21 @@ from tools.core.safe_paths import safe_sysname  # noqa: E402,F401
 
 def etl_dir(sysname):
     """DWD 脚本目录（主数据归 MASTER）。"""
-    safe_sysname(sysname)
-    scripts = SCRIPTS
-    return (scripts / 'MASTER/dwd/02_etl') if sysname == '主数据' else scripts / sysname / 'dwd/02_etl'
+    return delivery_paths.dwd_etl_dir(SCRIPTS, sysname)
 
 
 def ddl_dir(sysname):
     """DDL 目录（主数据归 MASTER）。"""
-    safe_sysname(sysname)
-    return (SCRIPTS / 'MASTER/dwd/ddl') if sysname == '主数据' \
-        else (SCRIPTS / sysname / 'dwd/ddl')
+    return delivery_paths.dwd_ddl_dir(SCRIPTS, sysname)
 
 
 def dws_etl_dir(sysname):
     """DWS 脚本目录（scripts/<系统>/dws/02_etl）。"""
-    safe_sysname(sysname)
-    return SCRIPTS / sysname / 'dws/02_etl'
+    return delivery_paths.dws_etl_dir(SCRIPTS, sysname)
 
 
 def ddl_main(sysname):
-    safe_sysname(sysname)
-    return (SCRIPTS / 'MASTER/dwd/01_ddl.sql') if sysname == '主数据' \
-        else (SCRIPTS / sysname / 'dwd/01_ddl.sql')
+    return delivery_paths.dwd_ddl_main(SCRIPTS, sysname)
 
 
 TAB_RE = re.compile(r'^DWD_[A-Z0-9_]+$')
@@ -74,7 +65,7 @@ TGT = re.compile(
 #:   它们仍指向真实仓库 ⇒ 沙箱（测试）里读写的其实是仓库文件。
 #:   改为 PEP 562 的模块级 `__getattr__`：`_ns.MASTER` 始终跟随当前值。
 _DERIVED_PATHS = {
-    'MASTER': lambda: SCRIPTS / 'MASTER/dwd/02_etl',
+    'MASTER': lambda: delivery_paths.dwd_etl_dir(SCRIPTS, '主数据'),
     'OWNER_JSON': lambda: REPO / 'tools/.dx-tmp/dwd_owner_map.json',
     'DEPCFG_OUT': lambda: REPO / 'tools/ds-deploy/dep-config-proscript',
     'PREVDAY_OUT': lambda: REPO / 'tools/_prev_day_deps.json',

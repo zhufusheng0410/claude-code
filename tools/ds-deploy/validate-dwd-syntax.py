@@ -372,7 +372,7 @@ def run_batch(items: list, tag: str, batch: int, t0: float, par: int = 1) -> tup
         keys, sql = job
         try:
             _, out, _ = beeline(sql)
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError, RuntimeError) as e:
             # ★ 2026-10-12：HS2 挂起/超时时不让整个运行崩——本批全部记缺失，
             #   逐条走单跑重试（单跑超时则记失败，不影响其他批）。
             out = ""
@@ -394,7 +394,7 @@ def run_batch(items: list, tag: str, batch: int, t0: float, par: int = 1) -> tup
                             + ";\nSELECT '__P__%s__' AS chk;" % key)
                     try:
                         _, o2, _ = beeline(solo)
-                    except Exception as e2:
+                    except (subprocess.SubprocessError, OSError, RuntimeError) as e2:
                         failed.append((key, by_key[key],
                                        "会话超时/异常: %s" % str(e2)[:120]))
                         continue

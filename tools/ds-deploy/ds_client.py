@@ -154,18 +154,24 @@ class DSClient:
             if not self.session_file.exists():
                 return False
             meta = json.loads(self.session_file.read_text(encoding="utf-8"))
+            if not isinstance(meta, dict):
+                return False
+            timestamp = meta.get("ts")
+            sid = meta.get("sessionId")
+            if (type(timestamp) not in (int, float)
+                    or not 0 <= timestamp <= time.time()
+                    or not isinstance(sid, str) or not sid.strip()):
+                return False
             # 本地预留 2h 过期窗口，比服务端判定略保守
-            age = time.time() - meta.get("ts", 0)
+            age = time.time() - timestamp
             if age >= 7200:
                 self._log(f"[ds_client] 磁盘会话已超 2h（{age/60:.0f} 分钟），放弃复用")
                 return False
-            self.sid = meta.get("sessionId")
-            if not self.sid:
-                return False
+            self.sid = sid
             # 把 sessionId 塞回 CookieJar，供服务端 getAuthUser 读取
             self._set_cookie(self.sid)
             return True
-        except Exception as e:  # 磁盘损坏不阻断
+        except (OSError, ValueError) as e:  # 磁盘损坏不阻断
             self._log(f"[ds_client] 读取会话文件失败：{e}")
             return False
 
@@ -179,9 +185,9 @@ class DSClient:
             # 会话文件含凭据，限制权限（Windows 下 chmod 尽力而为）
             try:
                 os.chmod(self.session_file, 0o600)
-            except Exception:
+            except OSError:
                 pass
-        except Exception as e:
+        except OSError as e:
             self._log(f"[ds_client] 写会话文件失败：{e}")
 
     def _set_cookie(self, sid):
@@ -232,7 +238,7 @@ class DSClient:
         try:
             r = self.call("GET", "/users/get-user-info", raise_on_401=False)
             return bool(r) and r.get("code") == 0
-        except Exception:
+        except (OSError, ValueError, DSClientError):
             return False
 
     # ---------- 通用调用 ----------
@@ -294,7 +300,7 @@ class DSClient:
                     time.sleep(wait)
                     try:
                         self.login()
-                    except Exception as le:
+                    except (OSError, ValueError, DSClientError) as le:
                         self._log("[ds_client] 重登失败：%s" % le)
                     return self._call_once(method, path, form, params, body,
                                            raise_on_401, _retry_401,
@@ -326,7 +332,7 @@ class DSClient:
             return
         try:
             self.call("POST", "/signOut", raise_on_401=False)
-        except Exception:
+        except (OSError, DSClientError):
             pass
 
 
@@ -419,7 +425,7 @@ def _maybe_json(x):
     if isinstance(x, str):
         try:
             return json.loads(x)
-        except Exception:
+        except ValueError:
             return []
     return x
 

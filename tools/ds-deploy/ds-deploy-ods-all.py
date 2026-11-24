@@ -37,6 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
 from ds_client import legacy_client  # noqa: E402
+from ds_common import DS_CALL_ERRORS  # noqa: E402
 from ds_text import read_script  # noqa: E402
 
 DS = "http://127.0.0.1:12345/dolphinscheduler"
@@ -87,7 +88,7 @@ def call(method, path, params=None, form=None, _retry=True):
 def login():
     try:
         return _client().login()
-    except Exception as e:
+    except DS_CALL_ERRORS as e:
         sys.exit("登录失败: %s" % e)
 
 
@@ -104,6 +105,8 @@ def ensure_project(name):
 def list_wf(project_code, search=""):
     res = call("GET", f"/projects/{project_code}/workflow-definition",
                params={"pageNo": 1, "pageSize": 500, "searchVal": search})
+    if res.get("code") != 0:
+        sys.exit(f"查询工作流 {search} 失败: {json.dumps(res, ensure_ascii=False)[:300]}")
     d = res.get("data") or {}
     return d.get("totalList") if isinstance(d, dict) else d
 
@@ -122,8 +125,11 @@ def drop_wf(project_code, name):
             continue
         print(f"      (清理同名旧工作流 code={it['code']} "
               f"release={it.get('releaseState')} schedule={it.get('scheduleReleaseState')})")
-        call("POST", f"/projects/{project_code}/workflow-definition/{it['code']}/release",
-             form={"releaseState": "OFFLINE"})
+        res = call("POST", f"/projects/{project_code}/workflow-definition/{it['code']}/release",
+                   form={"releaseState": "OFFLINE"})
+        if res.get("code") != 0:
+            sys.exit(f"       !! 下线 {name}(code={it['code']}) 失败: "
+                     f"{json.dumps(res, ensure_ascii=False)[:300]}")
         res = call("DELETE", f"/projects/{project_code}/workflow-definition/{it['code']}")
         if res.get("code") != 0:
             sys.exit(f"       !! 删除 {name}(code={it['code']}) 失败: "
@@ -283,7 +289,7 @@ def main():
             })
             if res.get("code") != 0:
                 print(f"      !! {wf} 失败: {json.dumps(res, ensure_ascii=False)[:300]}")
-                continue
+                return 1
             created.append(wf)
             print(f"      {wf}: {len(chunk)} 个任务 code={res['data']['code']}")
 
@@ -296,14 +302,14 @@ def main():
     for wf in created:
         code = next((it["code"] for it in (list_wf(pcode, wf) or []) if it["name"] == wf), None)
         if code is None:
-            print(f"      !! {wf} 找不到，跳过上线")
-            continue
+            print(f"      !! {wf} 找不到，上线中止")
+            return 1
         res = call("POST", f"/projects/{pcode}/workflow-definition/{code}/release",
                    form={"releaseState": "ONLINE"})
-        if res.get("code") == 0:
-            ok += 1
-        else:
+        if res.get("code") != 0:
             print(f"      !! {wf} 上线失败: {json.dumps(res, ensure_ascii=False)[:200]}")
+            return 1
+        ok += 1
     print(f"      上线成功 {ok}/{len(created)}（未挂任何定时调度，不会自动跑）")
     print(f"\n完成。项目 {args.project} code={pcode}")
     return 0

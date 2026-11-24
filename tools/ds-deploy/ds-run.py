@@ -108,7 +108,7 @@ def vm_mem_gb():
              'grep MemAvailable /proc/meminfo | tr -s " " | cut -d" " -f2'],
             capture_output=True, timeout=60)
         return int(p.stdout.decode().strip().split()[0]) / 1048576.0
-    except Exception:
+    except (subprocess.SubprocessError, OSError, ValueError, IndexError):
         return -1.0
 
 
@@ -206,8 +206,10 @@ def _tasks_of(ds, pcode, inst_id):
     while True:
         r = ds.call("GET", "/projects/%d/task-instances" % pcode,
                     params={"pageNo": page, "pageSize": 100, "workflowInstanceId": inst_id})
+        if r.get("code") != 0:
+            raise RuntimeError("任务实例回查失败")
         tl = (r.get("data") or {}).get("totalList") or []
-        out += tl
+        out.extend(task for task in tl if str(task.get("workflowInstanceId")) == str(inst_id))
         if len(tl) < 100:
             break
         page += 1
@@ -623,31 +625,59 @@ def _serial(args, kind):
             rep["workflows"].append({"name": name, "state": "TRIGGER_FAILED", "detail": str(r)[:300]})
             _save_report(report, rep)
             continue
-        print("   ✓ 已触发，等待完成…")
-
-        deadline = time.time() + args.max_min * 60
-        inst = None
-        while time.time() < deadline:
-            time.sleep(args.poll)
-            inst = _latest(ds, pcode, name)
-            if inst and inst.get("endTime"):
-                break
-            rest = int(deadline - time.time())
-            print("   … %s  (剩余 %dm%ds)" % (st(inst.get("state")) if inst else "?", rest // 60, rest % 60))
-        else:
-            print("   ⚠ 超时，记为 TIMEOUT 并继续下一条")
-            rep["workflows"].append({"name": name, "state": "TIMEOUT"})
+        ids = r.get("data")
+        if not isinstance(ids, list) or len(ids) != 1 or not str(ids[0]).isdigit():
+            rep["workflows"].append({"name": name, "state": "INSTANCE_ID_MISSING"})
             _save_report(report, rep)
-            continue
+            print("   ✗ 触发成功但未取得唯一实例 ID，停止后续触发，请按工作流核查")
+            ds.close()
+            return 1
+        instance_id = int(ids[0])
+        entry = {"name": name, "instanceId": instance_id, "state": "SUBMITTED",
+                 "waitTimedOut": False}
+        rep["workflows"].append(entry)
+        _save_report(report, rep)
+        print("   ✓ 已触发实例 %s，等待完成…" % instance_id)
 
-        tasks = _tasks_of(ds, pcode, inst["id"]) if inst else []
+        deadline = time.monotonic() + args.max_min * 60
+        while True:
+            time.sleep(args.poll)
+            response = ds.call(
+                "GET", "/projects/%d/workflow-instances/%d" % (pcode, instance_id))
+            inst = response.get("data") or {}
+            if response.get("code") != 0 or str(inst.get("id")) != str(instance_id):
+                entry["trackingError"] = "实例状态回查失败"
+                _save_report(report, rep)
+                print("   ✗ 实例 %s 状态回查失败，已保留实例 ID，停止后续触发" % instance_id)
+                ds.close()
+                return 1
+            entry.pop("trackingError", None)
+            entry.update(state=st(inst.get("state")), startTime=inst.get("startTime"),
+                         endTime=inst.get("endTime"))
+            if time.monotonic() >= deadline and not entry["waitTimedOut"]:
+                entry["waitTimedOut"] = True
+                print("   ⚠ 已超过等待阈值，继续回查实例 %s 直到结束" % instance_id)
+            _save_report(report, rep)
+            if (inst.get("endTime") or entry["state"] in TERMINAL
+                    or entry["state"] == "FORCED_SUCCESS"):
+                break
+            print("   … 实例 %s %s" % (instance_id, entry["state"]))
+
+        try:
+            tasks = _tasks_of(ds, pcode, instance_id)
+        except RuntimeError as exc:
+            entry["trackingError"] = str(exc)
+            _save_report(report, rep)
+            print("   ✗ 实例 %s 的任务结果回查失败，停止后续触发" % instance_id)
+            ds.close()
+            return 1
         ok = sum(1 for t in tasks if st(t.get("state")) in TASK_OK)
         bad = [t for t in tasks if st(t.get("state")) not in TASK_OK]
         wstate = st(inst.get("state"))
         print("   → %s  成功 %d/%d" % (wstate, ok, len(tasks)))
         for t in bad[:8]:
             print("        ✗ %s  %s" % (t["name"], st(t.get("state"))))
-        rep["workflows"].append({
+        entry.update({
             "name": name, "instanceId": inst.get("id"), "state": wstate,
             "startTime": inst.get("startTime"), "endTime": inst.get("endTime"),
             "taskTotal": len(tasks), "taskOk": ok, "taskFail": len(bad),
@@ -665,7 +695,8 @@ def _serial(args, kind):
               % (w["name"], w.get("state"), w.get("taskOk", "-"), w.get("taskTotal", "-")))
     print("\n报告: %s" % report)
     ds.close()
-    return 0
+    return 0 if all(w["state"] in TASK_OK and not w.get("taskFail")
+                    for w in rep["workflows"]) else 1
 
 
 # ============================ main ============================ #
@@ -700,7 +731,8 @@ def main():
         parser.add_argument("--start-from", help="从这个工作流名开始")
         parser.add_argument("--poll", type=int, default=30)
         parser.add_argument("--mem-wait", type=int, default=20)
-        parser.add_argument("--max-min", type=int, default=30)
+        parser.add_argument("--max-min", type=int, default=30,
+                            help="等待告警阈值（分钟），超时后仍按实例 ID 跟踪至结束")
         parser.add_argument("--no-skip-success", action="store_true")
         parser.add_argument("--min-mem", type=float, default=None, help="VM 内存下限 GiB（默认 ODS 1.0 / DWD 1.5）")
         parser.add_argument("--failure-strategy", default="CONTINUE", choices=["CONTINUE", "END"],

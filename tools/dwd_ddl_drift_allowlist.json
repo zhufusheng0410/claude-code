@@ -1,0 +1,4 @@
+{
+  "_comment": "DDL 对账的已登记豁免。命中本清单的差异计入 ignore，不计入 drift；清单之外仍照常失败。条目字段：columns / reason / registered(YYYY-MM-DD)。",
+  "tables": {}
+}

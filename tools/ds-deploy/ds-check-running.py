@@ -16,7 +16,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
-from ds_client import legacy_client  # noqa: E402
+from ds_client import legacy_client, lst_of  # noqa: E402
+from ds_common import DS_CALL_ERRORS  # noqa: E402
 
 DS = "http://localhost:12345/dolphinscheduler"
 USER = ds_admin_user()
@@ -51,12 +52,6 @@ def raw(method, path, params=None, form=None):
     return _client().call(method, path, params=params, form=form, _retry=False)
 
 
-def lst_of(res):
-    """DS 的分页返回有时是 list、有时是 {'totalList': [...]} ⇒ 两种都接。"""
-    d = res.get("data")
-    return d.get("totalList") if isinstance(d, dict) else (d or [])
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--all", action="store_true", help="检查所有项目（默认只看 dw）")
@@ -64,7 +59,7 @@ def main():
 
     try:
         _client().login()
-    except Exception as e:
+    except DS_CALL_ERRORS as e:
         sys.exit("登录失败: %s" % e)
 
     projs = lst_of(raw("GET", "/projects/list", params={"pageSize": 100, "pageNo": 1}))

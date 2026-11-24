@@ -17,9 +17,9 @@ from ..config import (
 )
 from tools.utils.validation import validate_db_identifier
 from tools.utils.logging_setup import get_logger
-from tools.utils.table_utils import write_file, write_file_safe, extract_physical_name
+from tools.utils.table_utils import write_file_safe, extract_physical_name
 from ..generator.ddl_common import (generate_ddl_body, build_field_defs,
-                                    quote_hive_column, quote_hive_column_sh,
+                                    quote_hive_column_sh,
                                     normalize_hive_type,
                                     HIVE_NUMERIC_PREFIXES, HIVE_STRING_PREFIXES,
                                     ORACLE_CHAR_PREFIXES, ORACLE_DATE_PREFIXES)

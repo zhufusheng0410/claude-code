@@ -4,23 +4,21 @@
 
 口径以 [AGENTS.md](AGENTS.md) 为准。`CLAUDE.md` 只是指向该文件的短入口，不要再维护第二份全文。
 
-## 测试
-
-统一在 **WSL Ubuntu** 里用 `python3` 运行（Windows 原生无 Python，详见 `AGENTS.md`）：
-
-```text
-python3 -m unittest discover -s tools/tests -p "test_*.py"
-python3 -m compileall -q tools
-```
-
-生成与部署的运行环境、凭据和 Hive / DolphinScheduler 约定见 `AGENTS.md`。口令只放环境变量或本机忽略文件，不要写进仓库。
-
 ## 常用入口
 
-| 用途 | 命令 |
-|------|------|
-| 生成 | `python3 tools/main.py --layer ALL` |
-| DWD 搬移与血缘 | `python3 tools/dwd-pipeline.py all`（默认 dry-run，`--apply` 才落盘） |
-| DWD+DWS 管线 | `python3 tools/dw-pipeline.py all --source jf --layers DWD,DWS` |
+在 WSL 的仓库根目录运行。先分清是要校验、预览，还是直接生成文件：
 
-子命令、禁止事项和重启顺序都在 `AGENTS.md`，不要以本页代替。
+| 用途 | 命令 | 是否写入交付物 |
+|------|------|----------------|
+| 对账：本地 DDL 与甲方建表脚本 | `/usr/bin/python3 tools/dw-pipeline.py verify-ddl --layers DWD,DWS` | 否，只读校验 |
+| 预览：DWD 脚本搬移、DWS 脚本比对 | `/usr/bin/python3 tools/dw-pipeline.py scripts --layers DWD,DWS` | 否；可更新运行缓存。DWS 的 jf 比对即使加 `--apply` 也不覆盖脚本 |
+| 生成：只处理 O32 的 ODS | `/usr/bin/python3 tools/main.py --layer ODS --sys O32` | **是**，直接写生成文件；不是 dry-run，不需要 `--apply` |
+
+部署、MASTER 保护和工作流重启顺序见 [AGENTS.md](AGENTS.md)。
+
+## 测试
+
+```bash
+/usr/bin/python3 -m unittest discover -s tools/tests -p "test_*.py"
+/usr/bin/python3 -m compileall -q tools
+```

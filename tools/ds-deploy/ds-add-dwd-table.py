@@ -369,7 +369,7 @@ def build_plan(args):
         try:
             maxx = max(maxx, int(L.get("x", 0)))
             maxy = max(maxy, int(L.get("y", 0)))
-        except Exception:
+        except (ValueError, TypeError, AttributeError):
             pass
     locs_new = list(locs_old)
     locs_new.append({"taskCode": new_shell_code, "x": maxx + 1, "y": maxy})

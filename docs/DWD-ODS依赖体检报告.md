@@ -154,7 +154,7 @@ O32/DWD_TRAN_SETL_MANUAL_BUSIN_PFD.sh        → ODS_O32_TSTRIKEBUSINESS_PTD
 > ★ **2026-10-04 22:30 已修复**：根因不是映射表缺值，而是 `base.py` 里 `all_aliases`
 > **以别名为键**，多组 `UNION ALL` 时各组都从 `A1/A2/A3` 重新命名 ⇒ 只保住第一组。
 > 修复后本脚本的声明块已从 4 条变成 14 行（6 张源表全覆盖）。
-> 详见 `主数据生成说明.md` 第六节。
+> 详见 `archive/主数据生成说明.md` 第六节。
 
 ---
 

@@ -23,9 +23,10 @@ from tools.utils.logging_setup import get_logger
 logger = get_logger(__name__)
 
 try:
-    from python_calamine import CalamineWorkbook
+    from python_calamine import CalamineError, CalamineWorkbook
 except ImportError:  # pragma: no cover - 取决于环境是否安装可选依赖
     CalamineWorkbook = None
+    CalamineError = ()
 
 # pandas read_excel 默认 keep_default_na 会把以下字符串转成 NaN（与 pandas 2.x 默认集合一致）；
 # calamine 原样返回。为保持两引擎逐字段一致（实测：映射规则列的文本 'NULL'），同样转 NaN。
@@ -59,16 +60,23 @@ def norm_cell(v):
     return v
 
 
-def read_workbook_sheets(filepath: str):
-    """用 python-calamine 快速读整个工作簿，返回 {sheet名: DataFrame}。
+def _pad_rows(rows, start, fill):
+    """补回 calamine to_python() 裁掉的前导空行/列。"""
+    start_row, start_col = start
+    if not (start_row or start_col):
+        return rows
+    width = start_col + max(len(r) for r in rows)
+    return ([[fill] * width for _ in range(start_row)]
+            + [[fill] * start_col + list(r) for r in rows])
 
-    仅在以下情况返回 None（调用方回退 openpyxl）：
-      · 未安装 python-calamine 或 DW_NO_CALAMINE=1；
-      · 打开/解析抛异常。
-    空单元格语义：calamine 给 ''，经 norm_cell 与 openpyxl 的 NaN 归一为同一结果。
-    行/列对齐：calamine 的 to_python() 会裁掉前导空区，而 pandas(openpyxl) 按文件
-    dimension 保留（dimension 几乎总是 A1 起）——★ 用 sheet.start 补回前导空行/列，
-    否则「夹具首行为空」这类文件会整体偏移（table_survey 固定从第 3 行起读会读到空）。
+
+def _read_calamine(filepath: str, normalize: bool):
+    """统一的 calamine 读取内核。
+
+    normalize=True  → 每单元格走 norm_cell，返回 {sheet: DataFrame}（pandas 对齐）
+    normalize=False → 单元格原样返回，{sheet: list[list]}（DWD 归属扫描要保留 NULL/NA 字符串）
+    行/列补空一致：normalize 用 NaN，raw 用 None。
+    不可用或读取失败返回 None，调用方回退 openpyxl。
     """
     if not calamine_available():
         return None
@@ -77,19 +85,33 @@ def read_workbook_sheets(filepath: str):
         sheets = {}
         for sn in wb.sheet_names:
             sh = wb.get_sheet_by_name(sn)
-            rows = [[norm_cell(v) for v in row] for row in sh.to_python()]
-            if rows:
-                start_row, start_col = sh.start
-                if start_row or start_col:
-                    nan = float("nan")
-                    width = start_col + max(len(r) for r in rows)
-                    rows = ([[nan] * width for _ in range(start_row)]
-                            + [[nan] * start_col + r for r in rows])
-            sheets[sn] = pd.DataFrame(rows) if rows else pd.DataFrame()
+            if normalize:
+                rows = [[norm_cell(v) for v in row] for row in sh.to_python()]
+                rows = _pad_rows(rows, sh.start, float("nan")) if rows else []
+                sheets[sn] = pd.DataFrame(rows) if rows else pd.DataFrame()
+            else:
+                rows = [list(row) for row in sh.to_python()]
+                sheets[sn] = _pad_rows(rows, sh.start, None) if rows else []
         return sheets
-    except Exception as e:
-        logger.debug("calamine 读取失败，回退 openpyxl: %s", e)
+    except (OSError, ValueError, LookupError, CalamineError) as e:
+        logger.debug("calamine 读取失败 (normalize=%s)，回退 openpyxl: %s", normalize, e)
         return None
+
+
+def read_workbook_sheets(filepath: str):
+    """整本读回 {sheet名: DataFrame(header=None 原始网格)}，不可用返回 None。
+
+    单元格经 norm_cell 归一；行/列对齐补 NaN。
+    """
+    return _read_calamine(filepath, normalize=True)
+
+
+def read_workbook_rows(filepath: str):
+    """整本读回 {sheet名: 原始行列表}，不归一单元格。
+
+    供需要保留 `NULL` / `NA` 原样的扫描使用；不可用或读取失败返回 None。
+    """
+    return _read_calamine(filepath, normalize=False)
 
 
 def apply_header_row0(df: pd.DataFrame) -> pd.DataFrame:

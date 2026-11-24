@@ -89,6 +89,21 @@
   CLS_EMRT_INFO 等），已并入 `01_ddl.sql`；数据来源见各文件头注释。
 - 校验口径：DDL 全量通过；ETL **109/109 真实脚本、0 占位、0 缺脚本**（`DEFAULT_EMPTY` 已清空）。
 
+## DWD DDL 差异登记
+
+在 `tools/dwd_ddl_drift_allowlist.json` 的 `tables` 对象下，以大写表名为键，填写 `columns`（非空字符串列表）、`reason` 和 `registered`（`YYYY-MM-DD`）。只有全部列差异均在登记范围内才豁免；分区、表注释或语句边界问题不豁免。已经对齐的差异应移除登记。
+
+## MAPPING 归属缓存
+
+`tools/.dx-tmp/dwd_owner_map.json` 只缓存 MAPPING 归属扫描结果，不是交付物。
+dry-run 也可以写这一份，避免同一次链路重复冷扫。磁盘缓存只存 MAPPING→owner；
+`stems/assign` 每次按甲方 DWD txt 与 `MASTER` 脚本目录现算，不写入缓存。
+失效条件：`MAP_ROOT` 下各 xlsx 的路径、mtime 与 size（及缓存格式版本）。
+对不上就重扫。任一工作簿读失败则不写缓存，也不把这次结果留在内存里。
+`NULL` / `NA` / `N/A` 等占位文本不是空单元格，右侧查找在那里停下，两条读法同一规则。
+`owner` / `all` 的 `--force-rescan` 在同一进程里只全量重扫一次。
+脚本、DDL、校验报告和 DS 仍要 `--apply` 才落盘。
+
 ## DWD 工作流归属与调度依赖口径（2026-10-23 定稿）
 
 ### 归属：默认按表名前缀，个别表用 `WORKFLOW_OVERRIDE`
@@ -261,10 +276,11 @@ dw/
 ├── demo/templates/          # ODS ETL Shell 模板
 │   └── etl_ods_template.sh
 ├── scripts/                 # 脚本输出（已纳入版本库；一次性备份见 scripts/.gitignore）
-├── docs/                    # 文档目录
+├── docs/                    # 文档目录（索引详见 docs/README.md）
 │   ├── 功能与规范文档.md     # 生成器功能与规范
 │   ├── DWD-ODS依赖体检报告.md
-│   └── 主数据生成说明.md
+│   └── archive/             # 历史试验与阶段性交接归档
+│       └── 主数据生成说明.md
 ├── README.md                # 给人看的简要说明
 ├── CLAUDE.md                # 短入口，指向本文件
 ├── AGENTS.md                # 项目口径全文（本文件）
@@ -515,6 +531,25 @@ python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
   `05-脚本/01-建表语句/02-DWS建表脚本.sql` 时返回 1（原为静默跳过 ⇒ `all` 带着旧
   `01_ddl.sql` 一路假绿）。交付目录不可达用 `DW_DELIVERY` 指定；另有
   「产物早于来源」的 ⚠ 提示（verify 只查文件存在，查不出内容过期）。
+- **`deploy --apply` 先备份 DS 工作流定义**：完成只读预检后、首次删除前，导出目标层
+  (`DWD_`/`MASTER_`/`DWS_`) 到 `tools/.dx-tmp/ds-recovery/`。导出失败或快照校验失败就停止部署。
+  导出、恢复和部署统一通过 `project_code_of()` 解析目标项目，支持 `DS_PROJECT_CODE`。
+  快照的 `source.projectCode` 必须匹配目标项目，工作流清单必须完整覆盖目标层。
+  部署前导出 v2 快照，保留工作流超时、任务执行设置及依赖组内、组间的 AND/OR 关系。手工导入兼容 v1。
+  恢复导入先创建全部定义，再回读目标项目编号，按工作流名和任务名回填依赖。
+  依赖缺失、歧义或回填失败均中止。回填后再次核对实际任务成员，缺少导入任务或恢复模式下残留多余任务均失败，
+  全部检查通过后才恢复本次更新工作流原有的上线状态与在线调度。
+  快照按上游优先排序。中途失败时打印 `ds-deploy-api.py import --restore` 恢复入口；恢复前先停相关实例，
+  用 `--restore --dry-run` 审阅待移除任务和依赖边。`--restore` 接受 v2 快照，按快照替换目标工作流的
+  任务、关系和全局参数（包括空列表），复用同名任务编号；范围外工作流引用待移除任务时预检失败。
+  恢复模式在首次写入前校验全部工作流的任务脚本、参数结构、依赖分组、关系、坐标与超时字段；dry-run 使用同一预检。
+  普通 `import` 按名称增量合并。旧快照缺少工作流超时字段时沿用目标现值，新建时取 0；显式 0 可关闭超时。
+  范围外新增工作流、上线状态和调度需人工核对；删除后重建的定义需人工恢复上线状态与调度。
+- **ODS 批量部署失败即中止**：`ds-deploy-ods-all.py` 的工作流查询、旧流下线、删除、创建或上线任一步失败，
+  或待上线工作流回查缺失，均非零退出并停止后续写操作。创建阶段失败不进入上线阶段，已成功的操作保留供核查恢复。
+- **串行跑批按本次实例 ID 跟踪**：触发成功后立即把实例 ID 写入运行报告，按该 ID 回查状态。
+  `--max-min` 是等待告警阈值，超时后仍跟踪至终态。报告用 `waitTimedOut` 记录超时，`state` 保存 DS 实际状态。
+  缺少唯一实例 ID 或回查失败时停止后续触发。存在失败工作流或任务时返回非零退出码。
 - **verify 的 `bash -n` 口径**：脚本先 `\r\n`→`\n` 归一化，再经 **stdin**（`bash -n -`）
   执行，且 stdin 必须传 **bytes**。三个坑均已实测固化，勿退回旧写法：
   ① 文件路径方式下，cygwin bash 由 Windows 原生进程启动会吃掉 `C:\a\b` 的反斜杠
@@ -566,4 +601,4 @@ python3 tools/dw-pipeline.py verify --layers DWD,DWS --ds
   - 5 张单表 DDL 从甲方建表脚本搬入：`DWD_PTY_ORG_FTDICTIONARY_PTD_INT`、`DWD_PTY_ORG_ZTDICTIONARY_PTD_INT`、`DWD_PTY_ORG_NUM_MAPP_PFD_2`、`DWD_PROD_PROD_TAIL_PFD_INIT_TMP`（4 张进 `scripts/MASTER/dwd/ddl/` 并同步进 `MASTER/dwd/01_ddl.sql`，65→69 张）；`DWS_TRAN_FUTR_TRAN_DETAIL_PTD`（1 张进 `scripts/O32/dws/ddl/` 并同步进 `O32/dws/01_ddl.sql`，8→9 张，同时修复了该文件原为 2 行坏文件的问题）。
   - 聚合 `01_ddl.sql` 中 13 张 PTY INT 表段落已用单表文件新列数替换（`c_identityno`/`id`/`*_modify_time` 补齐，与线上表 `desc` 一致），备份在 `tools/.dx-tmp/backup-replace-only-20261027-093722/`。
   - 搬移清单 `_DWD搬移清单.json`：`assign` 补登记 5 条（4 张→主数据，FUTR→O32，86→91 条）；`ddl` 统计刷新为现盘单表文件数（HSFA 23 / HSZTA 31 / O32 39 / 主数据 67）。
-- **CHNL 无后缀表（记录偏离，不做变更）**：Hive 有一张 `DWDXDAY.DWD_CHNL_CHNL_BASIC_INFO`（**0 行、无分区**），但甲方建表脚本里只有 `DWD_CHNL_CHNL_BASIC_INFO_PFD`，19 个 CHNL ETL 脚本引用的也全是 `_PFD` 版（经精确词界核对，无对无后缀表的引用）。处置：**保持现状，脚本零改动、不补 DDL**（甲方脚本中无此名、表为空孤儿，不属漏搬）；如需追溯，以 Hive `show create table DWDXDAY.DWD_CHNL_CHNL_BASIC_INFO` 为准；下次对账时不再将其列为漏搬。
+- **CHNL 无后缀表（记录偏离，不做变更）**：Hive 有无后缀的 `DWD_CHNL_CHNL_BASIC_INFO`，甲方建表脚本和 ETL 引用的是 `_PFD` 版。处置：保持现状，不补 DDL，不算漏搬。

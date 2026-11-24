@@ -66,7 +66,6 @@ import json
 import math
 import os
 import random
-import re
 import sys
 import time
 import urllib.error
@@ -75,20 +74,27 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dw_paths  # noqa: E402
-from ds_client import task_definitions  # noqa: E402
-from ds_config import ds_admin_password, ds_admin_user, prefer_env  # noqa: E402
+from ds_client import project_code_of, task_definitions  # noqa: E402
+from types import SimpleNamespace
+from ds_config import ds_admin_password, ds_admin_user, ds_base, ds_project, prefer_env  # noqa: E402
+from ds_graph import find_all_cycles as _find_simple_cycles  # noqa: E402
 from ds_text import read_script  # noqa: E402
 
 # ★ 全部支持环境变量覆盖：脚本同步到生成器侧（`…\claude-code\tools\ds-deploy\`）后，
 #   仍默认指向本集群；要指向别的 DS/别的产物目录，设对应环境变量即可。
 #   统一用 DS_*；旧名 DW_DS / DW_DS_USER / DW_DS_PWD / DW_DS_PROJECT 仍可读，会告警。
-DS = prefer_env("DS_BASE", "DW_DS", "http://localhost:12345/dolphinscheduler")
+DS = ds_base()
 # ★ 2026-10-22：口令不再有源码缺省值。DS_ADMIN_USER / DS_ADMIN_PASSWORD 可覆盖，
 #   否则回落到 ds_config（环境变量 / .env.local / ~/.dw-secrets.env）；
 #   都缺失则抛 SecretMissingError 并提示配置方式。
 USER = prefer_env("DS_ADMIN_USER", "DW_DS_USER") or ds_admin_user()
 PWD = prefer_env("DS_ADMIN_PASSWORD", "DW_DS_PWD") or ds_admin_password()
-PROJECT = prefer_env("DS_PROJECT", "DW_DS_PROJECT", "dw")
+PROJECT = ds_project()
+
+
+def resolve_project(api):
+    """各部署阶段共用项目解析，包含 DS_PROJECT_CODE 显式覆盖。"""
+    return project_code_of(SimpleNamespace(call=api, base=DS), PROJECT)
 def _wsl_path(p):
     r"""Windows 路径在 WSL 里不存在时回退 `/mnt/<盘>/...`（本工具两种环境都跑）。"""
     if os.path.isdir(p) or ":" not in p:
@@ -124,7 +130,7 @@ def cn_name(table):
             p = os.path.join(REPO, "scripts", "DWS_表中文名.json")
         try:
             _CN_CACHE.update(json.load(open(p, encoding="utf-8")))
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError):
             pass
     return _CN_CACHE.get(table) or f"{LAYER} 加工 {table}"
 # ★★ 2026-10-15：COL_W 340 → **500**，与全仓口径对齐。
@@ -375,12 +381,27 @@ def load_cfgs(dep_dir):
     return out
 
 
-def script_of(table):
+def script_index():
+    """按当前层建立脚本索引，同名脚本保留原有的目录排序优先级。"""
+    index = {}
     layer_dir = "dws" if LAYER == "DWS" else "dwd"
     for s in sorted(os.listdir(os.path.join(REPO, "scripts"))):
-        p = os.path.join(REPO, "scripts", s, layer_dir, "02_etl", table + ".sh")
-        if os.path.isfile(p):
-            return p
+        directory = os.path.join(REPO, "scripts", s, layer_dir, "02_etl")
+        if os.path.isdir(directory):
+            for entry in os.scandir(directory):
+                if entry.name.endswith('.sh') and entry.is_file():
+                    index.setdefault(entry.name[:-3], entry.path)
+    return index
+
+
+def script_of(table, index=None):
+    if index is not None:
+        return index.get(table)
+    layer_dir = "dws" if LAYER == "DWS" else "dwd"
+    for system in sorted(os.listdir(os.path.join(REPO, "scripts"))):
+        path = os.path.join(REPO, "scripts", system, layer_dir, "02_etl", table + ".sh")
+        if os.path.isfile(path):
+            return path
     return None
 
 
@@ -460,29 +481,6 @@ def auto_per_row(n, lo=3, hi=6):
         if key is None or k < key:
             best, key = p, k
     return best
-
-
-def _find_simple_cycles(adj, maxlen=10):
-    """枚举全部简单环（限制长度，避免组合爆炸）。"""
-    cycles, seen = [], set()
-
-    def dfs(path, inpath):
-        for nxt in sorted(adj.get(path[-1], ())):
-            if nxt == path[0]:
-                key = tuple(sorted(path))
-                if key not in seen:
-                    seen.add(key)
-                    cycles.append(list(path))
-            elif nxt not in inpath and len(path) < maxlen:
-                inpath.add(nxt)
-                path.append(nxt)
-                dfs(path, inpath)
-                path.pop()
-                inpath.discard(nxt)
-
-    for s in sorted(adj):
-        dfs([s], {s})
-    return cycles
 
 
 def break_cycles(nodes, edges):
@@ -720,7 +718,7 @@ def build_job_index(pcode):
     return idx
 
 
-def cross_items_for(t, wf_name, cfgs, job_index, pcode):
+def cross_items_for(t, wf_name, cfgs, job_index, pcode, scripts=None):
     """跨工作流**作业级**依赖项（2026-10-15 晚回归口径）。
 
     cfgs[t]["cross_workflow"] 的每个源表 → 一条 DEPENDENT_ON_TASK：
@@ -735,7 +733,7 @@ def cross_items_for(t, wf_name, cfgs, job_index, pcode):
     返回 (items, skipped, drifted)。
     """
     c = cfgs[t]
-    dwd_etl = {x for x in cfgs if script_of(x)}
+    dwd_etl = script_index() if scripts is None else scripts
     items, skipped, drifted, seen = [], [], [], set()
     for g in c.get("cross_workflow") or []:
         up_name = g.get("workflow") or ""
@@ -871,6 +869,22 @@ def plan(workflow, cfgs, overrides, inherit=False):
 
 
 # --------------------------------------------------------------------------- #
+def release_workflows(pcode, names):
+    """逐个上线工作流，缺失或被 DS 拒绝时立即失败。"""
+    for name in names:
+        code = wf_code(pcode, name)
+        if not code:
+            print(f"      ❌ {name} 不存在，无法上线")
+            return 1
+        result = call("POST", f"/projects/{pcode}/workflow-definition/{code}/release",
+                      form={"releaseState": "ONLINE"})
+        if result.get('code') != 0:
+            print(f"      ❌ {name} 上线失败")
+            return 1
+        print(f"      {name}: ONLINE")
+    return 0
+
+
 def main():
     global LAYER
     ap = argparse.ArgumentParser(description="把一个 DWD/DWS 工作流的全部依赖落地 + 零交叉布局")
@@ -897,7 +911,7 @@ def main():
                     help="给「无跨工作流依赖」的表**继承**前置表的跨工作流等待（冗余，默认关）")
     ap.add_argument("--empty-tables", default="",
                     help="这些表配空脚本（不配真实 ETL），依赖边保留；"
-                         "逗号分隔。默认已含 5 张指定排除表")
+                         "逗号分隔，与 DEFAULT_EMPTY 取并集")
     ap.add_argument("--master-placeholder", action="store_true",
                     help="回滚 2026-10-15 旧口径：主数据（scripts/MASTER/）配空脚本不跑。"
                          "默认已改为跑真实脚本（2026-10-23 用户要求）")
@@ -978,10 +992,7 @@ def main():
     task_ref = {t: sorted({a for a, b in edges if b == t}) for t in members}
     # ---------- 会话 + 全项目作业索引（dry-run 也执行：只读，不影响） ----------
     login()
-    r = call("GET", "/projects/list", params={"searchVal": PROJECT, "pageSize": 50, "pageNo": 1})
-    d = r.get("data")
-    plist = d.get("totalList") if isinstance(d, dict) else d
-    pcode = next((p["code"] for p in plist or [] if p["name"] == PROJECT), None)
+    pcode = resolve_project(call)
     if not pcode:
         sys.exit(f"项目 {PROJECT} 不存在")
     print(f"      {PROJECT} code={pcode}")
@@ -992,9 +1003,10 @@ def main():
     #   depTaskCode=具体作业，dateValue=today）。ODS 当天没跑就一直
     #   WAITING——用户拍板的批次语义。
     cross_items, skipped, drifted = {}, {}, {}
+    scripts = script_index()
     for t in members:
         cross_items[t], skipped[t], drifted[t] = cross_items_for(
-            t, args.workflow, cfgs, job_index, pcode)
+            t, args.workflow, cfgs, job_index, pcode, scripts)
     n_cross = sum(len(v) for v in cross_items.values())
     n_with_cross = sum(1 for v in cross_items.values() if v)
     print(f"跨工作流作业级依赖：{n_cross} 条，覆盖 {n_with_cross}/{len(members)} 张表")
@@ -1114,8 +1126,8 @@ def main():
                 print(f"      {w} 已存在，保留不重建")
                 continue
             created_up.append(w)
-            mem = [(t, script_of(t)) for t, c in cfgs.items()
-                   if c["own_workflow"] == w and script_of(t)]
+            mem = [(t, scripts[t]) for t, c in cfgs.items()
+                   if c["own_workflow"] == w and t in scripts]
             b = int(time.time() * 1000) % 10 ** 9
             if not mem:
                 # ★ 依赖表里该工作流名下没有带脚本的表（如 DWD_PUB = 公共层，其表都被标成「手工表」）。
@@ -1168,7 +1180,7 @@ def main():
             #   scripts/MASTER/dwd/02_etl/ 下的脚本参与跑批（不再空跑占位）。
             #   旧口径（2026-10-15「跑 DWD 时主数据不跑」）用 --master-placeholder 回滚。
             #   优先级仍高于 empty_set（问题表占位）。
-            p = script_of(t)
+            p = scripts.get(t)
             if master_placeholder and p and p.replace("\\", "/").startswith(
                     (REPO.rstrip("/") + "/scripts/MASTER/")):
                 return MASTER_EMPTY_TPL.format(t=t)
@@ -1191,7 +1203,7 @@ def main():
         if LAYER == "DWD" and master_placeholder:
             master_hit = [t for t in members
                           if (lambda p: p and p.replace("\\", "/").startswith(
-                              (REPO.rstrip("/") + "/scripts/MASTER/")))(script_of(t))]
+                              (REPO.rstrip("/") + "/scripts/MASTER/")))(scripts.get(t))]
             if master_hit:
                 print(f"      ★ {len(master_hit)} 张主数据（MASTER）占位不跑"
                       f"（脚本存档 scripts/MASTER/dwd/02_etl，2026-10-15 口径）")
@@ -1268,12 +1280,9 @@ def main():
         print(f"      第二遍 PUT 回填自身 code ✓（{n_same} 条依赖项含 self_code）")
 
     print("\n[5/5] 上线")
-    for w in [args.workflow] + up_auto:
-        c = wf_code(pcode, w)
-        if c:
-            res = call("POST", f"/projects/{pcode}/workflow-definition/{c}/release",
-                       form={"releaseState": "ONLINE"})
-            print(f"      {w}: {'ONLINE' if res.get('code') == 0 else '失败'}")
+    rc = release_workflows(pcode, [args.workflow] + up_auto)
+    if rc:
+        return rc
     print("\n完成。")
     return 0
 

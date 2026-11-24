@@ -3,7 +3,9 @@
 覆盖 N1（_parse_sheet_df 复用 df）与 mapping.py 的解析逻辑。
 """
 
+import json
 import os
+from pathlib import Path
 import shutil
 import tempfile
 import time
@@ -143,6 +145,20 @@ class TestXlsxSheetsDiskCache(unittest.TestCase):
         self.assertEqual(os.stat(cache_file).st_mtime_ns, cache_mtime)
         self.assertEqual([x.tgt_table for x in s1], [x.tgt_table for x in s2])
         self.assertEqual(len(s1[0].mappings), len(s2[0].mappings))
+
+    def test_malformed_cache_reparses_workbook_and_rewrites_cache(self):
+        expected = _parse_xlsx_sheets(self.path)
+        cache = Path(self.cache_dir) / self._cache_files()[0]
+        valid = json.loads(cache.read_text(encoding='utf-8'))
+        invalid_payloads = [[], None, 'invalid',
+                            dict(valid, sheets={}), dict(valid, sheets=[None]),
+                            dict(valid, sheets=[dict(valid['sheets'][0], mappings={})]),
+                            dict(valid, sheets=[dict(valid['sheets'][0], mappings=[None])])]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                cache.write_text(json.dumps(payload), encoding='utf-8')
+                self.assertEqual(_parse_xlsx_sheets(self.path), expected)
+                self.assertEqual(json.loads(cache.read_text(encoding='utf-8')), valid)
 
     def test_modified_file_invalidates(self):
         s1 = _parse_xlsx_sheets(self.path)

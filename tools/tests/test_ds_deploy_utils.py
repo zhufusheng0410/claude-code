@@ -16,11 +16,13 @@
 import collections
 import importlib
 import importlib.util
+import json
 import os
 import pathlib
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import unittest.mock
 import warnings
@@ -691,6 +693,41 @@ class TestResolveProjectCode(unittest.TestCase):
         ds = self._Fake([{"name": "proj_x", "code": 7}])
         with unittest.mock.patch.dict(os.environ, {"DS_PROJECT": "proj_x"}):
             self.assertEqual(ds_client.project_code_of(ds), 7)
+
+
+class TestSessionCacheRecovery(unittest.TestCase):
+    def test_invalid_cache_falls_back_to_login(self):
+        now = time.time()
+        valid = {'ts': now, 'sessionId': 'cached-session'}
+        invalid = [[], None, 'invalid', {}, dict(valid, ts='invalid'),
+                   dict(valid, ts=True), dict(valid, ts=float('nan')),
+                   dict(valid, ts=float('inf')), dict(valid, ts=now + 3600),
+                   dict(valid, ts=now - 7201), dict(valid, sessionId=42),
+                   dict(valid, sessionId=' ')]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / 'cache_test.json'
+            for payload in invalid:
+                with self.subTest(payload=payload), \
+                        unittest.mock.patch.object(ds_client.DSClient, 'login') as login, \
+                        unittest.mock.patch.object(ds_client.DSClient, '_probe') as probe:
+                    path.write_text(json.dumps(payload), encoding='utf-8')
+                    client = ds_client.DSClient(user='cache_test', password=object(),
+                                                session_dir=folder, verbose=False)
+                    login.assert_called_once_with()
+                    probe.assert_not_called()
+                    self.assertIsNone(client.sid)
+
+    def test_valid_cache_reuses_session(self):
+        with tempfile.TemporaryDirectory() as folder, \
+                unittest.mock.patch.object(ds_client.DSClient, 'login') as login, \
+                unittest.mock.patch.object(ds_client.DSClient, '_probe', return_value=True) as probe:
+            path = pathlib.Path(folder) / 'cache_test.json'
+            path.write_text(json.dumps({'ts': time.time(), 'sessionId': 'cached-session'}), encoding='utf-8')
+            client = ds_client.DSClient(user='cache_test', password=object(),
+                                       session_dir=folder, verbose=False)
+            login.assert_not_called()
+            probe.assert_called_once_with()
+            self.assertEqual(client.sid, 'cached-session')
 
 
 if __name__ == "__main__":

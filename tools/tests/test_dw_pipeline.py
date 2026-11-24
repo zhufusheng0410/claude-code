@@ -15,6 +15,63 @@ WP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(WP)
 
 
+class TestPipelineFailureGuards(unittest.TestCase):
+    def test_dwd_requires_at_least_one_comparable_table(self):
+        from unittest.mock import patch
+        from tools.dws import ddl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jf = Path(tmp) / 'DWD_A.sql'
+            jf.write_text('CREATE TABLE DWD_A (ID STRING);\n', encoding='utf-8')
+            local = {'DWD_OTHER': Path(tmp) / 'other.sql'}
+            with patch.object(ddl, 'local_ddl_paths', return_value=local):
+                self.assertEqual(ddl.verify_ddl_vs_jf('DWD', jf), (0, -1, 0))
+            with patch.object(ddl, 'local_ddl_paths', return_value={**local, 'DWD_A': jf}):
+                self.assertEqual(ddl.verify_ddl_vs_jf('DWD', jf), (1, 0, 0))
+
+    def test_dws_empty_parse_or_empty_intersection_fails_even_when_not_strict(self):
+        from unittest.mock import patch
+        from tools.dws import verify
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jf = Path(tmp) / 'source.sql'
+            args = argparse.Namespace(layers='DWS', no_strict=True)
+            for sql in ('-- no tables', 'CREATE TABLE DWS_A (ID STRING);'):
+                with self.subTest(sql=sql), patch.object(verify.st, 'SRC_DWS_DDL', jf), \
+                        patch.object(verify, 'dws_table_sys_map', return_value={'DWS_OTHER': 'O32'}):
+                    jf.write_text(sql, encoding='utf-8')
+                    self.assertNotEqual(verify.cmd_verify_ddl(args), 0)
+
+    def test_convert_reports_skipped_target_as_failure(self):
+        from unittest.mock import patch
+        from tools.dwd import generation
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data = {'assign': {'DWD_A': 'O32'}}
+            args = argparse.Namespace(force_sys='', apply=False)
+            with patch.object(generation, 'JF', root), patch.object(generation, 'GROUPS', ()), \
+                    patch.object(generation._ns, 'SCRIPTS', root), \
+                    patch.object(generation, 'take_owner', return_value=data):
+                self.assertNotEqual(generation.cmd_convert(args), 0)  # 已归属但文件缺失
+                (root / 'DWD_A.txt').write_text('bad', encoding='utf-8')
+                with patch.object(generation, 'convert', side_effect=ValueError('bad input')):
+                    self.assertNotEqual(generation.cmd_convert(args), 0)
+
+    def test_failed_dwd_stage_skips_downstream_calls(self):
+        from unittest.mock import patch
+        from tools.dws import scripts
+
+        args = argparse.Namespace(layers='DWD,DWS', apply=True, source='jf')
+        for codes, expected in (([7, 0], ['convert']), ([0, 8], ['convert', 'distribute'])):
+            with self.subTest(codes=codes), patch.object(scripts, 'run',
+                    side_effect=[(rc, '') for rc in codes]) as run, \
+                    patch.object(scripts, '_sync_dws_jf', return_value=0) as dws:
+                self.assertEqual(scripts.cmd_scripts(args), max(codes))
+                self.assertEqual([call.args[0][2] for call in run.call_args_list], expected)
+                dws.assert_not_called()
+
+
 class TestLayers(unittest.TestCase):
     def test_layers_of(self):
         self.assertEqual(WP.layers_of(argparse.Namespace(layers=' dwd, DWS ')),

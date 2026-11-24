@@ -92,7 +92,8 @@ python ds-sync-ods-scripts.py --only-changed-with scripts.bak --apply
 - **只改 `taskParams.rawScript`**，其余字段（依赖/布局/全局参数/`executionType`）原样回填。
 - 自动**先置 OFFLINE 再 PUT**，建完保持 OFFLINE（不自动上线）。
 - 内容逐字节比对，**只提交真变了的**；串行执行（同用户只 1 会话）。
-- ★★★ **动手前必跑 `ds-check-running.py`**，有跑批就别动。
+- ★★★ **动手前必跑 `ds-check-running.py`**（或统一巡检入口 `ds-inspect.py running|tables|all`），有跑批就别动。
+- 统一同步入口：`ds-sync-scripts.py --layer ODS|DWD|DWS [...]`（自动路由到 `ds-sync-ods-scripts.py` 或 `ds-sync-dwd-scripts.py`，默认 dry-run）。
 
 ## ★★ 导入即排版（2026-10-15 统一，勿再事后补 relayout）
 
@@ -125,8 +126,8 @@ python ds-sync-ods-scripts.py --only-changed-with scripts.bak --apply
 ## 一条龙（推荐）
 
 ```bash
-# 1) 生成血缘依赖配置（读 scripts/*/dwd/lineage/DWD_lineage.xlsx）
-python ds-build-dependent-from-lineage.py
+# 1) 从现役依赖报告生成配置到 dep-config-proscript
+/usr/bin/python3 ../dw-pipeline.py config --layers DWD --apply
 
 # 2) 同步 DWD 脚本到 DS（只提交 sha1 真正变了的）
 python ds-sync-dwd-scripts.py          # 先看差异
@@ -202,8 +203,8 @@ python run-dwd-etl-direct.py --date 20261010 --no-count  # 跳过行数回采
   跑批前可先停 DS 容器腾内存（`docker stop dolphinscheduler-{api,master,worker,alert}`）。
 - **行数回采**：执行后批量 `COUNT` 每张表 `P_DT=date` 行数，0 行单独标注
   （上游空转 / 分区无数据）；`--no-count` 可跳过。
-- **EXCLUDE 5 张**指定排除表（编译即失败/含临时过程）不执行、只登记；
-  DS 侧配**空脚本**保持依赖完整。`--exclude` 可通过常量 `EXCLUDE` 调整。
+- `EXCLUDE` 当前为空集。直跑范围由现役依赖配置与 `--only` 决定。
+  DS 临时占位使用部署工具的 `--empty-tables`。
 - **ODS 前置检查**：抽样 `ODS_HSFA_TACCOUNT_PFD` 的 `P_DT=date` 行数，为 0/查询失败则告警（非致命）。
 - 成败判定 = 探针存在**且**探针前的输出段无 `Error:`（只看探针会假阳性，同上）。
 - 报告 `tools/.dx-tmp/dwd-etl-run.json`（逐表耗时/成败/错误摘要 + 行数回采 + 0 行清单）。
@@ -228,7 +229,7 @@ python run-dwd-etl-direct.py --date 20261010 --no-count  # 跳过行数回采
 
 ## JSON 契约（`ds-deploy-api.py`）
 
-`schema = dw-ds-deploy/v1`，**用名字做键、不写死 code** ⇒ 同一份 JSON 可导入到不同环境的 DS。
+`plan` 输出 v1 部署计划，`export` 输出 v2 恢复快照，`import` 接受两个版本。以下是 v1 计划示例。
 
 ```json
 {"schema":"dw-ds-deploy/v1","project":"dw","workflows":[
@@ -247,7 +248,32 @@ python run-dwd-etl-direct.py --date 20261010 --no-count  # 跳过行数回采
 |---|---|---|
 | `export` | DS → JSON | 备份 / 迁移 / 人工编辑（`--only WF1,WF2`、`--match ods_`） |
 | `plan` | 本地 → JSON | 脚本目录 + 血缘配置 ⇒ 作业 + **作业级**依赖 + 3 列布局 |
-| `import` | JSON → DS | **幂等 upsert**（按名字合并，保留已有 code）；两遍建图回填依赖 |
+| `import` | JSON → DS | **幂等 upsert**（按名字合并，保留已有 code）；`--restore` 按 v2 快照替换目标工作流成员与关系；两遍建图回填依赖 |
+
+导出与导入统一使用 `DS_PROJECT_CODE` 或 `DS_PROJECT` 解析目标项目。导出在
+`source.projectCode` 记录来源项目，部署前会核验快照项目及目标层工作流覆盖范围。
+v2 快照保存工作流超时，以及任务本地参数、资源列表、工作组、环境、重试和超时设置。`DEPENDENT` 以
+`dependence.dependTaskList` 保留组间和组内 AND/OR、检查周期及逐项参数传递选项。
+工作流和任务引用按目标项目中的名称解析。跨集群使用时须核对工作组、环境编号和资源引用。
+v1 文件中的 `dependItems` 按单个 AND 组恢复，旧快照遗漏的执行设置需从原环境补取。
+
+导入先检查依赖能否从目标项目或本次 JSON 中解析，再创建全部定义，回读编号后统一回填依赖。
+任务按工作流名和任务名共同定位。缺失、歧义或 API 写入失败会返回非零退出码。
+回填后再次核对实际任务成员，缺少导入任务或恢复模式下残留多余任务均失败。
+全部检查通过后，才恢复本次更新工作流原有的上线状态与在线调度。
+
+恢复使用 `import --input <快照> --restore`，先加 `--dry-run` 审阅待移除任务和依赖边。
+该模式按 v2 快照完整替换目标工作流的任务、关系和全局参数（包括空列表），复用同名任务编号。
+范围外工作流引用待移除任务时预检失败，需先处理该依赖。范围外工作流由操作者核对。
+恢复模式在首次写入前校验全部工作流的任务脚本、参数结构、依赖分组、关系、坐标和超时字段，dry-run 使用同一预检。
+普通 `import` 继续按名称增量合并。旧快照缺少工作流超时字段时保留目标现值，新建时取 0；显式 0 可关闭超时。
+
+`ds-deploy-ods-all.py` 的工作流查询、旧流下线、删除、创建或上线任一步失败，或待上线工作流回查缺失，
+均非零退出并停止后续写操作。创建阶段失败不进入上线阶段，已成功的操作保留供核查恢复。
+
+`ds-run.py ods-serial` 和 `dwd-serial` 在触发后立即保存实例 ID，持续按该 ID 回查。
+`--max-min` 表示等待告警阈值，超过后继续等待终态。报告以 `waitTimedOut` 标记等待超时，
+`state` 记录实际 DS 状态。回查失败会停止后续触发，保留实例 ID 供核查。
 
 ## 铁律（踩过的坑）
 
@@ -297,7 +323,7 @@ python run-dwd-etl-direct.py --date 20261010 --no-count  # 跳过行数回采
 
 # 1) 血缘 → 依赖配置（现役口径 `tools/ds-deploy/dep-config-proscript`，由
 #    `tools/dwd-pipeline.py depcfg` 生成；`dep-config-lineage` 仅作历史回退）
-python ds-build-dependent-from-lineage.py
+/usr/bin/python3 ../dw-pipeline.py config --layers DWD --apply
 
 # 2) 逆拓扑全删 → 正拓扑重建 11 个 DWD 工作流（作业级跨工作流依赖）
 #    ★ 主数据 23 张**配真实脚本**（2026-10-23 用户要求；`--master-placeholder` 可回滚旧占位口径）。
@@ -308,7 +334,9 @@ python ds-deploy-all-dwd.py --empty-tables \
   "DWD_PROD_PROD_BASIC_INFO_PFD,DWD_SCR_O32_SCR_INCD_PFD,DWD_SCR_HSFA_SCR_INCD_PFD"
 
 # 3) 复核：无 gate、一作业一依赖、跨工作流项数、ONLINE
-python ../dw-pipeline.py verify --layers DWD,DWS --ds   # 结构体检（血缘 vs dep.json vs DS）
+/usr/bin/python3 ../dw-pipeline.py verify --layers DWD,DWS --ds --strict
+# 检查本地脚本、配置数量及线上脚本一致性。DWS 同时检查依赖节点缺失或为空。
+# 逐条依赖项和连线结构需另行核对。
 
 # 4) 定时调度（此前全 DS 0 条）：ODS 03:15 起每 15 分、DWD 按拓扑 12:00→15:30
 python ds-schedule.py ensure --check      # 只体检

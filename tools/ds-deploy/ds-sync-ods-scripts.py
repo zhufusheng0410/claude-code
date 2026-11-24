@@ -47,10 +47,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import dw_paths  # noqa: E402
 from ds_client import DSClient  # noqa: E402
+from ds_common import docker_bin, snapshot_online_schedules as _snapshot_schedules  # noqa: E402
 from ds_config import ds_admin_password, ds_admin_user, pg_conn, prefer_env  # noqa: E402
 from ds_text import normalize_newlines  # noqa: E402
 
-DOCKER = "docker"   # WSL 环境直接调 Linux docker CLI（原 r'C:\Program Files\...\docker.exe' 仅 Windows 可用）
+DOCKER = docker_bin()
 REPO = dw_paths.REPO
 PROJECT = prefer_env("DS_PROJECT", "DW_DS_PROJECT", "dw")
 BACKUP_DIR = os.path.join(dw_paths.BACKUP_ROOT, "ods-sync", "rawscript-before")
@@ -93,26 +94,8 @@ def strip_source_line(text):
 
 # ============================ 调度快照 ============================ #
 def snapshot_online_schedules():
-    """读元库里当前 ONLINE 的调度 id 集合。
-
-    ★★ 必须查库，不能用 API（`GET /schedules` 只返回 ONLINE 的）。
-    ★★ 为什么需要：工作流的 release 会**级联把挂在其上的调度置 OFFLINE**
-       （2026-10-04 实测：update_time 精确等于提交那一刻，02:00 跑批静默漏跑）。
-    """
-    sql = "select id from t_ds_schedules where release_state = 1"
-    try:
-        p = subprocess.run([DOCKER, "exec", "hive-metastore-db", "psql", "-U", "dolphinscheduler",
-                            "-d", "dolphinscheduler", "-tAc", sql],
-                           capture_output=True, timeout=60)
-    except Exception as e:
-        print("⚠️ 读调度快照失败（不影响上传，但无法自动恢复调度）: %s" % str(e)[:120])
-        return set()
-    ids = set()
-    for line in p.stdout.decode("utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if line.isdigit():
-            ids.add(int(line))
-    return ids
+    """读元库里当前 ONLINE 的调度 id 集合（委托 ds_common）。"""
+    return _snapshot_schedules(docker=DOCKER, as_int=True)
 
 
 def restore_schedules(ds, ids, pcode):

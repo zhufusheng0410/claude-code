@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 
+from tools.core.reporting import print_limited
 from tools.core.safe_paths import safe_sysname
 
 from tools.dws import state as st
@@ -82,10 +83,7 @@ def _entry_issues(entry):
 def _print_issues(items, head):
     """统一打印「前 8 条 + 其余 N 条」（告警与失败两条路径共用）。"""
     print(head)
-    for line in items[:8]:
-        print(f"    {line}")
-    if len(items) > 8:
-        print(f"    … 其余 {len(items) - 8} 条")
+    print_limited(items)
 
 
 def _read_manifest():

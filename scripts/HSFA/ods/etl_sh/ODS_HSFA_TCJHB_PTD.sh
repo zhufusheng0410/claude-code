@@ -126,7 +126,7 @@ json_obj=$(cat <<'EOF'
                                    , L_YJMXBH
                                    , L_TQBZ
                                    , D_JSRQ
-                                   , L_CLBZ
+                                   , NULL AS L_CLBZ
                                    , L_JSJG
                                    , EN_QMZE
                                    , VC_QSBSLX
@@ -138,12 +138,12 @@ json_obj=$(cat <<'EOF'
                                    , L_CCFL
                                    , VC_CJSJ
                                    , VC_QSBZ
-                                   , L_JSFS
-                                   , L_XSQBZ
-                                   , VC_JYDS
-                                   , L_XQSBFS
-                                   , EN_YBQMZE
-                                   , L_XZBZ
+                                   , NULL AS L_JSFS
+                                   , NULL AS L_XSQBZ
+                                   , NULL AS VC_JYDS
+                                   , NULL AS L_XQSBFS
+                                   , NULL AS EN_YBQMZE
+                                   , NULL AS L_XZBZ
                                 FROM ${hsfa_src_schema}.T_H_CJHB
                                 WHERE D_RQ between TO_DATE('${p_start_dt}','YYYYMMDD') and TO_DATE('${p_end_dt}','YYYYMMDD')"],
               "jdbcUrl": ["${hsfa_jdbc}"]
@@ -178,9 +178,9 @@ json_obj=$(cat <<'EOF'
 EOF
 )
 
-sudo -u ${ds_user} echo $json_obj>${json_path}ods_hsfa_tcjhb_ptd_tmp.json
+printf '%s' "$json_obj" > "${json_path}ods_hsfa_tcjhb_ptd_tmp.json"
 
-sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" ${json_path}ods_hsfa_tcjhb_ptd_tmp.json
+sudo -u ${ds_user} python ${datax_path} -j "-Xms384m -Xmx2g" "${json_path}ods_hsfa_tcjhb_ptd_tmp.json"
 
 if [ $? -ne 0 ]; then
    echo "导入到ODS_HSFA_TCJHB_PTD_TMP表失败"

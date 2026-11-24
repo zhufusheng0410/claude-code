@@ -35,7 +35,6 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ds_config import ds_admin_password, ds_admin_user  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 from ds_load import load as _load_file  # noqa: E402
@@ -58,10 +57,10 @@ DEPLOY = os.path.join(HERE, "ds-deploy-dwd-workflow.py")
 PY = sys.executable
 LAYER = "DWD"
 
-DS = "http://localhost:12345/dolphinscheduler"
-USER = ds_admin_user()
-PWD = ds_admin_password()
-PROJECT = "dw"
+DS = D.DS
+USER = D.USER
+PWD = D.PWD
+PROJECT = D.PROJECT
 SID = None
 
 
@@ -162,16 +161,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--layer", choices=["DWD", "DWS"], default="DWD")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--check-only", action="store_true",
+                    help="只检查重建计划和运行实例，不修改 DS")
     ap.add_argument("--only", default="", help="只部署这几个工作流（逗号分隔，调试用）")
     # ★ 2026-10-11：只删不建。删完②就返回，不进入③重建。
     ap.add_argument("--delete-only", action="store_true",
                     help="只删光 DS 里所有同层工作流，不重建（删完回读复核）")
     # ★ 2026-10-14（用户要求）：执行期失败的表也配空脚本（依赖边保留，DAG 完整）。
-    #   单工作流工具默认已含 5 张指定排除表，这里追加运行期失败表。
+    #   与单工作流工具的 DEFAULT_EMPTY 合并，这里追加运行期失败表。
     ap.add_argument("--empty-tables", default="",
-                    help="追加配空脚本的表（逗号分隔；与默认 5 张排除表取并集）")
+                    help="追加配空脚本的表（逗号分隔；与 DEFAULT_EMPTY 取并集）")
     args = ap.parse_args()
     LAYER = args.layer
+    D.LAYER = LAYER
     if LAYER == "DWS":
         DEPCFG = DEPCFG_DWS
     PREFIXES = ("DWD_", "MASTER_") if LAYER == "DWD" else ("DWS_",)
@@ -187,6 +189,14 @@ def main():
         want = {x.strip() for x in args.only.split(",") if x.strip()}
         order = [w for w in order if w in want]
 
+    if not args.delete_only:
+        if not order:
+            sys.exit("重建计划为空，拒绝删除现有工作流")
+        scripts = D.script_index()
+        missing = [t for w in order for t in groups[w] if t not in scripts]
+        if missing:
+            sys.exit(f"重建计划缺 ETL 脚本: {missing}")
+
     print(f"主题工作流 {len(order)} 个（共 {sum(len(v) for v in groups.values())} 张表）")
     for w in order:
         dep = sorted(x for x in wf_deps.get(w, ()) if x in groups)
@@ -201,9 +211,9 @@ def main():
         return 0
 
     login()
-    projs = raw("GET", "/projects/list", params={"pageSize": 100, "pageNo": 1}).get("data")
-    projs = projs if isinstance(projs, list) else (projs or {}).get("totalList", [])
-    pcode = next((p["code"] for p in projs if p["name"] == PROJECT), None)
+    pcode = D.resolve_project(raw)
+    if not pcode:
+        sys.exit(f"项目 {PROJECT} 不存在")
     print(f"\n项目 {PROJECT} code={pcode}")
 
     # ---------- ① 跑批必须为 0 ----------
@@ -228,6 +238,8 @@ def main():
     stopped = [i for i in insts if i.get("state") in (5, 8, "STOP", "KILL")]
     print(f"[0] 跑批实例 {len(insts)} 个，本层未结束 {len(mine)}"
           + (f"（另有 {len(stopped)} 个已停止/KILL，视为结束）" if stopped else "") + " ✓")
+    if args.check_only:
+        return 0
 
     # ---------- ② 一次性删光所有同层工作流 ----------
     existing = {x["name"]: x["code"] for x in lst_of(
@@ -288,7 +300,8 @@ def main():
                 params={"pageNo": 1, "pageSize": 500})) if x["name"].startswith(PREFIXES)}
         print(f"\n[delete-only] {LAYER}_* 工作流残留 {len(final)} 个"
               + (f"：{sorted(final)}" if final else " ✓ 全部删净"))
-        return 0
+        remaining = set(final) & only if only else set(final)
+        return 1 if remaining else 0
 
     # ---------- ③ 按拓扑序逐个建 ----------
     print(f"\n[2] 按拓扑序创建 {len(order)} 个工作流")
@@ -316,7 +329,8 @@ def main():
         x = final.get(w)
         print(f"   {w:12s} {'ONLINE' if x and x.get('releaseState') == 'ONLINE' else '缺失/未上线'}")
     print(f"\n{LAYER}_* 工作流合计 {len(final)} 个")
-    return 0
+    return 1 if any(not final.get(w) or final[w].get("releaseState") != "ONLINE"
+                    for w in order) else 0
 
 
 if __name__ == "__main__":

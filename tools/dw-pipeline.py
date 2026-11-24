@@ -30,6 +30,7 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+from tools.core.facade_bridge import executing_module, PatchBridge
 from tools.dws import (args as _args, cli as _cli, ddl as _ddl, deploy as _deploy,
                        lineage as _lineage, manifest as _manifest,
                        process as _process, scripts as _scripts, state as _state,
@@ -76,36 +77,16 @@ _shell_syntax = _process.shell_syntax
 _fail_stale = _manifest.fail_stale
 
 
-class _PatchBridge(types.ModuleType):
+class _PatchBridge(PatchBridge):
     """把对本模块的路径类赋值写穿到 `tools.dws.state`（及 manifest 的告警标志）。"""
-
-    def __setattr__(self, name, value):
-        target = _PATCHABLE.get(name)
-        if target is not None:
-            setattr(target, name, value)
-        super().__setattr__(name, value)
-
-
-def _executing_module():
-    """正在执行本文件的模块对象。
-
-    ``tools.core.loader`` 会先登记 ``sys.modules``；单测则只 ``exec_module``、不登记。
-    两种都要把补丁桥装到**调用方持有的那个对象**上。
-    """
-    g = globals()
-    registered = sys.modules.get(__name__)
-    if registered is not None and getattr(registered, '__dict__', None) is g:
-        return registered
-    frame = sys._getframe()
-    while frame is not None:
-        for val in frame.f_locals.values():
-            if getattr(val, '__dict__', None) is g:
-                return val
-        frame = frame.f_back
-    return None
+    _PATCHABLE = {
+        'REPO': _state, 'SCRIPTS': _state, 'SYS': _state, 'GROUPS': _state,
+        'SRC_DWS_EXEC': _state, 'SRC_DWS_DDL': _state, 'SRC_DWD_DDL': _state,
+        '_STALE_MANIFEST_WARNED': _manifest,
+    }
 
 
-_self = _executing_module()
+_self = executing_module(globals(), __name__)
 if _self is not None:
     _self.__class__ = _PatchBridge
 

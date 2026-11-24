@@ -1,21 +1,13 @@
 # -*- coding: utf-8 -*-
 """DWD DDL 落盘与自检。"""
-# -*- coding: utf-8 -*-
 import collections
-import difflib
-import json
-import os
 import re
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
 
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.worksheet.hyperlink import Hyperlink
-
+from tools.core.ddl_compare import append_diff_section, compare_local_ddl
 from tools.core.loader import load as _load_file
 
 from tools.dwd import export_ns
@@ -85,7 +77,6 @@ def verify_ddl_after_write(have: dict, stmts: dict) -> list:
 
     返回问题列表（空 = 全部一致）；每项为 `{table, sysname, diff, probs}`。
     """
-    verify = _load_ddl_verify()
     out = []
     for table, (sysname, _s) in have.items():
         local = ddl_dir(sysname) / f'{table}.sql'
@@ -93,9 +84,7 @@ def verify_ddl_after_write(have: dict, stmts: dict) -> list:
             out.append({'table': table, 'sysname': sysname, 'diff': None,
                         'probs': ['本地文件不存在']})
             continue
-        text = local.read_text(encoding='utf-8', errors='replace')
-        diff = verify.diff_ddl(stmts[table] + ';', text, '甲方', '本地')
-        probs = verify.lint_statements(text)
+        diff, probs = compare_local_ddl(local, stmts[table])
         if probs or not diff.empty():
             out.append({'table': table, 'sysname': sysname, 'diff': diff,
                         'probs': probs})
@@ -110,31 +99,10 @@ def _report_dwd_ddl_drift(bad: list):
     lines = [f'# DWD DDL 落盘自检报告 ({ts})', '', f'来源: {JF_DDL}', '']
     for item in bad:
         t, s, diff, probs = item['table'], item['sysname'], item['diff'], item['probs']
-        lines.append(f'## {t} ({s})')
         if diff is not None:
-            lines.append(f'- 摘要: {diff.summary()}')
-            if diff.type_mismatch:
-                lines.append('### 类型不一致')
-                for col, lt, rt in diff.type_mismatch:
-                    lines.append(f'- {col}: 甲方 `{lt}` / 本地 `{rt}`')
-            if diff.comment_mismatch:
-                lines.append('### 注释不一致')
-                for col, lc, rc in diff.comment_mismatch:
-                    lines.append(f'- {col}: 甲方 `{lc}` / 本地 `{rc}`')
-            if diff.partition_mismatch:
-                lines.append('### 分区不一致')
-                lines.append(f'- 甲方: {[(c.name, c.type) for c in diff.left_partitions]}')
-                lines.append(f'- 本地: {[(c.name, c.type) for c in diff.right_partitions]}')
-            if diff.table_comment_mismatch:
-                lines.append('### 表注释不一致')
-                lines.append(f'- 甲方: `{diff.table_comment_mismatch[0]}`')
-                lines.append(f'- 本地: `{diff.table_comment_mismatch[1]}`')
-            if diff.only_in_left:
-                lines.append(f'- 仅甲方有列: {", ".join(diff.only_in_left)}')
-            if diff.only_in_right:
-                lines.append(f'- 仅本地有列: {", ".join(diff.only_in_right)}')
+            append_diff_section(lines, t, s, diff)
         if probs:
-            lines.append('### 语句边界')
+            lines.append('### DDL 文件名或语句边界')
             for p in probs:
                 lines.append(f'- {p}')
         lines.append('')
@@ -166,7 +134,9 @@ def cmd_ddl(args):
     #   只查 SYS 会让「只有主数据」的环境被误判成没有脚本。
     if not any(etl_dir(s).is_dir() for s in GROUPS):
         sys.exit('缺 scripts/{系统}/dwd/02_etl ⇒ 先跑 dwd-pipeline.py convert --apply')
-    data = load_owner(write=args.apply)
+    data = take_owner(args)
+    if data is None:
+        return 1
     assign = resolved_assign(data, args.force_sys)
     jf = parse_jf_ddl()
     want = {}
@@ -192,12 +162,13 @@ def cmd_ddl(args):
     stamp = time.strftime('%Y%m%d-%H%M%S')
     bak = _ns.REPO / 'tools/.dx-tmp' / f'backup-dwd-ddl-{stamp}'
     for s in GROUPS:
-        d = _ns.SCRIPTS / ('MASTER/dwd' if s == '主数据' else f'{s}/dwd')
-        if (d / 'ddl').exists():
-            shutil.copytree(d / 'ddl', bak / s / 'ddl', dirs_exist_ok=True)
-        if (d / '01_ddl.sql').exists():
+        d = ddl_dir(s)
+        if d.exists():
+            shutil.copytree(d, bak / s / 'ddl', dirs_exist_ok=True)
+        main = ddl_main(s)
+        if main.exists():
             (bak / s).mkdir(parents=True, exist_ok=True)
-            shutil.copy2(d / '01_ddl.sql', bak / s / '01_ddl.sql')
+            shutil.copy2(main, bak / s / '01_ddl.sql')
     for t, (sysname, _s) in have.items():
         body = ('-- 来源: 甲方 01-DWD建表脚本.sql（dwd-pipeline ddl）\n'
                 + sanitize_ddl(jf[t]) + ';\n')

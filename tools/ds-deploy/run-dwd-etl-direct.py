@@ -53,6 +53,7 @@ import glob
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -231,7 +232,7 @@ def run_etls(order: list, groups: dict, sqls: dict, date: str, timeout: int,
             _rc, out, err = V.beeline(stmt, timeout=timeout)
             ok = marker in out and "Error:" not in V._seg_before(out, marker)
             msg = "" if ok else V.classify(out + err)[1][:300]
-        except Exception as e:                       # 超时等
+        except (subprocess.SubprocessError, OSError, RuntimeError) as e:  # 超时等
             ok, msg = False, "执行异常: %s" % e
         secs = time.time() - t0
         with lock:
@@ -288,7 +289,7 @@ def collect_counts(order: list, date: str, log, chunk: int = 20,
         sql = "\n".join(stmts[i:i + chunk])
         try:
             _rc, out, _err = V.beeline(sql, timeout=900)
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError, RuntimeError) as e:
             log("  回采批次 %d 超时/异常: %s" % (i // chunk, str(e)[:80]))
             continue
         for line in out.splitlines():
@@ -423,7 +424,7 @@ def main():
                 "上游可能空转，继续执行但行数请以回采为准" % args.date)
         else:
             log("前置检查：ODS TACCOUNT_PFD P_DT=%s 共 %s 行 ✓" % (args.date, m.group(1)))
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError, RuntimeError) as e:
         log("⚠ ODS 前置检查异常（忽略）: %s" % str(e)[:100])
 
     results = run_etls(order, groups, sqls, args.date, args.timeout,

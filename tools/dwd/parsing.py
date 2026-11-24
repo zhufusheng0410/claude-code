@@ -1,27 +1,24 @@
 # -*- coding: utf-8 -*-
 """DWD 管线解析：MAPPING 归属、脚本依赖、分区口径。"""
-# -*- coding: utf-8 -*-
 import collections
 import difflib
 import functools
+import hashlib
 import json
+import math
 import os
 import re
-import shutil
-import subprocess
-import sys
-import time
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 from pathlib import Path
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.worksheet.hyperlink import Hyperlink
 
 from tools.core.loader import load as _load_file
+from tools.utils.excel_reader import read_workbook_rows
 
 from tools.dwd import export_ns
 from tools.dwd import ns as _ns
@@ -34,91 +31,239 @@ def norm_table(t):
     return str(t).strip().upper().replace('DWDXDAY.', '').replace('DWD.', '')
 
 
-def _scan_mapping_xlsx(p, out):
-    wb = load_workbook(p, read_only=True, data_only=True)
+_TARGET_LABELS = ('目标表英文名称', '目标表英文名', '目标表名称')
+_ENTITY_LABELS = ('实体名称', '实体英文名称')
+_READ_ERRORS = (OSError, ValueError, LookupError, zipfile.BadZipFile,
+                zlib.error, InvalidFileException, ET.ParseError)
+
+
+def _cell_text(v):
+    """空单元格返回 None。NaN 和空白不能当成表名，也不能截断右侧查找。"""
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return None
+    return str(v).strip() or None
+
+
+def _consume_mapping_rows(rows, filename, out):
+    entity_col = None
+    for row in rows:
+        for j, c in enumerate(row):
+            if _cell_text(c) not in _TARGET_LABELS:
+                continue
+            for v in row[j + 1:]:
+                text = _cell_text(v)
+                if not text:
+                    continue
+                name = norm_table(text)
+                if TAB_RE.match(name):
+                    out[name].append(filename)
+                break
+        if entity_col is None:
+            # ★ 内层用 jj/cc：避免遮蔽外层 for j, c 的循环变量
+            for jj, cc in enumerate(row):
+                if _cell_text(cc) in _ENTITY_LABELS:
+                    entity_col = jj
+            if entity_col is not None:
+                continue
+        else:
+            v = row[entity_col] if entity_col < len(row) else None
+            text = _cell_text(v)
+            if text and TAB_RE.match(norm_table(text)):
+                out[norm_table(text)].append(filename)
+
+
+def _scan_openpyxl(p, out):
+    wb = None
     try:
+        wb = load_workbook(p, read_only=True, data_only=True)
         for ws in wb.worksheets:
-            entity_col = None
-            for row in ws.iter_rows(values_only=True):
-                for j, c in enumerate(row):
-                    if c is None:
-                        continue
-                    label = str(c).strip()
-                    if label not in ('目标表英文名称', '目标表英文名', '目标表名称'):
-                        continue
-                    for v in row[j + 1:]:
-                        if v is not None and str(v).strip():
-                            if TAB_RE.match(norm_table(v)):
-                                out[norm_table(v)].append(p.name)
-                            break
-                if entity_col is None:
-                    # ★ 内层用 jj/cc：避免遮蔽外层 for j, c 的循环变量
-                    for jj, cc in enumerate(row):
-                        if cc is not None and str(cc).strip() in ('实体名称', '实体英文名称'):
-                            entity_col = jj
-                    if entity_col is not None:
-                        continue
-                else:
-                    v = row[entity_col] if entity_col < len(row) else None
-                    if v is not None and TAB_RE.match(norm_table(v)):
-                        out[norm_table(v)].append(p.name)
+            _consume_mapping_rows(ws.iter_rows(values_only=True), p.name, out)
     # ★ 2026-11-10：一个坏 xlsx 跳过并带上异常类型；编程错误不再被裸 Exception 吞掉。
     #   ★ 评审 M4：**不含 TypeError** —— 这是「读不出来」的分支，吞掉 TypeError
     #     会把参数个数写错之类的编程错误变成「安静跳过一份 MAPPING」。
-    except (OSError, ValueError, LookupError, zipfile.BadZipFile,
-            zlib.error, InvalidFileException, ET.ParseError) as e:
+    except _READ_ERRORS as e:
         print(f'  ! {p.name}: {type(e).__name__}: {e}')
+        return False
     finally:
-        wb.close()
+        if wb is not None:
+            wb.close()
+    return True
 
 
-def build_owner(write=True):
-    owner = collections.defaultdict(set)
-    for d in sorted(MAP_ROOT.iterdir()):
+def _scan_mapping_xlsx(p, out):
+    """读完返回 True。读失败返回 False，调用方不得把本次结果写入缓存。"""
+    sheets = read_workbook_rows(str(p))
+    if sheets is not None:
+        for rows in sheets.values():
+            _consume_mapping_rows(rows, p.name, out)
+        return True
+    return _scan_openpyxl(p, out)
+
+
+OWNER_CACHE_VERSION = 3
+_OWNER_MEM = None
+
+
+def _walk_mapping_files(root):
+    """枚举 root 下所有 xlsx（含根目录下的），供指纹使用。"""
+    root = Path(root) if root is not None else MAP_ROOT
+    if not root.is_dir():
+        return ()
+    return tuple(
+        p for p in sorted(root.rglob('*.xlsx'))
+        if not p.name.startswith('~$') and p.is_file()
+    )
+
+
+def _iter_mapping_entries(root=None):
+    """只产系统子目录下的 xlsx，返回 (目录名, 系统名, 路径)。不含根目录散文件。"""
+    root = Path(root) if root is not None else MAP_ROOT
+    if not root.is_dir():
+        return ()
+    out = []
+    for d in sorted(root.iterdir()):
         if not d.is_dir():
             continue
         sysname = ALIAS.get(d.name, d.name)
-        names = collections.defaultdict(list)
         for p in sorted(d.rglob('*.xlsx')):
-            if p.name.startswith('~$'):
+            if p.name.startswith('~$') or not p.is_file():
                 continue
-            _scan_mapping_xlsx(p, names)
-        for t in names:
-            owner[t].add(sysname)
-        print(f'{d.name:8s} -> {sysname:6s} 表数={len(names)}')
-    owner = {k: sorted(v) for k, v in owner.items()}
+            out.append((d.name, sysname, p))
+    return out
+
+
+def mapping_fingerprint(root=None):
+    """xlsx 的路径 + mtime_ns + size 摘要。不读文件内容。根目录散文件也计入。"""
+    root = Path(root) if root is not None else MAP_ROOT
+    rows = []
+    for path in _walk_mapping_files(root):
+        st = path.stat()
+        rel = path.relative_to(root).as_posix()
+        rows.append(f'{rel}\t{st.st_mtime_ns}\t{st.st_size}')
+    return hashlib.sha256('\n'.join(rows).encode()).hexdigest()
+
+
+def _read_owner_cache():
+    path = _ns.OWNER_JSON
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError, UnicodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_owner_cache(data):
+    path = _ns.OWNER_JSON
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + '.', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(data, stream, ensure_ascii=False, indent=1)
+        os.replace(tmp, path)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
+def _render_owner(cached):
+    """由缓存补全 stems/assign/amb/none 并打印摘要，返回完整 dict。"""
+    owner = cached.get('owner') if isinstance(cached.get('owner'), dict) else {}
     master_stems = {p.stem for p in _ns.MASTER.glob('*.sh')}
     stems = [p.stem for p in sorted(JF.glob('*.txt'))
              if p.stem not in master_stems and not p.stem.endswith('_INIT')]
     assign, amb, none = {}, {}, []
     for s in stems:
-        base = s[:-5] if s.endswith('_INIT') else s
-        hits = owner.get(base, [])
+        hits = owner.get(s, [])
         if len(hits) == 1:
             assign[s] = hits[0]
         elif len(hits) > 1:
             amb[s] = hits
         else:
             none.append(s)
-    data = {'owner': owner, 'assign': assign, 'amb': amb, 'none': none, 'stems': stems}
+    data = dict(cached, stems=stems, assign=assign, amb=amb, none=none)
     print(f'\n唯一归属 {len(assign)} | 多系统 {len(amb)} | 未命中 {len(none)}')
     for s, h in sorted(amb.items()):
         print(f'  AMB {s}: {h}')
     for s in none:
         print(f'  NONE {s}')
-    if write:
-        owner_json = _ns.OWNER_JSON
-        owner_json.parent.mkdir(parents=True, exist_ok=True)
-        owner_json.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
-        print('写出', owner_json)
     return data
 
 
-def load_owner(write=False):
-    if _ns.OWNER_JSON.exists():
-        return json.loads(_ns.OWNER_JSON.read_text(encoding='utf-8'))
-    print('归属缓存不存在，现场扫描 MAPPING …')
-    return build_owner(write=write)
+def _hit_owner(cached):
+    return _render_owner(cached)
+
+
+def build_owner(fp=None):
+    """全量扫描 MAPPING。任一份读失败就返回 None，不写缓存、不留内存命中。"""
+    global _OWNER_MEM
+    fp = fp if fp is not None else mapping_fingerprint()
+    entries = _iter_mapping_entries()
+    if not entries:
+        print(f'  ! MAPPING 目录不存在或没有 xlsx: {MAP_ROOT}')
+        _OWNER_MEM = None
+        return None
+    dir_tables = collections.defaultdict(set)
+    dir_sys = {}
+    for dir_name, sysname, path in entries:
+        dir_sys[dir_name] = sysname
+        got = collections.defaultdict(list)
+        if not _scan_mapping_xlsx(path, got):
+            print('MAPPING 扫描未完成，不写归属缓存')
+            _OWNER_MEM = None
+            return None
+        dir_tables[dir_name].update(got)
+    owner_map = collections.defaultdict(set)
+    for dir_name in sorted(dir_tables):
+        sysname = dir_sys[dir_name]
+        tables = dir_tables[dir_name]
+        print(f'{dir_name:8s} -> {sysname:6s} 表数={len(tables)}')
+        for table in tables:
+            owner_map[table].add(sysname)
+    cached = {
+        'version': OWNER_CACHE_VERSION,
+        'owner': {table: sorted(sysnames) for table, sysnames in owner_map.items()},
+        'fingerprint': fp,
+    }
+    _write_owner_cache(cached)
+    print('写出', _ns.OWNER_JSON)
+    _OWNER_MEM = cached
+    return _hit_owner(cached)
+
+
+def load_owner(force_rescan=False):
+    """读归属缓存。
+
+    命中进程内缓存直接返回，不重新遍历 MAPPING 目录。
+    未命中才读磁盘并比指纹；指纹不符就重扫。
+    ``force_rescan=True`` 时跳过磁盘缓存，直接全量重扫并写入缓存。
+    """
+    global _OWNER_MEM
+    if force_rescan:
+        print('强制重扫 MAPPING …')
+        return build_owner()
+    if _OWNER_MEM is not None:
+        print('归属缓存命中（进程内）')
+        return _hit_owner(_OWNER_MEM)
+    fp = mapping_fingerprint()
+    cached = _read_owner_cache()
+    if (cached is not None
+            and cached.get('version') == OWNER_CACHE_VERSION
+            and cached.get('fingerprint') == fp
+            and isinstance(cached.get('owner'), dict)):
+        print('归属缓存命中')
+        _OWNER_MEM = cached
+        return _hit_owner(cached)
+    if cached is None and not _ns.OWNER_JSON.exists():
+        print('归属缓存不存在，现场扫描 MAPPING …')
+    else:
+        print('归属缓存已失效，重新扫描 MAPPING …')
+    return build_owner(fp=fp)
+
+
+def take_owner(args):
+    """命令入口用。扫描未完成时返回 None，调用方不得落盘。"""
+    return load_owner(force_rescan=getattr(args, 'force_rescan', False))
 
 
 def resolved_assign(data, force_sys=None):
@@ -137,7 +282,8 @@ def resolved_assign(data, force_sys=None):
 # owner / convert / distribute
 # --------------------------------------------------------------------------- #
 def cmd_owner(args):
-    build_owner(write=args.apply)
+    if take_owner(args) is None:
+        return 1
     return 0
 
 # --------------------------------------------------------------------------- #
@@ -255,8 +401,8 @@ _SQL_KW_ALIAS = {
     'DISTRIBUTE', 'SORT', 'CLUSTER', 'TABLESAMPLE', 'LATERAL', 'CROSS',
     'AND', 'OR', 'PARTITION', 'AS', 'VALUES', 'WITH', 'IS', 'NOT', 'NULL',
 }
-_PDT_Q = re.compile(r'\b([A-Z0-9_]+)\s*\.\s*P_DT\s*(?:=|>=|<=|>|<|BETWEEN)\s*', re.I)
-_PDT_B = re.compile(r'\bP_DT\s*(?:=|>=|<=|>|<|BETWEEN)\s*', re.I)
+_PDT_Q = re.compile(r'\b([A-Z0-9_]+)\s*\.\s*P_DT\s*(?P<op>>=|<=|=|>|<|BETWEEN)\s*', re.I)
+_PDT_B = re.compile(r'\bP_DT\s*(?P<op>>=|<=|=|>|<|BETWEEN)\s*', re.I)
 # `T2.P_DT = T4.P_DT` 这种「分区字段对字段」：整条表达式就是一个「别名.P_DT」
 _ALIAS_PDT_RE = re.compile(r'^[A-Z0-9_]+\s*\.\s*P_DT\b', re.I)
 _PDT_STOP = re.compile(
@@ -351,7 +497,7 @@ def _classify_part(expr):
     """
     e = expr.upper()
     if 'DATE_SUB' in e:
-        m = PREV_IDIOM_RE.search(expr)
+        m = PREV_IDIOM_RE.fullmatch(expr.strip())
         if m:
             v = m.group('var').upper()
             if v in _PREV_VARS:
@@ -376,6 +522,83 @@ def _classify_part(expr):
     return 'other'
 
 
+def _optional_partition_positions(masked, scopes, matches):
+    """找出可被同一过滤子句的 OR 绕过的分区条件。"""
+    tokens = [(m.start(), m.group().upper()) for m in re.finditer(
+        r'\(|\)|\b(?:WHERE|ON|HAVING|JOIN|GROUP|ORDER|SELECT|UNION|OR)\b', masked, re.I)]
+    tokens.extend((m.start(), 'PARTITION') for m in matches)
+    groups, clauses, partitions, alternatives = [], {}, {}, []
+    for pos, word in sorted(tokens):
+        scope = scopes[pos]
+        if word == '(':
+            groups.append(pos)
+        elif word == ')':
+            if groups:
+                groups.pop()
+        elif word in ('WHERE', 'ON', 'HAVING'):
+            clauses[scope] = pos
+        elif word in ('JOIN', 'GROUP', 'ORDER', 'SELECT', 'UNION'):
+            clauses[scope] = None
+        elif word == 'PARTITION':
+            partitions[pos] = (scope, clauses.get(scope), tuple(groups))
+        elif word == 'OR' and clauses.get(scope) is not None:
+            alternatives.append((scope, clauses[scope], tuple(groups)))
+    return {pos for pos, (scope, clause, path) in partitions.items()
+            if any(scope == other_scope and clause == other_clause
+                   and path[:len(other_path)] == other_path
+                   for other_scope, other_clause, other_path in alternatives)}
+
+
+@functools.lru_cache(maxsize=None)
+def _partition_reads(script):
+    """按 SELECT 作用域记录每个表引用的分区条件，供所有上游复用。"""
+    reads = []
+    for statement in _strip_sql_comments(script).split(';'):
+        # 屏蔽字面量，避免字符串里的 FROM/P_DT 被当成实际读取。
+        masked = re.sub(r"'(?:''|[^'])*'", lambda m: ' ' * len(m.group()), statement)
+        scopes = [0] * len(masked)
+        stack, scope, next_scope, pos = [0], 0, 0, 0
+        for token in re.finditer(r'\(|\)|\bSELECT\b|\bUNION\b', masked, re.I):
+            scopes[pos:token.start()] = [scope] * (token.start() - pos)
+            word = token.group().upper()
+            if word == '(':
+                stack.append(scope)
+            elif word == ')':
+                scope = stack.pop() if len(stack) > 1 else 0
+            else:
+                next_scope += 1
+                scope = next_scope
+            scopes[token.start():token.end()] = [scope] * len(token.group())
+            pos = token.end()
+        scopes[pos:] = [scope] * (len(masked) - pos)
+        refs = list(_SQL_REF.finditer(masked))
+        qualified = [m for m in _PDT_Q.finditer(statement)
+                     if not masked[m.start()].isspace()]
+        bare = [m for m in _PDT_B.finditer(statement)
+                if not masked[m.start()].isspace()
+                and not re.search(r'\.\s*$', masked[:m.start()])]
+        optional = _optional_partition_positions(masked, scopes, qualified + bare)
+        for ref in refs:
+            scope = scopes[ref.start()]
+            alias = (ref.group(2) or '').upper()
+            if not alias or alias in _SQL_KW_ALIAS:
+                alias = ref.group(1).upper()
+            matches = [m for m in qualified
+                       if scopes[m.start()] == scope and m.group(1).upper() == alias]
+            if sum(scopes[r.start()] == scope for r in refs) == 1:
+                matches += [m for m in bare if scopes[m.start()] == scope]
+            modes = set()
+            for match in matches:
+                mode = _classify_part(_expr_at(statement, match.end()))
+                if mode in ('prev', 'prev_alike') and match.group('op') != '=':
+                    mode = 'other'
+                modes.add(mode)
+                if match.start() in optional:
+                    modes.add('other')
+            reads.append((ref.group(1).upper(), tuple(sorted(modes or {'none'}))))
+    return tuple(reads)
+
+
 @functools.lru_cache(maxsize=None)
 def partition_modes(script, src):
     """返回脚本里【每一处】读 src 这张表的分区口径，如 ('prev','prev')。
@@ -386,36 +609,8 @@ def partition_modes(script, src):
       （1605 次调用；`needs_schedule_dep` 内部对同一 (脚本, 上游) 算了两次）。
       返回**元组**而非 list，避免缓存值被调用方原地修改后污染后续查询。
     """
-    src_u = src.upper()
-    out = []
-    for st in [x for x in _strip_sql_comments(script).split(';') if x.strip()]:
-        st_u = st.upper()
-        aliases, refs = set(), 0
-        for m in _SQL_REF.finditer(st_u):
-            if m.group(1) != src_u:
-                continue
-            refs += 1
-            al = (m.group(2) or '').strip()
-            aliases.add(al if al and al not in _SQL_KW_ALIAS else src_u)
-        if not refs:
-            continue
-        found = []
-        for m in _PDT_Q.finditer(st_u):
-            if m.group(1) in aliases:
-                found.append(_classify_part(_expr_at(st, m.end())))
-        if not found and refs == 1:
-            # 无别名限定 ⇒ 看未限定的 P_DT（排除 T2.P_DT 这种）
-            for m in _PDT_B.finditer(st_u):
-                if re.search(r'[A-Z0-9_]\s*\.\s*$', st[max(0, m.start() - 24):m.start()], re.I):
-                    continue
-                found.append(_classify_part(_expr_at(st, m.end())))
-        if not found:
-            out.extend(['none'] * refs)
-        elif len(set(found)) == 1:
-            out.extend(found)
-        else:
-            out.extend(['mixed:' + '+'.join(sorted(set(found)))] * refs)
-    return tuple(out)
+    return tuple(mode for table, modes in _partition_reads(script)
+                 if table == src.upper() for mode in modes)
 
 
 @functools.lru_cache(maxsize=None)

@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 """DDL 解析、清洗、落盘与比对（DWS 为主，DWD 侧只做存在性/委托）。"""
+import datetime as dt
+import json
 import re
 import shutil
 import time
 from pathlib import Path
 
+from tools.core.ddl_compare import append_diff_section, compare_local_ddl
 from tools.core.loader import load as _load_file
 
 from tools.dws import state as st
@@ -184,6 +187,9 @@ def _print_ddl_diff(diff, indent="    ", limit=5):
       漏改一处的后果是「某个维度静默不报」—— 正是校验代码最不该有的失效方式。
     """
     ll, rl = diff.left_label, diff.right_label
+    if diff.table_name_mismatch:
+        print(f"{indent}- 表名: {ll}={diff.table_name_mismatch[0]} "
+              f"{rl}={diff.table_name_mismatch[1]}")
     if diff.type_mismatch:
         for col, lt, rt in diff.type_mismatch[:limit]:
             print(f"{indent}- 列 {col}: {ll}类型={lt} {rl}类型={rt}")
@@ -209,31 +215,10 @@ def _write_drift_report(layer, ts, drift_items, lint_hits, jf_source):
     report.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"# {layer} DDL 与甲方差异报告 ({ts})", "", f"来源: {jf_source}", ""]
     for table, sysname, diff in drift_items:
-        lines.append(f"## {table} ({sysname})")
-        lines.append(f"- 摘要: {diff.summary()}")
-        if diff.type_mismatch:
-            lines.append("### 类型不一致")
-            for col, lt, rt in diff.type_mismatch:
-                lines.append(f"- {col}: 甲方 `{lt}` / 本地 `{rt}`")
-        if diff.comment_mismatch:
-            lines.append("### 注释不一致")
-            for col, lc, rc in diff.comment_mismatch:
-                lines.append(f"- {col}: 甲方 `{lc}` / 本地 `{rc}`")
-        if diff.partition_mismatch:
-            lines.append("### 分区不一致")
-            lines.append(f"- 甲方: {[(c.name, c.type) for c in diff.left_partitions]}")
-            lines.append(f"- 本地: {[(c.name, c.type) for c in diff.right_partitions]}")
-        if diff.table_comment_mismatch:
-            lines.append("### 表注释不一致")
-            lines.append(f"- 甲方: `{diff.table_comment_mismatch[0]}`")
-            lines.append(f"- 本地: `{diff.table_comment_mismatch[1]}`")
-        if diff.only_in_left:
-            lines.append(f"- 仅甲方有列: {', '.join(diff.only_in_left)}")
-        if diff.only_in_right:
-            lines.append(f"- 仅本地有列: {', '.join(diff.only_in_right)}")
+        append_diff_section(lines, table, sysname, diff)
         lines.append("")
     if lint_hits:
-        lines.append("## 语句边界问题（beeline 按 `;` 切分会 ParseException）")
+        lines.append("## DDL 文件名或语句边界问题")
         lines.append("")
         for table, sysname, probs in lint_hits:
             for p in probs:
@@ -251,26 +236,25 @@ def verify_ddl_after_write(layer: str, have: dict, stmts: dict, jf_source: Path)
       它判成「一致」而假绿；beeline 按 `;` 切分执行时却必然 ParseException。
       语句边界是**执行层**属性，必须单独一道。
     ★ 2026-11-13：报告写出拆到 `_write_drift_report`（原函数 75 行）。
+    ★ 2026-11-18：逐表比对（读盘 + diff + 语句边界 lint）收进
+      `core/ddl_compare.compare_local_ddl`，与 DWD 落盘自检、`verify-ddl`
+      共用一份内核；原 4 份副本改一处忘另一处就会让某条链路静默不校验。
     """
-    verify = _load_ddl_verify()
     all_ok = True
     drift_items = []
     lint_hits = []
     for table, sysname in have.items():
         local_path = st.SCRIPTS / sysname / f"{layer.lower()}/ddl/{table}.sql"
-        if not local_path.is_file():
+        # 甲方原文：从 stmts 拿（已 sanitize）；读盘+比对+lint 走共用内核
+        diff, probs = compare_local_ddl(local_path, stmts[table])
+        if diff is None:
             print(f"  ⚠ {table}: 本地文件不存在 {local_path}")
             all_ok = False
             continue
-        # 甲方原文：从 stmts 拿（已 sanitize）
-        jf_text = stmts[table] + ";"
-        local_text = local_path.read_text(encoding="utf-8", errors="replace")
-        diff = verify.diff_ddl(jf_text, local_text, "甲方", "本地")
-        probs = verify.lint_statements(local_text)
         if probs:
             all_ok = False
             lint_hits.append((table, sysname, probs))
-            print(f"  ✗ {table} ({sysname}) 语句边界: {probs[0]}")
+            print(f"  ✗ {table} ({sysname}) DDL 文件检查: {probs[0]}")
         if not diff.empty():
             all_ok = False
             drift_items.append((table, sysname, diff))
@@ -349,47 +333,112 @@ def local_ddl_paths(layer):
     return m
 
 
+def _load_drift_allowlist():
+    """读登记豁免清单。文件缺失或坏掉 ⇒ 返回空字典（等于没登记，校验照常失败）。
+
+    ★ 2026-11-19：清单**随仓库提交**。不放 `tools/.dx-tmp/`——那是 gitignored 的
+      运行产物，清理一次就会静默解除豁免，等于给校验开后门。
+    """
+    path = st.REPO / "tools/dwd_ddl_drift_allowlist.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    tables = data.get("tables") if isinstance(data, dict) else None
+    return tables if isinstance(tables, dict) else {}
+
+
+def _drift_is_registered(diff, entry):
+    """差异是否**全部**落在登记列内。有一列越界就返回 False（不豁免）。
+
+    只认列级差异（仅一侧有列 / 类型 / 注释）。分区、表注释这类整体性差异
+    即使表在清单里也不豁免——它们通常意味着表结构本身变了。
+    """
+    if not isinstance(entry, dict):
+        return False
+    reason = entry.get("reason")
+    registered = entry.get("registered")
+    if (not isinstance(reason, str) or not reason.strip()
+            or not isinstance(registered, str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", registered)):
+        print(f"  ⚠ {diff.table} 豁免登记缺少有效 reason 或 registered，不予豁免")
+        return False
+    try:
+        dt.date.fromisoformat(registered)
+    except ValueError:
+        print(f"  ⚠ {diff.table} 豁免登记日期无效，不予豁免")
+        return False
+    columns = entry.get("columns")
+    if not isinstance(columns, list) or not columns or not all(
+        isinstance(c, str) and c.strip() for c in columns
+    ):
+        print(f"  ⚠ {diff.table} 豁免登记无效：columns 必须是非空字符串列表，不予豁免")
+        return False
+    cols = {c.strip().upper() for c in columns}
+    if (diff.table_name_mismatch or diff.partition_mismatch or
+            diff.table_comment_mismatch is not None):
+        return False
+    touched = set()
+    touched.update(str(c).strip().upper() for c in diff.only_in_left)
+    touched.update(str(c).strip().upper() for c in diff.only_in_right)
+    touched.update(str(c).strip().upper() for c, _l, _r in diff.type_mismatch)
+    touched.update(str(c).strip().upper() for c, _l, _r in diff.comment_mismatch)
+    return bool(touched) and touched <= cols
+
+
 def verify_ddl_vs_jf(layer, jf_source, limit=3):
     """本地 `ddl/*.sql` 逐表对比甲方建表脚本。
 
-    返回 `(已校验表数, 差异表数)`；无法校验（甲方文件缺失/解析不出/本地为空）返回 `(0, -1)`。
+    返回 `(已校验表数, 差异表数, 豁免表数)`；无法校验（甲方文件缺失/解析不出/本地为空）
+    返回 `(0, -1, 0)`。
     ★ 2026-10-28：`verify-ddl --layers DWD` 原先只打印一句「暂委托…手工对比」就返回 0
       ⇒ DWD 的 DDL 校验**永远通过**（假绿，比没有校验更危险）。改为与 DWS 共用
       同一套 `parse_jf_ddl` + `ddl_verify.diff_ddl` 真比对。
+    ★ 2026-11-19：差异全部落在 `tools/dwd_ddl_drift_allowlist.json` 登记列内时
+      计入 `ignore`（打印一次、不阻断）；清单外的差异照常算 drift。
     """
     jf_source = Path(jf_source)
     if not jf_source.is_file():
         print(f"  ✗ {jf_source} 不存在（甲方交付目录不可达，可用 DW_DELIVERY 指定）")
-        return 0, -1
+        return 0, -1, 0
     stmts = parse_jf_ddl(jf_source)
     if not stmts:
         print(f"  ✗ {jf_source} 未解析出 CREATE TABLE")
-        return 0, -1
+        return 0, -1, 0
     local = local_ddl_paths(layer)
     if not local:
         print(f"  ✗ 本地无 {layer} ddl/*.sql")
-        return 0, -1
-    verify = _load_ddl_verify()
-    checked, drift, extra, lint_hits = 0, 0, [], 0
+        return 0, -1, 0
+    allow = _load_drift_allowlist()
+    checked, drift, extra, lint_hits, ignored = 0, 0, [], 0, []
     for table, p in sorted(local.items()):
         if table not in stmts:
             extra.append(table)
             continue
         checked += 1
-        local_text = p.read_text(encoding="utf-8", errors="replace")
-        diff = verify.diff_ddl(stmts[table] + ";", local_text, "甲方", "本地")
-        probs = verify.lint_statements(local_text)
+        # p 来自 glob，必然存在 ⇒ diff 不会为 None
+        diff, probs = compare_local_ddl(p, stmts[table])
         if probs:
             lint_hits += 1
             drift += 1
-            print(f"  ✗ {table} 语句边界: {probs[0]}")
+            print(f"  ✗ {table} DDL 文件检查: {probs[0]}")
         if not diff.empty():
-            drift += 1
-            print(f"  ✗ {table} 差异: {diff.summary()}")
-            _print_ddl_diff(diff, limit=limit)
+            if not probs and _drift_is_registered(diff, allow.get(table)):
+                ignored.append(table)
+                print(f"  · {table} 差异已登记豁免: {diff.summary()}")
+            else:
+                drift += 1
+                print(f"  ✗ {table} 差异: {diff.summary()}")
+                _print_ddl_diff(diff, limit=limit)
     if extra:
         shown = ", ".join(extra[:6]) + (" …" if len(extra) > 6 else "")
         print(f"  ⚠ 本地独有 {len(extra)} 张（甲方建表脚本无此表，跳过比对）: {shown}")
+    if not checked:
+        print(f"  ✗ {layer} 本地与甲方没有可比对的表，校验未完成")
+        return 0, -1, 0
     if lint_hits:
-        print(f"  ✗ 语句边界问题 {lint_hits} 张（beeline 按 `;` 切分会 ParseException）")
-    return checked, drift
+        print(f"  ✗ DDL 文件名或语句边界问题 {lint_hits} 张")
+    if ignored:
+        print(f"  ⚠ 已登记豁免 {len(ignored)} 张（清单 tools/dwd_ddl_drift_allowlist.json）: "
+              f"{', '.join(ignored[:6])}{' …' if len(ignored) > 6 else ''}")
+    return checked, drift, len(ignored)

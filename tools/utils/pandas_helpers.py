@@ -17,7 +17,7 @@ def safe_str(row: pd.Series, col: Any) -> str:
 
 
 def safe_float(row: pd.Series, col: Any, default: float = 0.0) -> float:
-    """安全转换为浮点数，处理 NaN 和转换错误"""
+    """安全转换为浮点数；保留浮点 NaN 语义，仅对缺列、None 或无法解析的值返回 default。"""
     if col not in row.index:
         return default
     v = row[col]

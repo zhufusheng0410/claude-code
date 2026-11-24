@@ -33,6 +33,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_config import ds_admin_password, ds_admin_user, pg_password  # noqa: E402
 from ds_client import legacy_client  # noqa: E402
+from ds_common import DS_CALL_ERRORS  # noqa: E402
 
 DS = "http://127.0.0.1:12345/dolphinscheduler"
 USER = ds_admin_user()
@@ -219,7 +220,7 @@ def main():
             else:
                 failed.append((name, code, "REST返回 %s" % r.get("msg")))
                 print("  ⚠ REST 删除 %s 失败：%s" % (name, r.get("msg")))
-        except Exception as e:
+        except DS_CALL_ERRORS as e:
             failed.append((name, code, str(e)[:120]))
             print("  ⚠ REST 删除 %s 异常：%s" % (name, str(e)[:120]))
 
