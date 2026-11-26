@@ -106,49 +106,63 @@ def sys_of(table_short):
     return None
 
 
-def upstream_items(cfg, own_wf_code, tasks_old):
-    """把配置里的上游表名解析成依赖项 list。
+def cfg_source_names(cfg):
+    """从真实 dep-config 结构提取去重大写源表名（同工作流前置 + 跨工作流分组）。"""
+    seen, out = set(), []
+    raw = list(cfg.get("same_workflow_predecessors") or [])
+    for g in (cfg.get("cross_workflow") or []):
+        raw.extend(g.get("sources") or [])
+    for s in raw:
+        name = str((s.get("source") if isinstance(s, dict) else s) or "").strip().upper()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
+def upstream_items(cfg, own_wf_code, own_wf_name, tasks_old):
+    """把真实 dep-config 里的跨流/同流上游解析成作业级依赖项 list。
 
     分流规则
     --------
-    · 上游是 `ODS_*`            ⇒ locate_ods 找批次工作流 ⇒ DEPENDENT_ON_WORKFLOW
-    · 上游是 `DWD_*` 且不是本表   ⇒ DWD_<主题> 工作流      ⇒ DEPENDENT_ON_WORKFLOW
-    · 上游是本工作流的兄弟表      ⇒ DEPENDENT_ON_TASK（definitionCode = 自身工作流）
-    · 上游是映射表 / 手工表       ⇒ 跳过（DS 里没有对应工作流，等了也永远等不到）
+    · 跨工作流（`cross_workflow` 且 workflow != own_wf_name）⇒ `D.cross_items_for()` 查 DS 作业索引
+    · 同工作流（`same_workflow_predecessors` + workflow == own_wf_name 分组）⇒ 在 `tasks_old` 查作业 code
+    · 全部产出的 item 均为 `DEPENDENT_ON_TASK`，按 `(definitionCode, depTaskCode)` 去重
     """
-    items, skipped = [], []
-    for src in (cfg.get("sources") or []):
-        s = src if isinstance(src, str) else src.get("name", "")
-        if not s or s == cfg.get("target"):
-            continue
+    target = str(cfg.get("target") or "").upper()
+    cross_groups, same_sources = [], list(cfg.get("same_workflow_predecessors") or [])
+    for g in (cfg.get("cross_workflow") or []):
+        if g.get("workflow") == own_wf_name:
+            same_sources.extend(g.get("sources") or [])
+        else:
+            cross_groups.append(g)
 
-        if s.startswith("ODS_"):
-            sysname = sys_of(s)
-            wf = D.locate_ods(sysname, s) if sysname else None
-            if not wf:
-                skipped.append((s, f"本地 ODS 脚本里找不到 {sysname}/{s}"))
-                continue
-            code = D.wf_code(pcode(), wf)
-            if not code:
-                skipped.append((s, f"DS 里没有工作流 {wf}"))
-                continue
-            items.append({"cycle": "day", "dateValue": "today", "depTaskCode": 0,
-                          "projectCode": pcode(), "dependentType": "DEPENDENT_ON_WORKFLOW",
-                          "definitionCode": code, "parameterPassing": False})
-            continue
+    cross_cfg = dict(cfg)
+    cross_cfg["cross_workflow"] = cross_groups
+    items, skipped, drifted = D.cross_items_for(
+        cfg.get("target"), own_wf_name, {cfg.get("target"): cross_cfg}, job_index(), pcode()
+    )
+    for job, declared, actual in drifted:
+        print(f"⚠ 配置漂移：{job} 声明 {declared}，DS 实际 {actual}（采信 DS）")
 
-        if s.startswith("DWD_"):
-            # 本工作流内的兄弟表 → 任务级依赖
-            tc = next((t["code"] for t in tasks_old if t["name"] == s), 0)
-            if tc:
+    seen = {(it["definitionCode"], it["depTaskCode"]) for it in items}
+    name_to_code = {str(t.get("name") or "").upper(): t.get("code") for t in tasks_old}
+    seen_same = set()
+    for s in same_sources:
+        name = str((s.get("source") if isinstance(s, dict) else s) or "").strip().upper()
+        if not name or name == target or name in seen_same:
+            continue
+        seen_same.add(name)
+        tc = name_to_code.get(name, 0)
+        if tc:
+            key = (own_wf_code, tc)
+            if key not in seen:
+                seen.add(key)
                 items.append({"cycle": "day", "dateValue": "today", "depTaskCode": tc,
                               "projectCode": pcode(), "dependentType": "DEPENDENT_ON_TASK",
                               "definitionCode": own_wf_code, "parameterPassing": False})
-            else:
-                skipped.append((s, "同工作流内也没有这个作业（可能也是映射表）"))
-            continue
-
-        skipped.append((s, "非 ODS/DWD 前缀，未知归属"))
+        else:
+            skipped.append((name, "同工作流内没有这个作业（可能是映射表/未部署）"))
 
     return items, skipped
 
@@ -188,7 +202,7 @@ def _drop_if_prev(full, prev):
     return None
 
 
-def manual_upstream(table, own_wf_code, tasks_old, task_index):
+def manual_upstream(table, own_wf_code, tasks_old, idx):
     """映射表没有 dep 配置 ⇒ 直接按脚本里的源表构造依赖项。
 
     ★★ 用户要求（10-05）：**依赖一律用作业级**（`DEPENDENT_ON_TASK`），不再等整条工作流。
@@ -199,8 +213,8 @@ def manual_upstream(table, own_wf_code, tasks_old, task_index):
        见 `parse_src_tables` 的 `prev` 判定。
 
     分流：
-    · ODS_*  → 定位到【具体作业 code】，跨工作流 ⇒ DEPENDENT_ON_TASK
-               （definitionCode=上游工作流, depTaskCode=上游作业）
+    · ODS_*  → 以 `job_index()` 中的 DS 实际归属为准（(wf_name, wf_code, task_code)），
+               若与本地分块预测不一致仅打印漂移告警并采信 DS
     · DWD_*  → 同工作流兄弟表 ⇒ DEPENDENT_ON_TASK（definitionCode=自身工作流）
     · 映射表 / 手工表 / 无作业 ⇒ 跳过（DS 里没有对应作业，等了也永远等不到）
     """
@@ -220,7 +234,20 @@ def manual_upstream(table, own_wf_code, tasks_old, task_index):
             continue
 
         if s.startswith("ODS_"):
+            hit = idx.get(s.upper())
             sysname = sys_of(s)
+            if hit:
+                wf = D.locate_ods(sysname, s) if sysname else None
+                pred_code = D.wf_code(pcode(), wf) if wf else None
+                if pred_code and pred_code != hit[1]:
+                    print(f"⚠ 配置漂移：{s} 本地预测 {wf}(code={pred_code})，"
+                          f"DS 实际 {hit[0]}(code={hit[1]})（采信 DS）")
+                items.append({"cycle": "day", "dateValue": "today",
+                              "depTaskCode": hit[2],
+                              "projectCode": pcode(),
+                              "dependentType": "DEPENDENT_ON_TASK",
+                              "definitionCode": hit[1], "parameterPassing": False})
+                continue
             if not sysname:
                 skipped.append((full, f"系统代号未登记（SYS_LIST={SYS_LIST}）⇒ 手工表无 ODS 工作流"))
                 continue
@@ -232,17 +259,7 @@ def manual_upstream(table, own_wf_code, tasks_old, task_index):
             if not code:
                 skipped.append((full, f"DS 里没有工作流 {wf}"))
                 continue
-            # ★ 作业级：定位该 ODS 表在 DS 里的具体任务 code
-            #   task_index 的值是 (工作流code, 作业code)，这里要【第二个】
-            hit = task_index.get(s)
-            tc = hit[1] if hit else 0
-            if not tc:
-                skipped.append((full, f"{wf} 里找不到作业 {s}"))
-                continue
-            items.append({"cycle": "day", "dateValue": "today", "depTaskCode": tc,
-                          "projectCode": pcode(),
-                          "dependentType": "DEPENDENT_ON_TASK",
-                          "definitionCode": code, "parameterPassing": False})
+            skipped.append((full, f"{wf} 里找不到作业 {s}"))
         elif s.startswith("DWD_"):
             tc = next((t["code"] for t in tasks_old if t["name"] == s), 0)
             if tc:
@@ -258,26 +275,15 @@ def manual_upstream(table, own_wf_code, tasks_old, task_index):
     return items, skipped
 
 
-def build_task_index():
-    """全项目「作业名 → (工作流code, 作业code)」索引。
+def job_index():
+    """全项目 SHELL 作业索引（复用部署工具口径）：作业名(大写) → (工作流名, 工作流code, 作业code)。
 
     ★ 用户要求（10-05）：依赖用**作业级**，所以必须能把 ODS 表名解析到具体作业，
-      不能只停在工作流粒度。这里一次性把 11 个 DWD + 全部 ODS 工作流的作业名全捞回来。
+      不能只停在工作流粒度。这里一次性把全项目相关工作流的 SHELL 作业名全捞回来。
     """
-    if hasattr(build_task_index, "_c"):
-        return build_task_index._c
-    idx = {}
-    for w in D.wf_list(pcode()) or []:
-        wid, wname = w["code"], w["name"]
-        r = D.call("GET", f"/projects/{pcode()}/workflow-definition/{wid}")
-        if r.get("code") != 0:
-            continue
-        for t in (r["data"].get("taskDefinitionList") or []):
-            if isinstance(t, str):
-                t = json.loads(t)
-            idx[t["name"]] = (wid, t["code"])
-    build_task_index._c = idx
-    return idx
+    if not hasattr(job_index, "_c"):
+        job_index._c = D.build_job_index(pcode())
+    return job_index._c
 
 
 def build_plan(args):
@@ -324,13 +330,13 @@ def build_plan(args):
     new_dep_code = new_shell_code + 1
 
     cfg = load_cfg(args.table)
-    tindex = build_task_index()
+    idx = job_index()
     if cfg is None:
-        items, skipped = manual_upstream(args.table, own_code, tasks_old, tindex)
+        items, skipped = manual_upstream(args.table, own_code, tasks_old, idx)
         print("  依赖配置  : 【查不到】⇒ 被映射表排除规则跳过，改用"
               "**脚本实际源表**手工构造依赖（不改 dep-config-lineage，避免污染 103 表口径）")
     else:
-        items, skipped = upstream_items(cfg, own_code, tasks_old)
+        items, skipped = upstream_items(cfg, own_code, args.workflow, tasks_old)
 
     print(f"== 目标 ==")
     print(f"  工作流   : {args.workflow} (code={own_code}, 现有 {len(tasks_old)} 任务)")
@@ -339,9 +345,9 @@ def build_plan(args):
     print(f"  新 SHELL code : {new_shell_code}")
     print(f"  新 DEP  code : {new_dep_code}")
     if cfg is not None:
-        print(f"  配置归属  : {cfg.get('own_workflow')} / 上游 {cfg.get('sources')}")
+        print(f"  配置归属  : {cfg.get('own_workflow')} / 上游 {cfg_source_names(cfg)}")
     print(f"  解析出依赖项 {len(items)} 条（**全部作业级**）：")
-    code2name = {tc: n for n, (wc, tc) in tindex.items()}
+    code2name = {tc: n for n, (_wn, _wc, tc) in idx.items()}
     for it in items:
         tid = it["depTaskCode"]
         scope = "本工作流" if it["definitionCode"] == own_code \

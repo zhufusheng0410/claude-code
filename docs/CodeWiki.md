@@ -432,7 +432,7 @@ python3 tools/ds-deploy/ds_config.py   # 自检：只报在/缺，不打印值
 | **生成与解析** | `test_ods.py`、`test_generator_grouping.py`、`test_ddl_common.py`、`test_mapping_parse.py`、`test_table_survey.py`、`test_field_survey.py`、`test_lineage.py`、`test_data_dict.py` | ODS/DWD/DWS DDL 与 ETL 生成、多组 UNION 别名归属、增量列校验、血缘与数据字典 |
 | **中间表示与基础工具** | `test_sql_tables.py`、`test_type_mapper.py`、`test_excel_reader.py`、`test_delivery_paths.py`、`test_mapping_finder.py`、`test_pandas_helpers.py`、`test_table_utils.py`、`test_sys_extractor.py`、`test_validation.py`、`test_loader.py` | SQL 表引用解析、Oracle→Hive 映射、calamine/openpyxl 双路径等价、跨平台交付路径探测、安全写入与防注入 |
 | **一体化管线与对账** | `test_dwd_pipeline.py`、`test_dw_pipeline.py`、`test_dws_package.py`、`test_ddl_drift_allowlist.py`、`test_dws_dep_report.py`、`test_baseline_compare.py` | MAPPING 归属缓存与失效指纹、DDL 方言清洗与漂移豁免、拼接副本检测、`tools/dws/` 子包与失败即停契约 |
-| **DS 部署与运维护栏** | `test_ds_deploy_utils.py`、`test_ds_deploy_ops.py`、`test_ds_recovery.py`、`test_ods_deploy_failures.py`、`test_pipeline_regressions.py`、`test_ds_deploy_import_smoke.py`、`test_cbo_stats.py` | 凭据优先级、v2 恢复快照与回填、ODS/DWD 失败中止、`ds-wipe-workflows` 范围与备份门控、全脚本无凭据导入冒烟 |
+| **DS 部署与运维护栏** | `test_ds_deploy_utils.py`、`test_ds_deploy_ops.py`、`test_ds_deploy_incremental.py`、`test_ds_recovery.py`、`test_ods_deploy_failures.py`、`test_pipeline_regressions.py`、`test_ds_deploy_import_smoke.py`、`test_cbo_stats.py` | 凭据优先级、v2 恢复快照与回填、增量加表与 DWS 依赖构建、ODS/DWD 失败中止、`ds-wipe-workflows` 范围与备份门控、全脚本无凭据导入冒烟 |
 | **工程治理与定制守门** | `test_project_consistency.py`、`test_skills_integrity.py`、`test_cleanup_tmp.py` | MASTER 禁生成护栏、归属单一来源、`pyproject.toml` 子包完整声明、`.dx-tmp` 保留清理、`.agents/skills/` 完整性与词根翻译单测桥接 |
 
 ```bash

@@ -33,6 +33,7 @@ import collections
 import difflib
 import glob
 import json
+import math
 import os
 import re
 import sys
@@ -107,6 +108,13 @@ def norm(name):
     if "." in s:
         s = s.rsplit(".", 1)[1]
     return s.upper()
+
+
+def cn_text(v):
+    """Excel 中文名单元格 → 文本；空 / NaN / None 一律返回 ""（避免 str(nan) 落盘成 "nan"）。"""
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return ""
+    return str(v)
 
 
 TBL_LAYER = {}       # 表 -> "MASTER" / "DWD" / "ODS"（按血缘来源打标）
@@ -256,8 +264,8 @@ def load_lineage():
             if not t or not u or t == u:
                 continue
             pairs.append((t, u, sys_name))
-            meta.setdefault(t, str(r["目标表中文名"] or ""))
-            meta.setdefault(u, str(r["上游表中文名"] or ""))
+            meta.setdefault(t, cn_text(r["目标表中文名"]))
+            meta.setdefault(u, cn_text(r["上游表中文名"]))
             tgt_layer[t] = "MASTER" if sys_name == "MASTER" else "DWD"
     # 层标：目标表用来源；上游表按「是不是某层血缘的目标表」归类，
     # 都不是（ODS_* / 甲方手工表）→ ODS/其他（own_workflow 本就返回未知）。

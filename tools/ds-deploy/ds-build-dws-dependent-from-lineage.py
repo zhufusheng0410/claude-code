@@ -11,13 +11,13 @@
   HSZTA → DWS_ZTA，HSFA → DWS_HSFA，O32 → DWS_O32（与 2026-10-20 方案一致）。
 - 上游三分：`ODS_*` → ods_<sys>_etl_NN 批次；`DWD_*` → DWD_<主题> 工作流；
   `DWS_*` → 产出该 DWS 表的系统 DWS 工作流（同流进 same_workflow_predecessors）。
-- ★ 防死锁与占位口径（2026-10-20 复核 README 铁律8 + ds-deploy-dwd-workflow.py:136 后定稿）：
-  1) DWD 上游脚本位于 scripts/MASTER/ ⇒ DS 里是 `MASTER_EMPTY_TPL` **echo 秒过占位任务**
-     （跑 DWD 批次时主数据不真跑、任务本身照常完成保 DAG，不存在死锁）⇒ **照常建边**，
-     计入 master_dep 仅作报告；
+- ★ 防死锁与占位口径（2026-10-23 口径更新）：
+  1) DWD 上游脚本位于 scripts/MASTER/ 时，DS 里以**真实脚本**随 DWD 批次参与跑批
+     （AGENTS.md，2026-10-23；`--master-placeholder` 可回滚为空占位）⇒ **照常建边**，
+     计入 `master_dep` 仅作报告；
   2) 无脚本上游（本地无 .sh，无法确认 DS 任务存在，如 _PTD 旧名孤儿）⇒ 跳过并**列出明细**，
      与 DWD 构建器 noscript_up 同口径；不建空占位（占位是 DWD 内部 2026-10-15 口径）。
-- 产出：`D:\\datax\\tools\\dep-config-dws\\<TABLE>.dep.json`（schema 与 DWD 版同构，
+- 产出：`tools/ds-deploy/dep-config-dws/<TABLE>.dep.json`（schema 与 DWD 版同构，
   layer=DWS, _source=dws/lineage），供 `ds-deploy-api.py plan-dws` 消费。
 
 用法
@@ -81,8 +81,8 @@ def load_lineage():
             if not t or not u or t == u:
                 continue
             pairs.append((t, u, sys_name))
-            meta.setdefault(t, str(r["目标表中文名"] or ""))
-            meta.setdefault(u, str(r["上游表中文名"] or ""))
+            meta.setdefault(t, DWD.cn_text(r["目标表中文名"]))
+            meta.setdefault(u, DWD.cn_text(r["上游表中文名"]))
             if tgt_sys.setdefault(t, sys_name) != sys_name:
                 print(f"⚠ 目标表跨系统重复: {t} ({tgt_sys[t]} vs {sys_name})")
     return files, pairs, meta, tgt_sys
@@ -167,7 +167,8 @@ def main():
     print(f"★ 最小破环切断 {len(cut)} 条，保留 {len(cross_all) - len(cut)} 条")
 
     # ---- 逐表构造 dep.json ----
-    os.makedirs(OUT, exist_ok=True)
+    if not args.stats:
+        os.makedirs(OUT, exist_ok=True)
     by_wf = collections.Counter()
     unresolved, noscript_list = [], []
     noscript_up = master_dep = cut_hits = written = 0
@@ -256,7 +257,7 @@ def main():
         for t, u in noscript_list[:30]:
             print(f"   {t} ← {u}")
     print(f"\n★ 上游无脚本跳过 {noscript_up} 条 | 破环丢弃 {cut_hits} 条 | "
-          f"含主数据占位(MASTER_EMPTY_TPL echo 秒过) {master_dep} 条")
+          f"含主数据(MASTER)上游 {master_dep} 条")
     print(f"{'（--stats，未落盘）' if args.stats else '已写出 %d 份到 %s' % (written, OUT)}")
     return 0
 
