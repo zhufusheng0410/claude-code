@@ -21,9 +21,9 @@
 
 用法
 ----
-    python tools/ds-deploy-all-dwd.py --dry-run     # 只打印计划
-    python tools/ds-deploy-all-dwd.py               # 真跑（删光 + 按拓扑序重建）
-    python tools/ds-deploy-all-dwd.py --delete-only # ★ 只删光 DWD_*，不重建
+    python3 tools/ds-deploy/ds-deploy-all-dwd.py --dry-run     # 只打印计划
+    python3 tools/ds-deploy/ds-deploy-all-dwd.py               # 真跑（删光 + 按拓扑序重建）
+    python3 tools/ds-deploy/ds-deploy-all-dwd.py --delete-only # ★ 只删光 DWD_*，不重建
 """
 import argparse
 import collections
@@ -180,9 +180,9 @@ def main():
     PREFIXES = ("DWD_", "MASTER_") if LAYER == "DWD" else ("DWS_",)
 
     if not os.path.isdir(DEPCFG):
-        sys.exit(f"缺 {DEPCFG} ⇒ 先跑 python tools/ds-build-dependent-from-lineage.py"
+        sys.exit(f"缺 {DEPCFG} ⇒ 先跑 python3 tools/dwd-pipeline.py depcfg --apply"
                  if LAYER == "DWD" else
-                 f"缺 {DEPCFG} ⇒ 先跑 python tools/ds-deploy/ds-build-dws-dependent-from-lineage.py")
+                 f"缺 {DEPCFG} ⇒ 先跑 python3 tools/ds-deploy/ds-build-dws-dependent-from-lineage.py")
 
     groups, wf_deps = load_groups()
     order = topo_order(groups, wf_deps)

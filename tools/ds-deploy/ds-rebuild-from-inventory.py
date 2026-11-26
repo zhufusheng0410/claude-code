@@ -52,7 +52,7 @@ sys.path.insert(0, HERE)
 import dw_paths  # noqa: E402
 from ds_client import DSClient  # noqa: E402
 from ds_common import DS_CALL_ERRORS  # noqa: E402
-from ds_config import ds_admin_password, ds_admin_user, prefer_env  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base, prefer_env  # noqa: E402
 from ds_text import read_script  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -563,7 +563,7 @@ def main():
         return 0
 
     # ---------- 执行 ----------
-    ds = DSClient(base="http://127.0.0.1:12345/dolphinscheduler",
+    ds = DSClient(base=ds_base(),
                   user=ds_admin_user(), password=ds_admin_password(),
                   allow_admin=True)
     r = ds.call("GET", "/projects/list",

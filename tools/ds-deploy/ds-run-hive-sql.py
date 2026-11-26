@@ -4,7 +4,7 @@
 
 流程：建项目 → 建工作流（单个 SQL 任务）→ 上线 → 启动实例 → 轮询直到终态。
 用法：
-  python tools/ds-run-hive-sql.py [SQL] [--datasource hive_krb] [--project hive_ds_verify]
+  python3 tools/ds-deploy/ds-run-hive-sql.py [SQL] [--datasource hive_krb] [--project hive_ds_verify]
 """
 import argparse
 import json

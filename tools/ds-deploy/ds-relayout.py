@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""把 DS 工作流重排成整齐网格 —— **DWD / ODS 两用**（二合一）。
+"""把 DS 工作流重排成整齐网格 —— **DWD / DWS / ODS 三用**。
 
 并入自（原文件已删，2026-10-11）：
-  `dwd` ← `ds-relayout-dwd.py`   3 列前置依赖 + 3 列作业（每排 3 对），消除坐标叠压
-  `ods` ← `ds-relayout-ods.py`   零连线纯 SHELL，每排 3 列作业（紧凑网格）
+  `dwd` / `dws` ← `ds-relayout-dwd.py`   3 列前置依赖 + 3 列作业（每排 3 对），消除坐标叠压
+  `ods`         ← `ds-relayout-ods.py`   零连线纯 SHELL，每排 3 列作业（紧凑网格）
 
 ★ 只改 `locations`，**不动** task / relation / code / 依赖 —— 非破坏性、可反复执行。
 ★ 已符合目标布局的默认跳过（`--force` 强制）。
@@ -14,8 +14,9 @@
 
 用法
 ----
-    python ds-relayout.py dwd [--apply] [--only DWD_PROD] [--force] [--col-w 500]
-    python ds-relayout.py ods [--apply] [--only ods_hsfa_etl_01] [--force] [--col-w 416] [--per-row 3]
+    python3 tools/ds-deploy/ds-relayout.py dwd [--apply] [--only DWD_PROD] [--force] [--col-w 500]
+    python3 tools/ds-deploy/ds-relayout.py dws [--apply] [--only DWS_HSFA] [--force] [--col-w 500]
+    python3 tools/ds-deploy/ds-relayout.py ods [--apply] [--only ods_hsfa_etl_01] [--force] [--col-w 416] [--per-row 3]
 """
 import argparse
 import json
@@ -114,13 +115,15 @@ def _relayout_dwd_one(P, w, args):
             return False
         return all(b - a == pair_gap for a, b in zip(xs, xs[1:]))
 
+    all_placed = (sh_codes | dep_codes).issubset(x_of)
     offsets = [x_of[name2code[m]] - x_of[name2code[dep_of[m]]]
                for m in members
                if dep_of.get(m) in name2code and m in name2code
                and name2code[dep_of[m]] in x_of and name2code[m] in x_of]
-    pair_ok = all(o == args.col_w for o in offsets)
+    pair_ok = len(offsets) == len(dep_of) and all(o == args.col_w for o in offsets)
 
-    if _cols_ok(cur_dep) and _cols_ok(cur_sh) and pair_ok and not args.force:
+    if (all_placed and _cols_ok(cur_dep) and _cols_ok(cur_sh)
+            and pair_ok and not args.force):
         return "[%s] 已达标（%d 列dep+%d 列作业 / 列距 %d / dep→作业 %d），跳过" % (
             w["name"], len(cur_dep), len(cur_sh), pair_gap, args.col_w)
 
@@ -218,8 +221,14 @@ def _relayout_ods_one(P, w, args):
     members = sorted(t["name"] for t in shells)
     xs = sorted({lc[t["code"]][0] for t in shells if t["code"] in lc})
     gaps = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)] if len(xs) > 1 else []
-    already = (len(xs) <= args.per_row and gaps and all(gap == args.col_w for gap in gaps)
-               and xs[0] == D.X0)
+    all_placed = all(t["code"] in lc for t in shells)
+    expected_cols = min(len(shells), args.per_row)
+    already = (all_placed and (
+        expected_cols == 0 or (
+            len(xs) == expected_cols and xs[0] == D.X0
+            and all(gap == args.col_w for gap in gaps)
+        )
+    ))
     if already and not args.force:
         return "[%s] 已是 %d 列 / 间距 %s，跳过" % (w["name"], len(xs), gaps[0] if gaps else "-")
 

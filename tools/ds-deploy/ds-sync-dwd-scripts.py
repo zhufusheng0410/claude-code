@@ -18,10 +18,10 @@
 ★ 比对用 sha1（先统一 CRLF），只提交真正变了的，避免无谓上下线。
 
 用法：
-    python tools/ds-sync-dwd-scripts.py                     # dry-run，只看差异
-    python tools/ds-sync-dwd-scripts.py --apply             # 提交（自动备份旧脚本）
-    python tools/ds-sync-dwd-scripts.py --apply --only DWD_PTY_DELR_INFO_PTD
-    python tools/ds-sync-dwd-scripts.py --layer DWS         # DWS 层（默认 DWD）
+    python3 tools/ds-deploy/ds-sync-dwd-scripts.py                     # dry-run，只看差异
+    python3 tools/ds-deploy/ds-sync-dwd-scripts.py --apply             # 提交（自动备份旧脚本）
+    python3 tools/ds-deploy/ds-sync-dwd-scripts.py --apply --only DWD_PTY_DELR_INFO_PTD
+    python3 tools/ds-deploy/ds-sync-dwd-scripts.py --layer DWS         # DWS 层（默认 DWD）
 
 ★ 2026-10-23：新增 `--layer DWS`（DWS 也走同一套 OFFLINE→PUT→ONLINE 原地同步），
     并加**硬护栏**：任何脚本若仍含 `set inceptor.cross.join.enabled`（Hive 4.2 运行时

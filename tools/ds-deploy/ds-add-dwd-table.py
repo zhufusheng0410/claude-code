@@ -31,10 +31,10 @@
 用法
 ----
     # 干跑（默认，不改任何东西）
-    python tools/ds-add-dwd-table.py --table DWD_PROD_PROD_NUM_MAPP_PFD --workflow DWD_PROD
+    python3 tools/ds-deploy/ds-add-dwd-table.py --table DWD_PROD_PROD_NUM_MAPP_PFD --workflow DWD_PROD
 
     # 真跑
-    python tools/ds-add-dwd-table.py --table DWD_PROD_PROD_NUM_MAPP_PFD --workflow DWD_PROD --apply
+    python3 tools/ds-deploy/ds-add-dwd-table.py --table DWD_PROD_PROD_NUM_MAPP_PFD --workflow DWD_PROD --apply
 """
 
 import argparse
@@ -444,8 +444,8 @@ def build_plan(args):
         print(f"  已恢复调度 ONLINE: {sorted(online_sched)}")
 
     print("\n提交完成 ✅")
-    print(f"  回读核对：python tools/ds-verify-dwd-layout.py --all-dwd")
-    print(f"  触发跑数：python tools/ds-run-task.py --task {args.table}")
+    print("  回读核对：python3 tools/ds-deploy/ds-verify-dwd-layout.py --all-dwd")
+    print(f"  触发跑数：python3 tools/ds-deploy/ds-run.py task --task {args.table}")
 
 
 def main():

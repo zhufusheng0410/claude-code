@@ -20,9 +20,9 @@
 
 用法
 ----
-    python tools/ds-wipe-workflows.py --dry-run
-    python tools/ds-wipe-workflows.py --apply --backup backup/ds-metastore-20261009-154742.sql
-    python tools/ds-wipe-workflows.py --apply --backup <dump> --only "^ods_hsfa"   # 只删匹配名
+    python3 tools/ds-deploy/ds-wipe-workflows.py --dry-run
+    python3 tools/ds-deploy/ds-wipe-workflows.py --apply --backup backup/ds-metastore-20261009-154742.sql
+    python3 tools/ds-deploy/ds-wipe-workflows.py --apply --backup <dump> --only "^ods_hsfa"   # 只删匹配名
 """
 import argparse
 import os
@@ -31,7 +31,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ds_config import ds_admin_password, ds_admin_user, ds_base, pg_password  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base, ds_project, pg_password  # noqa: E402
 from ds_client import legacy_client  # noqa: E402
 from ds_common import DS_CALL_ERRORS  # noqa: E402
 
@@ -170,7 +170,7 @@ def main():
     ap.add_argument("--apply", action="store_true", help="真正执行（默认只打印计划）")
     ap.add_argument("--backup", help="强制校验的备份文件路径（--apply 时必填）")
     ap.add_argument("--only", help="按正则只删匹配名称的工作流")
-    ap.add_argument("--project", default="dw")
+    ap.add_argument("--project", default=ds_project())
     args = ap.parse_args()
 
     sid = login()

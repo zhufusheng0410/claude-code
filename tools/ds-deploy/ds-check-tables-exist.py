@@ -7,7 +7,7 @@
   B) 源表：用 `parse_src_tables` 从各自脚本抠出读到的 `库.表` → 逐个查该库是否有这张表
      （能揪出「脚本引用了没建的库/表」，如 `ods_xday_hsfta` / `ods_xday_hsds` / `ods_xday_manual` 根本不存在）。
 
-只读，不改任何东西。用法: python tools/ds-check-tables-exist.py
+只读，不改任何东西。用法: python3 tools/ds-deploy/ds-check-tables-exist.py
 """
 import collections
 import os
@@ -17,7 +17,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_client import project_code, task_definitions  # noqa: E402
-from ds_common import docker_bin, parse_json_list as j  # noqa: E402
+from ds_common import docker_bin  # noqa: E402
+from ds_config import ds_project  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 from ds_load import load as _load_file  # noqa: E402
@@ -52,7 +53,7 @@ def tables_in(db):
 def main():
     D.login()
     res = D.call("GET", "/projects", params={"pageNo": 1, "pageSize": 100})
-    P = project_code(res, "dw")
+    P = project_code(res, ds_project())
     wfs = D.wf_list(P)
     dwd = sorted([w for w in wfs if w["name"].startswith("DWD_")], key=lambda x: x["name"])
 

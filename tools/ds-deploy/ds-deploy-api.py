@@ -21,12 +21,12 @@ code 由导入时的环境解析（这正是以前直接改 DS 做不到的事�
     import    JSON → DS        （幂等 upsert；`--restore` 按 v2 快照恢复；`--dry-run` 预览）
 
 用法:
-    python tools/ds-deploy-api.py export --match ods_ -o ods.json
-    python tools/ds-deploy-api.py export --only DWD_PROD -o dwd_prod.json
-    python tools/ds-deploy-api.py plan --subject DWD_PROD -o plan.json
-    python tools/ds-deploy-api.py import -i plan.json --dry-run
-    python tools/ds-deploy-api.py import -i plan.json
-    python tools/ds-deploy-api.py import -i snapshot.json --restore --dry-run
+    python3 tools/ds-deploy/ds-deploy-api.py export --match ods_ -o ods.json
+    python3 tools/ds-deploy/ds-deploy-api.py export --only DWD_PROD -o dwd_prod.json
+    python3 tools/ds-deploy/ds-deploy-api.py plan --subject DWD_PROD -o plan.json
+    python3 tools/ds-deploy/ds-deploy-api.py import -i plan.json --dry-run
+    python3 tools/ds-deploy/ds-deploy-api.py import -i plan.json
+    python3 tools/ds-deploy/ds-deploy-api.py import -i snapshot.json --restore --dry-run
 
 plan 的 v1 结构（export 的 v2 快照另保留任务参数和依赖分组）
 ------------------------------------
@@ -45,7 +45,6 @@ from copy import deepcopy
 import datetime as dt
 import json
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -55,6 +54,7 @@ from ds_text import read_script  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from core.ds_snapshot import PLAN_SCHEMA, SNAPSHOT_SCHEMA, dependency_groups, dependency_items
+from core.dwd_ownership import own_workflow
 from ds_load import load as _load_file  # noqa: E402
 
 
@@ -272,17 +272,19 @@ def cmd_plan(args):
         tables = [t.strip().upper() for t in args.only.split(",") if t.strip()]
     else:
         tables = sorted(cfgs)
-    if args.subject:                       # 主题 ⇒ DWD_<主题>_ 前缀
-        tables = [t for t in tables if t.startswith(args.subject.upper() + "_")]
+    want_subject = args.subject.upper() if args.subject else ""
 
     by_wf = {}
     for t in tables:
         cfg = cfgs.get(t)
         if not cfg:
-            print(f"  ⚠ 跳过 {t}：dep-config-lineage 里没有它的配置")
+            print(f"  ⚠ 跳过 {t}：依赖配置目录 {D.DEPCFG} 里没有它的配置")
             continue
-        wf = re.match(r"^(DWD_[A-Z]+)", t)
-        wf = wf.group(1) if wf else "DWD_OTHER"
+        wf = cfg.get("own_workflow") or own_workflow(t)
+        if not wf or wf == "(未知)":
+            wf = "DWD_OTHER"
+        if want_subject and wf != want_subject:
+            continue
         by_wf.setdefault(wf, []).append((t, cfg))
 
     out_wfs = []

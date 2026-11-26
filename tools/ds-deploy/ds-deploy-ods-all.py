@@ -21,11 +21,11 @@ DS 现状：只有 HSFA 的 78 个 ODS 脚本进了工作流（`ods_hsfa_etl_01.
 
 用法
 ----
-    python tools/ds-deploy-ods-all.py --dry-run              # 只打印计划
-    python tools/ds-deploy-ods-all.py                        # 建 + 上线（8 个系统）
-    python tools/ds-deploy-ods-all.py --systems HSZTA,HSFTA  # 只做某几个系统
-    python tools/ds-deploy-ods-all.py --exclude O32 --offline
-    python tools/ds-deploy-ods-all.py --include-hsfa          # 连 HSFA 一起重建（⚠️ 会打掉其定时调度）
+    python3 tools/ds-deploy/ds-deploy-ods-all.py --dry-run              # 只打印计划
+    python3 tools/ds-deploy/ds-deploy-ods-all.py                        # 建 + 上线（8 个系统）
+    python3 tools/ds-deploy/ds-deploy-ods-all.py --systems HSZTA,HSFTA  # 只做某几个系统
+    python3 tools/ds-deploy/ds-deploy-ods-all.py --exclude O32 --offline
+    python3 tools/ds-deploy/ds-deploy-ods-all.py --include-hsfa          # 连 HSFA 一起重建（⚠️ 会打掉其定时调度）
 """
 import argparse
 import json
@@ -35,7 +35,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from ds_config import ds_admin_password, ds_admin_user, ds_base  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base, ds_project  # noqa: E402
 from ds_client import legacy_client  # noqa: E402
 from ds_common import DS_CALL_ERRORS  # noqa: E402
 from ds_text import read_script  # noqa: E402
@@ -43,7 +43,7 @@ from ds_text import read_script  # noqa: E402
 DS = ds_base()
 USER = ds_admin_user()
 PWD = ds_admin_password()
-DEFAULT_PROJECT = "dw"
+DEFAULT_PROJECT = ds_project()
 
 REPO = os.environ.get("DW_REPO", os.path.dirname(os.path.dirname(HERE)))
 ODS_REL = os.path.join("scripts", "{sys}", "ods", "etl_sh")

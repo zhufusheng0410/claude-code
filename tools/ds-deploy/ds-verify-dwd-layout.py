@@ -17,8 +17,8 @@ DS 存进去的坐标会不会被 UI 改、有没有漏边，只有**回读**才
 
 用法
 ----
-    python tools/ds-verify-dwd-layout.py --workflow DWD_PROD
-    python tools/ds-verify-dwd-layout.py --workflow DWD_PROD --prefix DWD_PROD_
+    python3 tools/ds-deploy/ds-verify-dwd-layout.py --workflow DWD_PROD
+    python3 tools/ds-deploy/ds-verify-dwd-layout.py --workflow DWD_PROD --prefix DWD_PROD_
 """
 import argparse
 import json
@@ -30,7 +30,8 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ds_client import dependence_of, task_definitions  # noqa: E402
-from ds_config import ds_admin_password, ds_admin_user, ds_base  # noqa: E402
+from ds_common import parse_json_list as j  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base, ds_project  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 from ds_load import load as _load_file  # noqa: E402
@@ -135,12 +136,6 @@ def cleanup_probes(pcode):
     return rc
 
 
-def j(x):
-    """DS 详情接口里 `locations` / `taskDefinitionList` / `workflowTaskRelationList`
-    有时是 list、**有时是 JSON 字符串** ⇒ 统一解析。"""
-    return json.loads(x) if isinstance(x, str) else (x or [])
-
-
 def summary(pcode):
     """汇总全部 DWD_* 工作流：证明「依赖都进 dep 了、画线降到最少」。"""
     tl = total_list(raw("GET", f"/projects/{pcode}/workflow-definition",
@@ -163,8 +158,8 @@ def summary(pcode):
             #   原为 t["taskParams"]["dependence"]["dependTaskList"] 三层裸取键，
             #   任务缺 dependence 时 KeyError（DS 结构变化 / 无依赖的 DEPENDENT）。
             for grp in dependence_of(t):
-                for i in grp["dependItemList"]:
-                    if i["dependentType"] == "DEPENDENT_ON_TASK":
+                for i in (grp.get("dependItemList") or []):
+                    if i.get("dependentType") == "DEPENDENT_ON_TASK":
                         same += 1
                     else:
                         cross += 1
@@ -202,11 +197,12 @@ def main():
 
     relogin()
 
+    proj_name = ds_project()
     projs = raw("GET", "/projects/list", params={"pageSize": 100, "pageNo": 1}).get("data")
     projs = projs if isinstance(projs, list) else (projs or {}).get("totalList", [])
-    pcode = next((p["code"] for p in projs if p["name"] == "dw"), None)
+    pcode = next((p["code"] for p in projs if p["name"] == proj_name), None)
     if not pcode:
-        sys.exit("项目 dw 不存在")
+        sys.exit(f"项目 {proj_name} 不存在")
 
     if args.cleanup_probes:
         return cleanup_probes(pcode)
@@ -260,11 +256,11 @@ def main():
     print("[4] 逐排排布：")
     rows = {}
     for c, (x, y) in locs.items():
-        rows.setdefault(y, []).append((x, name[c]))
+        rows.setdefault(y, []).append((x, name.get(c, str(c))))
     for y in sorted(rows):
         line = "  ".join(nm for _, nm in sorted(rows[y]))
         print(f"    y={y:4d}  {line}")
-    return 0 if (n == 0 and not bad and not miss) else 1
+    return 0 if (n == 0 and not bad and (not args.strict_1to1 or not miss)) else 1
 
 
 if __name__ == "__main__":

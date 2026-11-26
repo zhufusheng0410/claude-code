@@ -126,5 +126,57 @@ class TestPyprojectPackages(unittest.TestCase):
         self.assertEqual(missing, set(), f'pyproject.toml packages 漏列子包: {sorted(missing)}')
 
 
+class TestDsConfigConsistency(unittest.TestCase):
+    """守门：ds-deploy 工具不得硬编码 DS 地址或项目名 "dw"，plan 须沿用单一归属口径。"""
+
+    def test_no_hardcoded_ds_url_or_project_outside_ds_config(self):
+        import ast
+
+        deploy_dir = ROOT / 'tools' / 'ds-deploy'
+        bad_urls = []
+        bad_proj = []
+        for path in sorted(deploy_dir.glob('*.py')):
+            if path.name == 'ds_config.py':
+                continue
+            src = path.read_text(encoding='utf-8')
+            tree = ast.parse(src, filename=str(path))
+            for node in ast.walk(tree):
+                # 1. 禁止代码字符串字面量中硬编码 DS 本机端口 URL（排除注释与模块 docstring）
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    if ('localhost:12345' in node.value or '127.0.0.1:12345' in node.value):
+                        # 仅忽略纯文档注释（Expr 节点里的 docstring）
+                        bad_urls.append(f'{path.name}:{node.lineno}')
+                # 2. 禁止 == "dw" / DEFAULT_PROJECT = "dw" / project_code(..., "dw") / default="dw"
+                if isinstance(node, ast.Compare):
+                    for comp in node.comparators:
+                        if isinstance(comp, ast.Constant) and comp.value == 'dw':
+                            bad_proj.append(f'{path.name}:{node.lineno}')
+                if isinstance(node, ast.Assign):
+                    if isinstance(node.value, ast.Constant) and node.value.value == 'dw':
+                        for tgt in node.targets:
+                            if isinstance(tgt, ast.Name) and 'PROJECT' in tgt.id.upper():
+                                bad_proj.append(f'{path.name}:{node.lineno}')
+                if isinstance(node, ast.Call):
+                    fname = node.func.id if isinstance(node.func, ast.Name) else (
+                        node.func.attr if isinstance(node.func, ast.Attribute) else ''
+                    )
+                    if fname == 'project_code' and len(node.args) >= 2:
+                        if isinstance(node.args[1], ast.Constant) and node.args[1].value == 'dw':
+                            bad_proj.append(f'{path.name}:{node.lineno}')
+                    if fname == 'add_argument' and any(
+                        isinstance(a, ast.Constant) and a.value == '--project' for a in node.args
+                    ):
+                        for kw in node.keywords:
+                            if kw.arg == 'default' and isinstance(kw.value, ast.Constant) and kw.value.value == 'dw':
+                                bad_proj.append(f'{path.name}:{node.lineno}')
+
+        self.assertEqual(bad_urls, [], f'发现硬编码 DS URL（应改用 ds_config.ds_base()）: {bad_urls}')
+        self.assertEqual(bad_proj, [], f'发现硬编码项目名 "dw"（应改用 ds_config.ds_project()）: {bad_proj}')
+
+    def test_ds_deploy_api_uses_dwd_ownership(self):
+        src = (ROOT / 'tools' / 'ds-deploy' / 'ds-deploy-api.py').read_text(encoding='utf-8')
+        self.assertIn('from core.dwd_ownership import own_workflow', src)
+
+
 if __name__ == '__main__':
     unittest.main()

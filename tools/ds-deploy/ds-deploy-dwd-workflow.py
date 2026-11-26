@@ -56,8 +56,8 @@
 
 用法
 ----
-    python tools/ds-deploy-dwd-workflow.py --workflow DWD_PROD --dry-run
-    python tools/ds-deploy-dwd-workflow.py --workflow DWD_PROD
+    python3 tools/ds-deploy/ds-deploy-dwd-workflow.py --workflow DWD_PROD --dry-run
+    python3 tools/ds-deploy/ds-deploy-dwd-workflow.py --workflow DWD_PROD
     # 依赖一律作业级：跨工作流项 DEPENDENT_ON_TASK → 上游具体 ODS 作业
 """
 import argparse
@@ -373,7 +373,8 @@ def create_wf(pcode, name, desc, tasks, rels, locs):
 def load_cfgs(dep_dir):
     if not os.path.isdir(dep_dir):
         sys.exit(f"依赖配置目录不存在：{dep_dir}\n"
-                 f"  → 先跑 python tools/ds-build-dependent-from-lineage.py")
+                 f"  → 先跑 python3 tools/dwd-pipeline.py depcfg --apply"
+                 f"（或 python3 tools/ds-deploy/ds-build-dependent-from-lineage.py）")
     out = {}
     for f in sorted(os.listdir(dep_dir)):
         if f.endswith(".dep.json"):
@@ -893,7 +894,7 @@ def main():
     ap.add_argument("--workflow", required=True)
     ap.add_argument("--layer", choices=["DWD", "DWS"], default="DWD")
     ap.add_argument("--dep-dir", default=None,
-                    help="依赖配置目录（DWD 默认 tools/dep-config-lineage；DWS 默认 tools/dep-config-dws）")
+                    help="依赖配置目录（DWD 默认 tools/ds-deploy/dep-config-proscript；DWS 默认 tools/ds-deploy/dep-config-dws）")
     ap.add_argument("--map", default="", help="甲方工作流名=实际DS工作流名，逗号分隔")
     ap.add_argument("--restarts", type=int, default=40, help="布局爬山搜索的随机重启次数")
     ap.add_argument("--layout", choices=["pair-grid", "dep-above"], default="pair-grid",

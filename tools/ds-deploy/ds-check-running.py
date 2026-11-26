@@ -7,15 +7,15 @@
 
 用法
 ----
-    python tools/ds-check-running.py            # 只看 dw 项目
-    python tools/ds-check-running.py --all      # 看所有项目
+    python3 tools/ds-deploy/ds-check-running.py            # 只看默认项目（DS_PROJECT，缺省 dw）
+    python3 tools/ds-deploy/ds-check-running.py --all      # 看所有项目
 """
 import argparse
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ds_config import ds_admin_password, ds_admin_user, ds_base  # noqa: E402
+from ds_config import ds_admin_password, ds_admin_user, ds_base, ds_project  # noqa: E402
 from ds_client import legacy_client, lst_of  # noqa: E402
 from ds_common import DS_CALL_ERRORS  # noqa: E402
 
@@ -64,7 +64,8 @@ def main():
 
     projs = lst_of(raw("GET", "/projects/list", params={"pageSize": 100, "pageNo": 1}))
     if not args.all:
-        projs = [p for p in projs if p["name"] == "dw"]
+        proj_name = ds_project()
+        projs = [p for p in projs if p["name"] == proj_name]
 
     total_run = 0
     for p in projs:

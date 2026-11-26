@@ -25,8 +25,8 @@
 
 用法
 ----
-    python tools/ds-build-dependent-from-lineage.py              # 生成到 tools/dep-config-lineage/
-    python tools/ds-build-dependent-from-lineage.py --stats      # 只看统计，不落盘
+    python3 tools/ds-deploy/ds-build-dependent-from-lineage.py              # 生成到 tools/ds-deploy/dep-config-lineage/
+    python3 tools/ds-deploy/ds-build-dependent-from-lineage.py --stats      # 只看统计，不落盘
 """
 import argparse
 import collections
@@ -286,7 +286,7 @@ def main():
                     help="逗号分隔：这些表**作上游**的依赖边全部剔除"
                          "（2026-10-16 用于 DWD_CMM_STD_DICT_CDVAL_MAP 码表）。")
     ap.add_argument("--exclude-prev-day", default="",
-                    help="「上一日分区」依赖边清单 JSON（由 tools/_scan_prev_day_deps.py 产出），"
+                    help="「上一日分区」依赖边清单 JSON（由 tools/dwd-pipeline.py prevday 产出），"
                          "命中 (目标表, 上游表) 的边全部剔除。")
     args = ap.parse_args()
 
